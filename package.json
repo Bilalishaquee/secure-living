@@ -1,0 +1,19 @@
+{
+  "name": "alex01-workspace",
+  "private": true,
+  "description": "Secure Living monorepo with separated frontend and backend folders.",
+  "scripts": {
+    "dev": "npm run dev --prefix Secure-Living-Frontend",
+    "dev:frontend": "npm run dev --prefix Secure-Living-Frontend",
+    "dev:backend": "DATABASE_URL=\"file:./Secure-Living-Backend/dev.db\" npm run dev --prefix Secure-Living-Backend",
+    "build": "npm run build --prefix Secure-Living-Frontend && npm run build --prefix Secure-Living-Backend",
+    "build:frontend": "npm run build --prefix Secure-Living-Frontend",
+    "build:backend": "npm run build --prefix Secure-Living-Backend",
+    "start": "npm run start --prefix Secure-Living-Frontend",
+    "start:frontend": "npm run start --prefix Secure-Living-Frontend",
+    "start:backend": "npm run start --prefix Secure-Living-Backend",
+    "lint": "npm run lint --prefix Secure-Living-Frontend && npm run lint --prefix Secure-Living-Backend",
+    "lint:frontend": "npm run lint --prefix Secure-Living-Frontend",
+    "lint:backend": "npm run lint --prefix Secure-Living-Backend"
+  }
+}

@@ -1,0 +1,639 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Safe-area insets (notched phones, home indicators) — use in layout padding */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Navy & blue — primary theme (components use brand-* + --rgb-* shadows) */
+  --brand-navy: #1f2937;
+  --brand-blue: #2f7df6;
+  --brand-blue-light: #5ea1ff;
+  --brand-teal: #1b9cf0;
+  --brand-gold: #b45309;
+  --brand-gold-light: #fcd34d;
+  --brand-gold-muted: color-mix(in srgb, var(--brand-gold) 35%, white);
+  --brand-green: #10b981;
+  --brand-red: #ef4444;
+  --surface-white: #ffffff;
+  --surface-gray: #f7f8fa;
+  --surface-border: #e5e7eb;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+  --escrow-bg: #eff6ff;
+  --sidebar-bg: #0f1b3d;
+  --sidebar-mid: #122457;
+  --sidebar-deep: #0b1635;
+  --sidebar-active: #2563eb;
+  --auth-panel-mid: #1e293b;
+
+  /* Space-separated RGB for shadows / gradients (Tailwind: rgb(var(--x)_/_a)) */
+  --rgb-primary: 37 99 235;
+  --rgb-primary-light: 96 165 250;
+  --rgb-accent: 14 165 233;
+  --rgb-ink: 15 23 42;
+  --rgb-gold: 180 83 9;
+
+  --background: var(--surface-white);
+  --foreground: var(--text-primary);
+  --card-shadow: 0 2px 14px rgb(var(--rgb-ink) / 0.06);
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f1f5f9;
+  --surface-white: #0f172a;
+  --surface-gray: #1e293b;
+  --surface-border: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --escrow-bg: #172554;
+  --sidebar-bg: #020617;
+  --sidebar-mid: #0f172a;
+  --sidebar-deep: #020617;
+  --sidebar-active: #3b82f6;
+  --rgb-ink: 2 6 23;
+  --card-shadow: 0 4px 24px rgb(0 0 0 / 0.35);
+}
+
+@layer base {
+  * {
+    @apply border-[var(--surface-border)];
+  }
+
+  /* Clip horizontal overflow at the root — avoids `overflow-x-hidden` on inner
+     wrappers, which can compute to `overflow-y: auto` and break Framer
+     `whileInView` / IntersectionObserver for below-the-fold sections. */
+  html {
+    overflow-x: clip;
+  }
+
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)] antialiased;
+    font-family: var(--font-inter), system-ui, sans-serif;
+    overflow-x: clip;
+    min-height: 100dvh;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-inter), system-ui, sans-serif;
+  }
+
+  /**
+   * Same family as the rest of the app (Inter) — reference dashboard uses Inter
+   * everywhere. Tabular nums keep amounts/dates aligned in tables and cards.
+   */
+  .font-mono-data {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Authenticated app — consistent page chrome (see DashboardLayout) */
+@layer components {
+  .app-page-title {
+    @apply font-display text-2xl font-semibold tracking-tight text-brand-navy sm:text-3xl;
+  }
+
+  .app-page-lead {
+    @apply mt-2 text-sm leading-relaxed text-[var(--text-secondary)];
+  }
+
+  .app-page-toolbar {
+    @apply relative flex flex-col gap-4 pb-6 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .app-page-toolbar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--rgb-primary) / 0.14),
+      rgb(var(--rgb-accent) / 0.08),
+      transparent
+    );
+  }
+
+  /** Glass panels for filters, toolbars, nested chrome */
+  .app-glass-panel {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  }
+
+  .app-shell-gradient {
+    background: #f4f5f7;
+  }
+
+  .stessa-app .app-page-toolbar::after {
+    background: #e5e7eb;
+    height: 1px;
+  }
+
+  .stessa-app .app-page-title {
+    @apply text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl;
+  }
+
+  .stessa-app .app-page-lead {
+    @apply mt-2 text-sm leading-relaxed text-slate-500;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .shadow-card {
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Marketing hero (Link 1 / Netlify clone) — dark blue diagonal panel */
+  .bg-hero-marketing-link1 {
+    background: linear-gradient(135deg, #0f172a, #1e3a8a 38%, #1d4ed8 72%, #172554);
+  }
+
+  .text-gradient-hero-link1 {
+    background: linear-gradient(105deg, #facc15, #60a5fa 42%, #2563eb);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero-link1-radial-accent {
+    background-image: radial-gradient(
+      ellipse 80% 60% at 100% 0%,
+      rgb(var(--rgb-primary) / 0.12),
+      transparent 50%
+    );
+  }
+
+  @keyframes hero-link1-dashed-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .hero-link1-dashed-ring {
+    animation: hero-link1-dashed-spin 42s linear infinite;
+    transform-origin: center center;
+  }
+
+  @keyframes hero-link1-orbit-icons {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .hero-link1-orbit-track {
+    animation: hero-link1-orbit-icons 36s linear infinite;
+    transform-origin: center center;
+  }
+
+  /* Hero center card — neon label */
+  .hero-kenya-live-neon {
+    color: #ecfeff;
+    text-shadow:
+      0 0 8px rgb(34 211 238 / 0.95),
+      0 0 18px rgb(56 189 248 / 0.9),
+      0 0 32px rgb(59 130 246 / 0.75),
+      0 0 48px rgb(59 130 246 / 0.45);
+  }
+
+  .hero-kenya-live-neon-icon {
+    color: #a5f3fc;
+    filter: drop-shadow(0 0 5px rgb(34 211 238 / 0.95))
+      drop-shadow(0 0 12px rgb(59 130 246 / 0.75));
+  }
+
+  /* Landing hero — soft light mesh aligned to brand navy / blue / sky */
+  .hero-light-surface {
+    background:
+      radial-gradient(
+        ellipse 120% 80% at 0% -20%,
+        rgb(var(--rgb-primary) / 0.09),
+        transparent 55%
+      ),
+      radial-gradient(
+        ellipse 90% 60% at 100% 0%,
+        rgb(var(--rgb-accent) / 0.08),
+        transparent 50%
+      ),
+      radial-gradient(
+        ellipse 70% 50% at 50% 100%,
+        rgb(var(--rgb-ink) / 0.05),
+        transparent 55%
+      ),
+      linear-gradient(180deg, #f8fafc 0%, #eff6ff 45%, #ffffff 100%);
+  }
+
+  .hero-dot-grid {
+    background-image: radial-gradient(
+      rgb(var(--rgb-primary) / 0.11) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+
+  /* Futuristic mesh + scan ambience */
+  .hero-mesh-gradient {
+    background:
+      radial-gradient(ellipse 100% 80% at 50% 120%, rgb(var(--rgb-primary) / 0.06), transparent 50%),
+      linear-gradient(
+        105deg,
+        rgb(var(--rgb-accent) / 0.04) 0%,
+        transparent 40%,
+        rgb(var(--rgb-primary) / 0.05) 100%
+      );
+    animation: hero-mesh-shift 18s ease-in-out infinite;
+  }
+
+  @keyframes hero-mesh-shift {
+    0%,
+    100% {
+      opacity: 1;
+      filter: hue-rotate(0deg);
+    }
+    50% {
+      opacity: 0.92;
+      filter: hue-rotate(12deg);
+    }
+  }
+
+  .hero-cyber-grid {
+    background-image:
+      linear-gradient(rgb(var(--rgb-primary) / 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--rgb-primary) / 0.07) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(
+      ellipse 70% 60% at 50% 40%,
+      black 20%,
+      transparent 75%
+    );
+  }
+
+  @keyframes hero-scan {
+    0% {
+      transform: translateY(-100%);
+      opacity: 0;
+    }
+    8% {
+      opacity: 0.12;
+    }
+    50% {
+      opacity: 0.06;
+    }
+    100% {
+      transform: translateY(100vh);
+      opacity: 0;
+    }
+  }
+
+  .hero-scan-sweep {
+    animation: hero-scan 11s ease-in-out infinite;
+  }
+
+  @keyframes hero-shimmer-border {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  .hero-glass-plate {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgb(239 246 255 / 0.45) 50%,
+      rgba(255, 255, 255, 0.25) 100%
+    );
+    border: 1px solid rgb(var(--rgb-primary) / 0.12);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.4) inset,
+      0 24px 80px rgb(var(--rgb-ink) / 0.12),
+      0 0 120px rgb(var(--rgb-primary) / 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .hero-mockup-glow {
+    box-shadow:
+      0 0 0 1px rgb(var(--rgb-primary) / 0.12),
+      0 4px 24px rgb(var(--rgb-primary) / 0.08),
+      0 32px 64px rgb(var(--rgb-ink) / 0.1),
+      0 0 80px rgb(var(--rgb-primary-light) / 0.15);
+  }
+
+  .hero-mockup-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.45) 45%,
+      rgba(255, 255, 255, 0) 90%
+    );
+    background-size: 200% 100%;
+    animation: hero-shimmer-border 4s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes hero-orbit-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.55;
+      transform: scale(1.02);
+    }
+  }
+
+  .hero-orbit-glow {
+    animation: hero-orbit-pulse 5s ease-in-out infinite;
+  }
+
+  @keyframes hero-float-3d-a {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 32px) rotateX(4deg) rotateY(-8deg);
+    }
+    50% {
+      transform: translate3d(0, -10px, 48px) rotateX(-2deg) rotateY(5deg);
+    }
+  }
+
+  @keyframes hero-float-3d-b {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 20px) rotateY(12deg) rotateX(-3deg);
+    }
+    50% {
+      transform: translate3d(0, -7px, 36px) rotateY(-6deg) rotateX(2deg);
+    }
+  }
+
+  @keyframes hero-float-3d-c {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 40px) rotateX(6deg) rotateY(6deg);
+    }
+    50% {
+      transform: translate3d(0, -9px, 52px) rotateX(-4deg) rotateY(-4deg);
+    }
+  }
+
+  .hero-float-3d-0 {
+    animation: hero-float-3d-a 5.2s ease-in-out infinite;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+  }
+
+  .hero-float-3d-1 {
+    animation: hero-float-3d-b 4.8s ease-in-out infinite;
+    animation-delay: 0.35s;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+  }
+
+  .hero-float-3d-2 {
+    animation: hero-float-3d-c 5.6s ease-in-out infinite;
+    animation-delay: 0.7s;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+  }
+
+  .hero-3d-perspective {
+    perspective: 1100px;
+    perspective-origin: 50% 40%;
+  }
+
+  .hero-3d-children {
+    transform-style: preserve-3d;
+  }
+
+  /* Landing sections — shared futuristic atmosphere (reuse with hero utilities) */
+  .landing-mesh-layer {
+    background:
+      radial-gradient(ellipse 90% 70% at 20% 0%, rgb(var(--rgb-primary) / 0.07), transparent 50%),
+      radial-gradient(ellipse 80% 60% at 100% 30%, rgb(var(--rgb-accent) / 0.06), transparent 45%),
+      linear-gradient(
+        180deg,
+        rgba(248, 250, 252, 0.95) 0%,
+        rgba(239, 246, 255, 0.5) 50%,
+        rgba(255, 255, 255, 0.9) 100%
+      );
+    animation: hero-mesh-shift 24s ease-in-out infinite;
+  }
+
+  @keyframes landing-chip-orbit {
+    0%,
+    100% {
+      transform: translateY(0) translateZ(0);
+    }
+    50% {
+      transform: translateY(-6px) translateZ(16px);
+    }
+  }
+
+  .landing-icon-orbit {
+    animation: landing-chip-orbit 5.5s ease-in-out infinite;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+  }
+
+  .landing-icon-orbit-d1 {
+    animation-delay: 0.2s;
+  }
+
+  .landing-icon-orbit-d2 {
+    animation-delay: 0.4s;
+  }
+
+  .landing-icon-orbit-d3 {
+    animation-delay: 0.6s;
+  }
+
+  @keyframes landing-frame-pulse {
+    0%,
+    100% {
+      border-color: rgba(255, 255, 255, 0.08);
+      box-shadow: 0 0 0 0 rgb(var(--rgb-primary-light) / 0);
+    }
+    50% {
+      border-color: rgba(255, 255, 255, 0.14);
+      box-shadow: 0 0 48px rgb(var(--rgb-primary) / 0.12);
+    }
+  }
+
+  .landing-journey-frame {
+    animation: landing-frame-pulse 5s ease-in-out infinite;
+  }
+
+  .landing-stat-halo {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      0 12px 48px rgba(0, 0, 0, 0.25),
+      0 0 80px rgb(var(--rgb-primary) / 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .landing-dark-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 85% 70% at 50% 40%, black 15%, transparent 70%);
+    -webkit-mask-image: radial-gradient(
+      ellipse 85% 70% at 50% 40%,
+      black 15%,
+      transparent 70%
+    );
+  }
+
+  .landing-glass-shell {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.92) 0%,
+      rgba(255, 255, 255, 0.78) 100%
+    );
+    border: 1px solid rgb(var(--rgb-primary) / 0.12);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.5) inset,
+      0 20px 60px rgb(var(--rgb-ink) / 0.1),
+      0 0 100px rgb(var(--rgb-primary) / 0.06);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  /* GPU-friendly float — avoids extra GSAP tickers on the hero */
+  @keyframes hero-float-soft {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0);
+    }
+    50% {
+      transform: translate3d(0, -6px, 0);
+    }
+  }
+
+  .hero-float-card {
+    animation: hero-float-soft 4.5s ease-in-out infinite;
+    backface-visibility: hidden;
+  }
+
+  .hero-float-delay-0 {
+    animation-delay: 0s;
+  }
+
+  .hero-float-delay-1 {
+    animation-delay: 0.45s;
+  }
+
+  .hero-float-delay-2 {
+    animation-delay: 0.9s;
+  }
+
+  @keyframes hero-ring-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .hero-orbit-ring {
+    animation: hero-ring-spin 100s linear infinite;
+    will-change: transform;
+  }
+
+  /* Horizontal scroll regions (tables) — smooth on iOS */
+  .app-touch-x-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  @keyframes app-sidebar-glow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.75;
+    }
+  }
+
+  .app-sidebar-ambient {
+    animation: app-sidebar-glow 8s ease-in-out infinite;
+  }
+}
+
+/*
+ * Responsive foundation (explicit media queries).
+ * Tailwind breakpoints match: xs 480px, sm 640px, md 768px, lg 1024px, xl 1280px, 2xl 1536px.
+ */
+
+@media (max-width: 479px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .hero-float-card,
+  .hero-orbit-ring,
+  .hero-mesh-gradient,
+  .hero-scan-sweep,
+  .hero-mockup-shimmer,
+  .hero-orbit-glow,
+  .hero-float-3d-0,
+  .hero-float-3d-1,
+  .hero-float-3d-2,
+  .landing-mesh-layer,
+  .landing-icon-orbit,
+  .landing-icon-orbit-d1,
+  .landing-icon-orbit-d2,
+  .landing-icon-orbit-d3,
+  .landing-journey-frame,
+  .app-sidebar-ambient,
+  .hero-link1-dashed-ring,
+  .hero-link1-orbit-track {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .app-page-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-page-toolbar > * {
+    width: 100%;
+  }
+}

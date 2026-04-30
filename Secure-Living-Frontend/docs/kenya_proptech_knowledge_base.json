@@ -1,0 +1,1102 @@
+{
+  "meta": {
+    "platform_name": "SecureLiving Kenya",
+    "version": "1.0.0",
+    "inspired_by": "Stessa.com (USA) — adapted for Kenya market",
+    "target_market": "Kenya",
+    "currency": "KES (Kenyan Shilling)",
+    "payment_rails": ["M-Pesa", "Airtel Money", "Bank Transfer (RTGS/EFT)", "PesaLink"],
+    "compliance": ["Kenya Revenue Authority (KRA)", "Rent Restriction Act (Kenya)", "Land Registration Act 2012", "Data Protection Act 2019 (Kenya)"],
+    "language_support": ["en", "sw"],
+    "description": "A full-stack property management and investment platform for Kenyan landlords, tenants, property managers, and professionals — inspired by Stessa.com but built for Kenya's unique market, payment infrastructure, and legal framework.",
+    "client_requirement_doc": "12_phases_for_secure_living_system.docx",
+    "total_phases": 12,
+    "frontend_status": "COMPLETED — backend, APIs, and integrations to be built by Cursor"
+  },
+
+  "subscription_plans": {
+    "description": "Three-tier subscription model adapted for Kenya (KES pricing)",
+    "plans": [
+      {
+        "id": "essentials",
+        "name": "Essentials",
+        "price_kes_monthly": 0,
+        "price_kes_annually": 0,
+        "label": "Free",
+        "target": "New landlords and small portfolio owners",
+        "features": {
+          "properties": "Unlimited",
+          "portfolios": 1,
+          "dashboards": "Key metrics only",
+          "receipt_scanning": 5,
+          "bank_feeds": "Unlimited (M-Pesa, bank)",
+          "manual_expense_tracking": true,
+          "mileage_tracking": true,
+          "maintenance_tracking": false,
+          "project_expense_tracking": false,
+          "budgeting_proforma": false,
+          "basic_reporting": true,
+          "advanced_reporting": false,
+          "kra_tax_package": "Basic",
+          "full_data_export": true,
+          "rent_collection_online": true,
+          "accelerated_rent_payments": false,
+          "automated_reminders_late_fees": true,
+          "tenant_autopay": true,
+          "tenant_ledger_rent_roll": true,
+          "vacancy_advertising": true,
+          "tenant_applications": true,
+          "tenant_screening": true,
+          "lease_template": false,
+          "esign": false,
+          "legal_forms_templates": false,
+          "document_storage": "Unlimited",
+          "support": "Basic"
+        }
+      },
+      {
+        "id": "manage",
+        "name": "Manage",
+        "price_kes_monthly": 1800,
+        "price_kes_annually": 1440,
+        "label": "KES 1,440/mo billed annually",
+        "target": "Active landlords managing multiple properties",
+        "features": {
+          "everything_in_essentials": true,
+          "maintenance_requests": true,
+          "maintenance_tracking": true,
+          "esign_per_month": 1,
+          "kra_schedule_e_equivalent": true,
+          "legal_forms_templates": "60+",
+          "accelerated_rent_payments": true,
+          "priority_chat_support": true
+        }
+      },
+      {
+        "id": "pro",
+        "name": "Pro",
+        "price_kes_monthly": 4200,
+        "price_kes_annually": 3360,
+        "label": "KES 3,360/mo billed annually",
+        "target": "Professional landlords and property managers",
+        "features": {
+          "everything_in_manage": true,
+          "unlimited_portfolios": true,
+          "all_advanced_reports": true,
+          "advanced_transaction_tracking": true,
+          "budgeting_proforma": true,
+          "unlimited_receipt_scanning": true,
+          "unlimited_chart_history": true,
+          "esign_per_month": 7,
+          "priority_tenant_screening": true,
+          "priority_phone_support": true,
+          "ai_features": true,
+          "professional_network_access": true
+        }
+      }
+    ]
+  },
+
+  "rbac": {
+    "description": "Role-Based Access Control — full permission matrix for the platform",
+    "roles": [
+      {
+        "id": "super_admin",
+        "name": "Super Admin",
+        "scope": "Global — all organizations, all branches",
+        "description": "Full platform control. Anthropic/SaaS operator level.",
+        "permissions": ["*"]
+      },
+      {
+        "id": "admin",
+        "name": "Organization Admin",
+        "scope": "Organization-wide",
+        "description": "Manages their own organization, branches, users, and all data within.",
+        "permissions": [
+          "org:manage", "branch:create", "branch:manage", "user:invite", "user:assign_role",
+          "property:create", "property:edit", "property:delete", "property:view",
+          "unit:create", "unit:edit", "unit:view",
+          "tenant:create", "tenant:edit", "tenant:view", "tenant:offboard",
+          "lease:create", "lease:edit", "lease:view", "lease:terminate",
+          "finance:view", "finance:approve", "finance:export",
+          "report:view_all", "report:export",
+          "maintenance:create", "maintenance:assign", "maintenance:close",
+          "kyc:approve", "kyc:reject",
+          "audit:view"
+        ]
+      },
+      {
+        "id": "branch_manager",
+        "name": "Branch Manager",
+        "scope": "Branch-scoped",
+        "description": "Manages properties and tenants within their assigned branch only.",
+        "permissions": [
+          "property:create", "property:edit", "property:view",
+          "unit:create", "unit:edit", "unit:view",
+          "tenant:create", "tenant:edit", "tenant:view",
+          "lease:create", "lease:edit", "lease:view",
+          "finance:view", "finance:submit",
+          "maintenance:create", "maintenance:assign",
+          "report:view_branch",
+          "user:view_branch"
+        ]
+      },
+      {
+        "id": "landlord",
+        "name": "Landlord / Property Owner",
+        "scope": "Own properties only",
+        "description": "Independent landlord who owns and manages their own properties.",
+        "permissions": [
+          "property:create", "property:edit", "property:view_own",
+          "unit:create", "unit:edit", "unit:view_own",
+          "tenant:create", "tenant:edit", "tenant:view_own",
+          "lease:create", "lease:edit", "lease:view_own",
+          "finance:view_own", "finance:submit",
+          "rent_collection:manage",
+          "maintenance:create", "maintenance:view_own",
+          "report:view_own",
+          "document:upload", "document:esign"
+        ]
+      },
+      {
+        "id": "property_manager",
+        "name": "Property Manager",
+        "scope": "Delegated properties only",
+        "description": "Third-party manager acting on behalf of a landlord for specific properties.",
+        "permissions": [
+          "property:view_delegated", "property:edit_delegated",
+          "unit:view_delegated",
+          "tenant:create", "tenant:edit", "tenant:view_delegated",
+          "lease:create", "lease:edit",
+          "maintenance:create", "maintenance:assign",
+          "finance:view_delegated", "finance:submit",
+          "report:view_delegated"
+        ]
+      },
+      {
+        "id": "tenant",
+        "name": "Tenant / Resident",
+        "scope": "Own tenancy only",
+        "description": "Resident who can pay rent, submit requests, view their lease.",
+        "permissions": [
+          "rent:pay", "rent:view_history",
+          "lease:view_own",
+          "maintenance:create_own", "maintenance:view_own",
+          "document:view_own",
+          "profile:edit_own",
+          "screening:complete"
+        ]
+      },
+      {
+        "id": "professional",
+        "name": "Professional / Service Provider",
+        "scope": "Assigned jobs only",
+        "description": "Plumber, electrician, cleaner, etc. Can view assigned work orders.",
+        "permissions": [
+          "maintenance:view_assigned",
+          "maintenance:update_assigned",
+          "quote:submit",
+          "invoice:submit",
+          "profile:edit_own"
+        ]
+      },
+      {
+        "id": "accountant",
+        "name": "Accountant / CPA",
+        "scope": "Financial read-only for assigned org",
+        "description": "External accountant with read-only access to financials and reports.",
+        "permissions": [
+          "finance:view", "report:view_all", "report:export",
+          "transaction:view", "document:view_financial"
+        ]
+      },
+      {
+        "id": "staff",
+        "name": "Staff Member",
+        "scope": "Limited — assigned tasks",
+        "description": "Support staff with limited operational access.",
+        "permissions": [
+          "tenant:view", "maintenance:view", "maintenance:update",
+          "property:view"
+        ]
+      }
+    ],
+    "permission_enforcement": {
+      "api_middleware": "Every API route checks: (1) JWT validity, (2) role permission, (3) branch/org scope, (4) resource ownership",
+      "branch_isolation": "A branch_manager cannot see or modify data outside their branch_id",
+      "audit_log": "All write actions (create/update/delete) are appended to immutable audit_logs table with user_id, role, action, timestamp, before/after JSON"
+    }
+  },
+
+  "modules": {
+
+    "module_01_auth_identity": {
+      "phase": 1,
+      "name": "Authentication, Identity & Organization",
+      "priority": "CRITICAL — Must be built first",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "The security bedrock. Nothing else works without this.",
+      "sub_modules": {
+        "user_registration": {
+          "fields": ["full_name", "email", "phone_number (Kenya +254)", "password", "role_requested", "organization_id (optional)", "referral_code"],
+          "phone_verification": "OTP via SMS (Africa's Talking or Twilio Kenya)",
+          "email_verification": "Email link",
+          "kyc_upload": ["national_id_front", "national_id_back", "kra_pin_certificate", "selfie_with_id"],
+          "kyc_status": ["pending", "under_review", "approved", "rejected"]
+        },
+        "authentication": {
+          "method": "JWT (Access + Refresh tokens)",
+          "access_token_expiry": "15 minutes",
+          "refresh_token_expiry": "30 days",
+          "mfa": "OTP via SMS or TOTP (Google Authenticator)",
+          "social_login": ["Google OAuth2"],
+          "session_management": "Redis-backed session store",
+          "password_policy": "Min 8 chars, 1 uppercase, 1 number, 1 special"
+        },
+        "organization_model": {
+          "types": ["Independent Landlord", "Property Management Agency", "Diaspora Client", "SACCO/Co-op"],
+          "fields": ["org_id", "name", "type", "country", "county", "logo", "subscription_plan", "owner_user_id", "created_at"],
+          "branch_model": {
+            "fields": ["branch_id", "org_id", "name", "county", "manager_user_id", "is_active"],
+            "note": "A branch is a geographic or operational subdivision of an organization (e.g., Nairobi Branch, Mombasa Branch)"
+          }
+        },
+        "rbac_engine": {
+          "description": "See RBAC section above for full permission matrix",
+          "middleware": "checkPermission(permission_key) middleware on every protected route",
+          "scope_injection": "branch_id and org_id injected into every DB query to enforce isolation"
+        },
+        "audit_log": {
+          "table": "audit_logs",
+          "fields": ["id", "user_id", "role", "action", "resource_type", "resource_id", "branch_id", "org_id", "ip_address", "user_agent", "before_json", "after_json", "timestamp"],
+          "immutable": true,
+          "note": "No UPDATE or DELETE ever on this table. Append-only."
+        }
+      },
+      "api_endpoints": [
+        "POST /auth/register",
+        "POST /auth/login",
+        "POST /auth/logout",
+        "POST /auth/refresh-token",
+        "POST /auth/verify-email",
+        "POST /auth/verify-phone",
+        "POST /auth/forgot-password",
+        "POST /auth/reset-password",
+        "POST /auth/mfa/enable",
+        "POST /auth/mfa/verify",
+        "GET  /users/me",
+        "PUT  /users/me",
+        "POST /organizations",
+        "GET  /organizations/:id",
+        "POST /organizations/:id/branches",
+        "GET  /organizations/:id/branches",
+        "POST /users/invite",
+        "GET  /roles",
+        "PUT  /users/:id/role",
+        "GET  /audit-logs"
+      ]
+    },
+
+    "module_02_property_units": {
+      "phase": 2,
+      "name": "Property, Units & Ownership Graph",
+      "priority": "HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "The asset truth layer — every property and unit in the system.",
+      "sub_modules": {
+        "property": {
+          "fields": [
+            "property_id", "org_id", "branch_id", "owner_user_id", "manager_user_id",
+            "name", "property_type", "address_line1", "address_line2", "county",
+            "sub_county", "ward", "gps_latitude", "gps_longitude",
+            "land_reference_number", "title_deed_number", "year_built",
+            "total_units", "purchase_price_kes", "current_value_kes",
+            "mortgage_balance_kes", "tags", "status", "created_at", "updated_at"
+          ],
+          "property_types": ["Apartment Block", "Maisonette", "Bungalow", "Bedsitter", "Studio", "Commercial", "Mixed Use", "Short-Term Rental", "Airbnb"],
+          "media": ["photos[]", "videos[]", "floor_plan_url", "title_deed_scan_url"],
+          "ownership_types": ["Owned", "Managed (Third Party)", "Joint Ownership", "Company Owned"]
+        },
+        "unit": {
+          "fields": [
+            "unit_id", "property_id", "unit_number", "floor", "unit_type",
+            "bedrooms", "bathrooms", "size_sqft", "rent_amount_kes",
+            "deposit_amount_kes", "is_furnished", "amenities[]",
+            "status", "current_tenant_id", "current_lease_id"
+          ],
+          "unit_statuses": ["vacant", "occupied", "under_maintenance", "reserved", "unavailable"],
+          "unit_types": ["Bedsitter", "1BR", "2BR", "3BR", "4BR+", "Studio", "Penthouse", "Commercial Unit", "Shop"]
+        },
+        "ownership_graph": {
+          "description": "Maps who owns, manages, or caretakes each property — supports complex structures",
+          "table": "property_roles",
+          "fields": ["id", "property_id", "user_id", "role", "scope", "start_date", "end_date", "commission_rate"],
+          "roles": ["owner", "manager", "caretaker", "co_owner", "agent"]
+        }
+      },
+      "api_endpoints": [
+        "POST   /properties",
+        "GET    /properties",
+        "GET    /properties/:id",
+        "PUT    /properties/:id",
+        "DELETE /properties/:id",
+        "POST   /properties/:id/units",
+        "GET    /properties/:id/units",
+        "GET    /units/:id",
+        "PUT    /units/:id",
+        "DELETE /units/:id",
+        "POST   /properties/:id/media",
+        "GET    /properties/:id/media",
+        "POST   /properties/:id/roles",
+        "GET    /properties/:id/roles"
+      ]
+    },
+
+    "module_03_service_requests": {
+      "phase": 3,
+      "name": "Service Request Engine (Polymorphic Core)",
+      "priority": "HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "One unified engine for all service workflows — maintenance, inspections, legal, proxies.",
+      "sub_modules": {
+        "service_request": {
+          "table": "service_requests",
+          "fields": [
+            "id", "org_id", "branch_id", "property_id", "unit_id",
+            "requester_user_id", "assigned_to_user_id", "type",
+            "title", "description", "priority", "status",
+            "scheduled_date", "completed_date",
+            "estimated_cost_kes", "actual_cost_kes",
+            "evidence_urls[]", "notes", "created_at", "updated_at"
+          ],
+          "types": ["maintenance", "inspection", "proxy_payment", "legal", "cleaning", "renovation", "emergency"],
+          "statuses": ["draft", "submitted", "approved", "assigned", "in_progress", "pending_review", "completed", "cancelled", "disputed"],
+          "priorities": ["low", "medium", "high", "emergency"],
+          "state_machine_transitions": {
+            "draft": ["submitted"],
+            "submitted": ["approved", "cancelled"],
+            "approved": ["assigned", "cancelled"],
+            "assigned": ["in_progress"],
+            "in_progress": ["pending_review", "completed"],
+            "pending_review": ["completed", "in_progress"],
+            "completed": [],
+            "cancelled": [],
+            "disputed": ["in_progress", "cancelled"]
+          }
+        },
+        "maintenance": {
+          "extends": "service_request",
+          "extra_fields": ["maintenance_category", "vendor_id", "quote_id", "work_order_number", "before_photos[]", "after_photos[]"],
+          "maintenance_categories": ["Plumbing", "Electrical", "Structural", "Painting", "Pest Control", "Security", "Cleaning", "HVAC", "Other"]
+        },
+        "inspection": {
+          "extends": "service_request",
+          "extra_fields": ["inspection_type", "inspector_id", "checklist_json", "overall_condition", "report_url"],
+          "inspection_types": ["move_in", "move_out", "routine", "emergency", "pre_purchase"]
+        },
+        "evidence_uploads": {
+          "table": "service_evidence",
+          "fields": ["id", "service_request_id", "uploader_user_id", "file_url", "file_type", "caption", "uploaded_at"],
+          "file_types": ["photo", "video", "document", "audio"]
+        }
+      },
+      "api_endpoints": [
+        "POST   /service-requests",
+        "GET    /service-requests",
+        "GET    /service-requests/:id",
+        "PUT    /service-requests/:id",
+        "PATCH  /service-requests/:id/status",
+        "POST   /service-requests/:id/evidence",
+        "POST   /service-requests/:id/assign",
+        "POST   /service-requests/:id/escalate",
+        "GET    /properties/:id/service-requests",
+        "GET    /units/:id/service-requests"
+      ]
+    },
+
+    "module_04_wallets_ledgers": {
+      "phase": 4,
+      "name": "Wallets, Ledgers & Immutable Transactions",
+      "priority": "CRITICAL — Must come before rent collection",
+      "budget_usd": 500,
+      "timeline_weeks": "3",
+      "description": "The financial spine of the platform. All money flows through this.",
+      "sub_modules": {
+        "wallets": {
+          "table": "wallets",
+          "fields": ["id", "owner_id", "owner_type", "wallet_type", "currency", "balance_kes", "is_frozen", "created_at"],
+          "wallet_types": ["user_wallet", "property_wallet", "escrow_wallet", "reserve_wallet", "operating_wallet"],
+          "owner_types": ["user", "property", "organization"],
+          "note": "balance_kes is DERIVED — computed from ledger entries, never stored as mutable field"
+        },
+        "ledger": {
+          "table": "ledger_entries",
+          "fields": [
+            "id", "wallet_id", "transaction_id", "entry_type",
+            "amount_kes", "running_balance_kes", "description",
+            "reference_id", "reference_type", "created_at"
+          ],
+          "entry_types": ["credit", "debit"],
+          "reference_types": ["rent_payment", "deposit", "maintenance_payout", "refund", "reversal", "fee", "commission"]
+        },
+        "transactions": {
+          "table": "transactions",
+          "fields": [
+            "id", "org_id", "property_id", "unit_id",
+            "from_wallet_id", "to_wallet_id",
+            "amount_kes", "fee_kes", "net_kes",
+            "transaction_type", "payment_method",
+            "mpesa_reference", "bank_reference", "idempotency_key",
+            "status", "description", "metadata_json",
+            "created_at", "reversed_at", "reversal_transaction_id"
+          ],
+          "transaction_types": ["rent_payment", "deposit", "deposit_refund", "maintenance_payment", "commission", "fee", "reversal", "withdrawal", "top_up"],
+          "payment_methods": ["mpesa_stk", "mpesa_paybill", "mpesa_till", "airtel_money", "bank_transfer_rtgs", "bank_transfer_eft", "pesalink", "card", "cash"],
+          "immutability_rules": {
+            "no_update_on_transactions": true,
+            "no_delete_on_transactions": true,
+            "reversal_only": "To undo a transaction, create a reversal transaction that references the original",
+            "double_entry": "Every credit to one wallet must have a corresponding debit to another"
+          }
+        },
+        "sub_ledgers": {
+          "types": ["rent_ledger", "deposit_ledger", "escrow_ledger", "reserve_ledger", "maintenance_ledger"],
+          "note": "Each sub-ledger rolls up to the main ledger for reconciliation"
+        },
+        "mpesa_integration": {
+          "provider": "Safaricom Daraja API",
+          "flows": ["STK Push (C2B)", "B2C (payouts to landlords/vendors)", "Paybill", "Buy Goods (Till)"],
+          "webhook": "POST /webhooks/mpesa/confirmation",
+          "idempotency": "mpesa_reference must be unique — duplicate callbacks ignored"
+        }
+      },
+      "api_endpoints": [
+        "GET    /wallets/:id/balance",
+        "GET    /wallets/:id/ledger",
+        "POST   /transactions",
+        "GET    /transactions/:id",
+        "GET    /transactions?property_id=&type=&from=&to=",
+        "POST   /transactions/:id/reverse",
+        "GET    /properties/:id/financial-summary",
+        "POST   /webhooks/mpesa/confirmation",
+        "POST   /webhooks/mpesa/validation"
+      ]
+    },
+
+    "module_05_escrow": {
+      "phase": 5,
+      "name": "Escrow State Machine & Holds",
+      "priority": "CRITICAL — before rent collection",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Prevents fraud, double spend, and premature payouts.",
+      "sub_modules": {
+        "escrow_accounts": {
+          "table": "escrow_accounts",
+          "fields": ["id", "lease_id", "tenant_id", "landlord_id", "property_id", "unit_id", "amount_kes", "status", "held_at", "released_at", "dispute_id", "created_at"],
+          "statuses": ["pending", "held", "partially_released", "fully_released", "disputed", "refunded", "forfeited"],
+          "state_transitions": {
+            "pending": ["held"],
+            "held": ["partially_released", "fully_released", "disputed"],
+            "partially_released": ["fully_released", "disputed"],
+            "disputed": ["held", "fully_released", "refunded"],
+            "fully_released": [],
+            "refunded": [],
+            "forfeited": []
+          }
+        },
+        "holds": {
+          "table": "fund_holds",
+          "fields": ["id", "wallet_id", "amount_kes", "reason", "held_by_user_id", "released_by_user_id", "is_active", "held_at", "released_at"],
+          "reasons": ["pending_verification", "dispute", "fraud_investigation", "contract_obligation"]
+        },
+        "idempotency": {
+          "table": "idempotency_keys",
+          "fields": ["key", "request_hash", "response_json", "created_at", "expires_at"],
+          "note": "All payment API calls must include X-Idempotency-Key header. Duplicate calls return cached response."
+        }
+      },
+      "api_endpoints": [
+        "POST   /escrow",
+        "GET    /escrow/:id",
+        "PATCH  /escrow/:id/hold",
+        "PATCH  /escrow/:id/release",
+        "PATCH  /escrow/:id/dispute",
+        "GET    /escrow?lease_id=",
+        "POST   /fund-holds",
+        "DELETE /fund-holds/:id"
+      ]
+    },
+
+    "module_06_rent_collection": {
+      "phase": 6,
+      "name": "Rent Collection & Reconciliation",
+      "priority": "HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Money enters the system safely. Automated reconciliation catches mismatches.",
+      "sub_modules": {
+        "rent_invoices": {
+          "table": "rent_invoices",
+          "fields": [
+            "id", "lease_id", "tenant_id", "landlord_id", "property_id", "unit_id",
+            "invoice_number", "period_start", "period_end", "due_date",
+            "rent_amount_kes", "late_fee_kes", "other_charges_kes",
+            "total_due_kes", "amount_paid_kes", "balance_kes",
+            "status", "payment_method", "mpesa_reference",
+            "sent_at", "paid_at", "created_at"
+          ],
+          "statuses": ["draft", "sent", "partially_paid", "paid", "overdue", "waived", "disputed"],
+          "auto_generation": "Invoices auto-generated monthly based on lease terms on the 1st of each month"
+        },
+        "payment_methods_kenya": {
+          "mpesa_stk_push": {
+            "description": "Prompt tenant's phone to pay via M-Pesa",
+            "api": "Safaricom Daraja STK Push",
+            "flow": "Landlord/system initiates → tenant gets popup on phone → tenant enters PIN → confirmation webhook"
+          },
+          "mpesa_paybill": {
+            "description": "Tenant manually pays to paybill number with account reference",
+            "account_format": "Unit number or lease ID used as account reference"
+          },
+          "bank_transfer": "EFT / RTGS for larger amounts",
+          "cash": "Recorded manually by manager/caretaker with receipt upload"
+        },
+        "late_fees": {
+          "config_per_lease": true,
+          "types": ["fixed_amount", "percentage_of_rent"],
+          "grace_period_days": "Configurable per property (default 5 days)",
+          "auto_charge": "Auto-charged at midnight on grace period expiry"
+        },
+        "automated_reminders": {
+          "channels": ["SMS (Africa's Talking)", "Email", "WhatsApp (optional)"],
+          "schedule": ["7 days before due", "3 days before due", "1 day before due", "due date", "3 days after (late fee warning)", "7 days after (formal notice)"]
+        },
+        "reconciliation": {
+          "job": "Daily reconciliation job at 2:00 AM Kenya time",
+          "formula": "Sum(Escrow) + Sum(Reserve) = Expected Total",
+          "mismatch_action": ["Alert admin via email/SMS", "Freeze all payouts", "Create reconciliation_discrepancy record"],
+          "table": "reconciliation_reports",
+          "fields": ["id", "run_at", "period_start", "period_end", "expected_kes", "actual_kes", "discrepancy_kes", "status", "resolved_at"]
+        }
+      },
+      "api_endpoints": [
+        "GET    /rent-invoices",
+        "GET    /rent-invoices/:id",
+        "POST   /rent-invoices/:id/pay",
+        "POST   /rent-invoices/:id/waive-late-fee",
+        "GET    /rent-collection/dashboard",
+        "POST   /rent-collection/send-reminder",
+        "GET    /reconciliation/reports",
+        "POST   /reconciliation/run",
+        "GET    /reconciliation/reports/:id"
+      ]
+    },
+
+    "module_07_tenant_leasing": {
+      "phase": 7,
+      "name": "Tenant Lifecycle & Lease Management",
+      "priority": "HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Full tenant journey from application to move-out.",
+      "sub_modules": {
+        "vacancy_marketing": {
+          "listing_fields": ["title", "description", "property_id", "unit_id", "rent_kes", "deposit_kes", "available_from", "amenities[]", "photos[]", "contact_method"],
+          "syndication": ["Facebook Marketplace Kenya", "BuyRentKenya.com", "Jumia House", "Own platform listing page"],
+          "listing_statuses": ["draft", "active", "paused", "filled", "expired"]
+        },
+        "tenant_applications": {
+          "table": "tenant_applications",
+          "fields": [
+            "id", "listing_id", "unit_id", "applicant_name", "applicant_email", "applicant_phone",
+            "national_id_number", "employer_name", "monthly_income_kes",
+            "references_json", "motivation_letter", "status", "applied_at", "reviewed_at"
+          ],
+          "statuses": ["submitted", "under_review", "shortlisted", "approved", "rejected", "withdrawn"]
+        },
+        "tenant_screening": {
+          "description": "Kenya-adapted screening — no US credit bureaus",
+          "checks": [
+            "National ID verification (IPRS check)",
+            "KRA PIN verification",
+            "Previous landlord references",
+            "Employment/income verification",
+            "CRB (Credit Reference Bureau) check — TransUnion Kenya, Creditinfo",
+            "Court records check",
+            "Social media screening (optional)"
+          ],
+          "crb_providers": ["TransUnion Kenya", "Creditinfo Kenya", "Metropol"],
+          "screening_packages": [
+            {"name": "Basic", "price_kes": 500, "includes": ["ID verification", "CRB check"]},
+            {"name": "Standard", "price_kes": 1200, "includes": ["Basic + employment verification + reference calls"]},
+            {"name": "Premium", "price_kes": 2500, "includes": ["Standard + court records + income verification"]}
+          ]
+        },
+        "leases": {
+          "table": "leases",
+          "fields": [
+            "id", "property_id", "unit_id", "tenant_id", "landlord_id",
+            "lease_type", "start_date", "end_date", "notice_period_days",
+            "rent_amount_kes", "rent_payment_day", "rent_escalation_percent",
+            "deposit_amount_kes", "deposit_status",
+            "utilities_included[]", "special_terms",
+            "signed_document_url", "status",
+            "created_at", "terminated_at", "termination_reason"
+          ],
+          "lease_types": ["Fixed Term", "Month-to-Month", "Periodic Tenancy"],
+          "lease_statuses": ["draft", "sent_for_signing", "active", "expiring_soon", "expired", "terminated", "renewed"],
+          "kenyan_legal_requirements": [
+            "Rent Restriction Act Cap 296",
+            "Landlord & Tenant (Shops, Hotels and Catering Establishments) Act",
+            "Notice periods as per Kenyan law (minimum 30 days for monthly tenancies)"
+          ]
+        },
+        "esigning": {
+          "provider": "DocuSign or local alternative (SignNow/Adobe Sign)",
+          "kenya_alternative": "KICA-compliant eSignature (Kenya Information and Communications Act)",
+          "flow": ["Draft lease → Send for signature → Tenant signs → Landlord signs → Document stored → Both parties get copy"]
+        },
+        "move_in_out": {
+          "move_in": {
+            "steps": ["Deposit payment confirmed", "Inspection completed", "Keys handed over", "Move-in inspection report signed", "Tenant portal activated"],
+            "inspection_form": "Digital checklist with photo upload per room"
+          },
+          "move_out": {
+            "steps": ["Notice served (30+ days)", "Move-out inspection booked", "Inspection completed", "Damage assessment", "Deductions agreed", "Deposit reconciliation", "Deposit refund initiated"]
+          }
+        },
+        "deposit_tracking": {
+          "table": "deposit_records",
+          "fields": ["id", "lease_id", "tenant_id", "property_id", "unit_id", "amount_held_kes", "deductions_kes", "deduction_reasons[]", "refund_amount_kes", "status", "held_at", "refunded_at"],
+          "statuses": ["held", "partially_deducted", "fully_refunded", "forfeited"]
+        }
+      },
+      "api_endpoints": [
+        "POST   /listings",
+        "GET    /listings",
+        "GET    /listings/:id",
+        "PUT    /listings/:id",
+        "POST   /listings/:id/applications",
+        "GET    /listings/:id/applications",
+        "PUT    /applications/:id/status",
+        "POST   /screening/order",
+        "GET    /screening/:id/report",
+        "POST   /leases",
+        "GET    /leases/:id",
+        "PUT    /leases/:id",
+        "PATCH  /leases/:id/sign",
+        "PATCH  /leases/:id/terminate",
+        "POST   /leases/:id/move-in",
+        "POST   /leases/:id/move-out",
+        "GET    /deposits/:lease_id",
+        "POST   /deposits/:lease_id/refund"
+      ]
+    },
+
+    "module_08_professional_network": {
+      "phase": 8,
+      "name": "Professional Network & Milestone Payouts",
+      "priority": "MEDIUM-HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Vetted service providers for maintenance and renovation work.",
+      "sub_modules": {
+        "professional_profiles": {
+          "table": "professionals",
+          "fields": [
+            "id", "user_id", "trade_category", "sub_categories[]",
+            "business_name", "county_coverage[]", "certifications[]",
+            "years_experience", "hourly_rate_kes", "bio",
+            "portfolio_urls[]", "id_verified", "kyc_status",
+            "average_rating", "total_jobs_completed", "is_available", "is_featured"
+          ],
+          "trade_categories": ["Plumber", "Electrician", "Painter", "Carpenter", "Mason", "Tiler", "Cleaner", "Pest Control", "Security Installer", "General Contractor", "Interior Designer", "Architect"]
+        },
+        "quotes": {
+          "table": "quotes",
+          "fields": ["id", "service_request_id", "professional_id", "amount_kes", "breakdown_json", "valid_until", "status", "notes", "submitted_at", "approved_at"],
+          "statuses": ["submitted", "under_review", "approved", "rejected", "expired"]
+        },
+        "milestones": {
+          "table": "job_milestones",
+          "fields": ["id", "service_request_id", "quote_id", "milestone_number", "description", "amount_kes", "due_date", "status", "completion_photo_urls[]", "approved_at", "paid_at"],
+          "statuses": ["pending", "in_progress", "submitted_for_review", "approved", "paid", "disputed"],
+          "payout_flow": "Milestone approved by landlord/manager → Escrow releases → M-Pesa B2C payout to professional"
+        },
+        "ratings_reviews": {
+          "table": "job_reviews",
+          "fields": ["id", "service_request_id", "reviewer_user_id", "professional_id", "rating", "review_text", "is_public", "created_at"]
+        },
+        "clawbacks": {
+          "table": "clawback_requests",
+          "fields": ["id", "job_id", "milestone_id", "requestor_user_id", "reason", "amount_kes", "status", "admin_decision", "created_at"],
+          "note": "If work is defective within 30 days, landlord can request a clawback which freezes the professional's next payout pending admin review"
+        }
+      },
+      "api_endpoints": [
+        "POST   /professionals/register",
+        "GET    /professionals",
+        "GET    /professionals/:id",
+        "POST   /professionals/:id/invite",
+        "POST   /quotes",
+        "GET    /quotes/:id",
+        "PATCH  /quotes/:id/approve",
+        "POST   /milestones/:id/submit",
+        "PATCH  /milestones/:id/approve",
+        "GET    /professionals/:id/payout-history",
+        "POST   /reviews",
+        "POST   /clawbacks"
+      ]
+    },
+
+    "module_09_finance_dashboards": {
+      "phase": 9,
+      "name": "Finance & Management Dashboards",
+      "priority": "MEDIUM-HIGH",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Real-time financial visibility for landlords and managers.",
+      "dashboards": {
+        "landlord_dashboard": {
+          "widgets": [
+            "Total portfolio value (KES)",
+            "Monthly gross rent collected",
+            "Monthly net cash flow",
+            "Occupancy rate (%)",
+            "Overdue rent amount",
+            "Upcoming lease expirations",
+            "Pending maintenance requests",
+            "Expense breakdown by category (chart)",
+            "Rent collected vs expected (chart)",
+            "Top performing property"
+          ]
+        },
+        "property_dashboard": {
+          "widgets": [
+            "Occupancy status per unit",
+            "Rent roll",
+            "Income statement (monthly/annual)",
+            "Expense register",
+            "Net operating income (NOI)",
+            "Cap rate",
+            "Cash-on-cash return",
+            "Maintenance history",
+            "Tenant ledger"
+          ]
+        },
+        "branch_manager_dashboard": {
+          "widgets": [
+            "Properties under management",
+            "Total rent due this month",
+            "Collection rate (%)",
+            "Vacancies count",
+            "Open maintenance requests",
+            "Overdue invoices",
+            "Staff activity feed"
+          ]
+        }
+      },
+      "reports": {
+        "standard_reports": [
+          "Income Statement (P&L)",
+          "Net Cash Flow Report",
+          "Rent Roll Report",
+          "Tenant Ledger",
+          "Expense Report by Category",
+          "Vacancy Report",
+          "Security Deposit Report",
+          "KRA Tax Package (annual income/expense summary for iTax filing)"
+        ],
+        "advanced_reports_pro_only": [
+          "Schedule of Real Estate Owned",
+          "CapEx Report",
+          "Budgeting vs Actuals",
+          "Pro-Forma Analysis",
+          "Loan Amortization Schedule",
+          "Property Valuation History",
+          "Vendor Aging Report",
+          "Commission & Fee Summary"
+        ]
+      },
+      "accounting_features": {
+        "bank_feeds": "Connect M-Pesa Paybill, bank accounts via open banking or statement upload",
+        "receipt_scanning": "Mobile OCR — snap receipt → auto-categorize expense",
+        "expense_categories_kenya": [
+          "Water Bill (NAIROBI WATER / County Water)", "Electricity (Kenya Power)", "Security Guards",
+          "Garbage Collection", "Caretaker Salary", "Maintenance & Repairs",
+          "Insurance", "Land Rates (County)", "Mortgage Interest",
+          "Agency Fees", "Legal Fees", "Accounting Fees",
+          "Marketing/Advertising", "Renovation/CapEx", "Other"
+        ],
+        "mileage_tracking": "Log km for property visits — deductible expense",
+        "kra_compliance": {
+          "rental_income_tax": "Monthly rental income withheld at 10% (residential) — MRI tax",
+          "annual_return": "Returns filed via iTax",
+          "withholding_tax": "WHT on service payments above KES 24,000/month",
+          "vat": "16% VAT applicable on commercial rentals"
+        }
+      },
+      "api_endpoints": [
+        "GET /dashboard/landlord",
+        "GET /dashboard/property/:id",
+        "GET /dashboard/branch",
+        "GET /reports/income-statement",
+        "GET /reports/cash-flow",
+        "GET /reports/rent-roll",
+        "GET /reports/tenant-ledger",
+        "GET /reports/expense-report",
+        "GET /reports/kra-tax-package",
+        "GET /reports/schedule-of-real-estate",
+        "GET /reports/proforma",
+        "POST /expenses",
+        "GET /expenses",
+        "PUT /expenses/:id",
+        "POST /expenses/receipt-scan"
+      ]
+    },
+
+    "module_10_feedback_risk_sop": {
+      "phase": 10,
+      "name": "Feedback → Risk → SOP Engine",
+      "priority": "MEDIUM",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Intelligence layer — convert operational data into actionable risk insights and SOPs.",
+      "sub_modules": {
+        "feedback_capture": {
+          "table": "feedback",
+          "fields": ["id", "source_type", "source_id", "submitted_by", "category", "rating", "comment", "sentiment_score", "created_at"],
+          "sources": ["tenant_portal", "professional_rating", "maintenance_completion", "lease_renewal", "move_out_survey"]
+        },
+        "risk_register": {
+          "table": "risk_items",
+          "fields": ["id", "property_id", "risk_type", "description", "severity", "likelihood", "mitigation", "status", "identified_at", "resolved_at"],
+          "risk_types": ["defaulting_tenant", "structural_issue", "legal_dispute", "vacancy_risk", "cash_flow_risk", "fraud_risk", "compliance_risk"],
+          "severity_levels": ["low", "medium", "high", "critical"]
+        },
+        "pattern_detection": {
+          "automated_rules": [
+            "Tenant late >3 months in a row → auto-flag as high risk",
+            "Maintenance request same category >3 times in 90 days → flag as structural risk",
+            "Rent collection rate <70% for a branch → alert branch manager",
+            "Vacancy >90 days → suggest price review"
+          ]
+        },
+        "sop_engine": {
+          "table": "sops",
+          "fields": ["id", "title", "category", "trigger_condition", "steps_json", "version", "created_by", "approved_by", "is_active"],
+          "categories": ["Eviction Process (Kenya)", "Deposit Dispute", "Emergency Maintenance", "Tenant Onboarding", "KRA Tax Filing"]
+        }
+      },
+      "api_endpoints": [
+        "POST /feedback",
+        "GET  /feedback",
+        "GET  /risk-register",
+        "POST /risk-register",
+        "PUT  /risk-register/:id",
+        "GET  /sops",
+        "POST /sops",
+        "PUT  /sops/:id"
+      ]
+    },
+
+    "module_11_marketing_growth": {
+      "phase": 11,
+      "name": "Marketing & Growth Action Panel",
+      "priority": "MEDIUM",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Lead funnel, campaign tracking, and portfolio growth tools.",
+      "sub_modules": {
+        "lead_management": {
+          "table": "leads",
+          "fields": ["id", "source", "name", "email", "phone", "property_interest", "county_preference", "budget_kes", "status", "notes", "assigned_to", "created_at", "converted_at"],
+          "sources": ["website_form", "facebook_ad", "referral", "walk_in", "whatsapp", "buyrentkenya", "jumia_house"],
+          "statuses": ["new", "contacted", "qualified", "viewing_scheduled", "application_submitted", "converted", "lost"]
+        },
+        "campaigns": {
+          "table": "campaigns",
+          "fields": ["id", "name", "channel", "budget_kes", "spend_kes", "leads_generated", "conversions", "roi_percent", "start_date", "end_date", "status"],
+          "channels": ["Facebook Ads", "Google Ads", "SMS Blast", "WhatsApp Broadcast", "Property Listing Sites", "Referral Program"]
+        },
+        "referral_program": {
+          "description": "Landlords earn commission for referring other landlords to the platform",
+          "reward_kes": 2000,
+          "paid_on": "Referred landlord's first paid subscription month"
+        }
+      },
+      "api_endpoints": [
+        "POST /leads",
+        "GET  /leads",
+        "PUT  /leads/:id",
+        "POST /campaigns",
+        "GET  /campaigns",
+        "GET  /campaigns/:id/analytics",
+        "GET  /marketing/dashboard"
+      ]
+    },
+
+    "module_12_ai_automation": {
+      "phase": 12,
+      "name": "AI, Automation & Scale Readiness",
+      "priority": "MEDIUM",
+      "budget_usd": 500,
+      "timeline_weeks": "2–3",
+      "description": "Intelligence and automation layer to scale the platform.",
+      "sub_modules": {
+        "ai_features": {
+          "image_comparison": {
+            "description": "AI compares move-in vs move-out photos to identify damage automatically",
+            "model": "OpenAI Vision API or AWS Rekognition",
+            "output": "Damage report with annotated photos and estimated repair cost"
+          },
+          "predictive_alerts": [
+            "Predict tenant default risk based on payment history",
+            "Predict vacancy based on lease expiry dates",
+            "Suggest optimal rent price based on market data",
+            "Flag anomalous expense transactions"
+          ],
+          "receipt_ocr": "Google Cloud Vision or Tesseract for receipt scanning and auto-categorization",
+          "chatbot": "AI assistant for tenant support (FAQ, maintenance requests, rent queries) — WhatsApp via Twilio/Africa's Talking"
+        },
+        "automation": {
+          "scheduled_jobs": [
+            "Monthly rent invoice generation (1st of month)",
+            "Late fee auto-charge (day after grace period)",
+            "Rent reminder SMS/email (7, 3, 1 days before due)",
+            "Daily reconciliation report (2:00 AM)",
+            "Lease expiry alerts (90, 60, 30 days out)",
+            "KYC expiry reminders",
+            "Vacancy listing auto-renewal"
+          ],
+          "tech": "Bull (Redis-backed job queue) or Celery/Sidekiq"
+        },
+        "api_hardening": {
+          "rate_limiting": "100 req/min per user, 1000 req/min per org",
+          "input_validation": "Zod or Joi schema validation on all inputs",
+          "sql_injection_prevention": "ORM (Prisma/TypeORM) parameterized queries only",
+          "xss_prevention": "DOMPurify on all user content",
+          "cors": "Whitelist frontend domains only",
+          "helmet": "HTTP security headers",
+          "logging": "Winston + CloudWatch/Datadog"
+        },
+        "scale": {
+          "architecture": "Microservices-ready monolith (start monolith, extract services as needed)",
+          "database": "PostgreSQL with read replicas",
+          "caching": "Redis for sessions, rate limits, frequently-read data",
+          "file_storage": "AWS S3 or Cloudflare R2 for documents, photos, videos",
+          "cdn": "Cloudflare for static assets",
+          "monitoring": "Sentry (errors), Datadog or New Relic (APM)",
+          "ci_cd": "GitHub Actions → staging → production"
+        },
+        "compliance_kenya": {
+          "data_protection": "Kenya Data Protection Act 2019 — consent collection, data retention policies, right to erasure",
+          "financial_regulation": "CBK guidelines for digital payment platforms",
+          "mpesa_compliance": "Safaricom Daraja API terms",
+          "crb_compliance": "Credit Information Sharing regulations (CBK)"
+        }
+      },
+      "api_endpoints": [
+        "POST /ai/image-compare",
+        "POST /ai/receipt-scan",
+        "GET  /ai/rent-recommendation/:unit_id",
+        "GET  /ai/tenant-risk-score/:tenant_id",
+        "POST /automations/trigger",
+        "GET  /system/health",
+        "GET  /system/metrics"
+      ]
+    }
+  },
+
+  "database_schema_overview": {
+    "core_tables": [
+      "users", "organizations", "branches", "user_roles",
+      "properties", "units", "property_roles", "property_media",
+      "leases", "lease_renewals",
+      "tenant_applications", "listings",
+      "service_requests", "service_evidence",
+      "wallets", "ledger_entries", "transactions",
+      "escrow_accounts", "fund_holds", "idempotency_keys",
+      "rent_invoices", "reconciliation_reports",
+      "deposit_records",
+      "professionals", "quotes", "job_milestones", "job_reviews", "clawback_requests",
+      "expenses", "expense_categories",
+      "feedback", "risk_items", "sops",
+      "leads", "campaigns",
+      "audit_logs",
+      "notifications", "notification_templates",
+      "documents", "esign_envelopes",
+      "kyc_documents",
+      "screening_reports"
+    ],
+    "key_relationships": {
+      "property → units": "One-to-many",
+      "property → leases (via unit)": "One-to-many",
+      "lease → tenant (user)": "Many-to-one",
+      "lease → deposit_record": "One-to-one",
+      "lease → rent_invoices": "One-to-many",
+      "service_request → evidence": "One-to-many",
+      "service_request → quote → milestones": "One-to-many",
+      "wallet → ledger_entries": "One-to-many",
+      "transaction → ledger_entries (debit + credit)": "One-to-two",
+      "escrow_account → lease": "One-to-one",
+      "user → wallets": "One-to-many"
+    }
+  },
+
+  "tech_stack_recommendation": {
+    "frontend": "Already built — React/Next.js (existing)",
+    "backend": "Node.js + Express.js or NestJS (TypeScript)",
+    "database": "PostgreSQL (primary) + Redis (cache/queues)",
+    "orm": "Prisma",
+    "auth": "JWT + bcrypt + passport.js",
+    "file_storage": "AWS S3 or Cloudflare R2",
+    "payments": "Safaricom Daraja API (M-Pesa), Stripe (cards)",
+    "sms": "Africa's Talking (SMS/USSD)",
+    "email": "Resend or SendGrid",
+    "whatsapp": "Africa's Talking WhatsApp API or Twilio",
+    "job_queue": "Bull + Redis",
+    "search": "PostgreSQL full-text search (start) → Elasticsearch (scale)",
+    "testing": "Jest + Supertest",
+    "ci_cd": "GitHub Actions",
+    "hosting": "AWS (EC2/ECS) or Railway.app or Render.com",
+    "monitoring": "Sentry + Datadog"
+  },
+
+  "kenya_specific_adaptations": {
+    "payments": {
+      "primary_method": "M-Pesa (80%+ of Kenyans use mobile money)",
+      "secondary": "Bank transfer, Airtel Money, PesaLink",
+      "no_support_needed": "ACH (US only), checks"
+    },
+    "identity_verification": {
+      "primary_id": "National ID (Huduma Namba)",
+      "business_id": "Certificate of Incorporation + KRA PIN",
+      "crb": "TransUnion Kenya, Creditinfo, Metropol (replace US credit bureaus)"
+    },
+    "legal_framework": [
+      "Rent Restriction Act (Cap 296) — limits rent increases for controlled premises",
+      "Land Registration Act 2012",
+      "The Law of Contract Act",
+      "Landlord and Tenant (Shops, Hotels and Catering Establishments) Act",
+      "Data Protection Act 2019",
+      "Kenya Information and Communications Act (eSignatures)"
+    ],
+    "tax_obligations": {
+      "monthly_rental_income_tax": "10% WHT on gross rent (residential) — remit to KRA by 20th of following month",
+      "itax_filing": "Monthly MRI returns + annual income tax return",
+      "vat": "16% on commercial property rentals above KES 5M annual turnover threshold"
+    },
+    "county_structure": {
+      "note": "Kenya has 47 counties. Branch/property should be county-tagged.",
+      "major_rental_markets": ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika", "Kiambu"]
+    },
+    "language": "Platform in English + Kiswahili toggle",
+    "date_format": "DD/MM/YYYY (Kenya standard)",
+    "phone_format": "+254XXXXXXXXX"
+  }
+}

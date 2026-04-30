@@ -1,0 +1,712 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ServiceRequest {
+  id               String    @id
+  organizationId   String
+  branchId         String
+  propertyId       String?
+  unitId           String?
+  tenantUserId     String?
+  assignedToUserId String?
+  type             String    @default("maintenance")
+  title            String
+  description      String
+  category         String
+  priority         String
+  estimatedCostKes Float?
+  actualCostKes    Float?
+  scheduledDate    DateTime?
+  completedDate    DateTime?
+  notes            String?
+  evidenceUrlsCsv  String?
+  status           String
+  escalatedAt      DateTime?
+  escalatedReason  String?
+  approvedAt       DateTime?
+  createdBy        String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  closedAt         DateTime?
+
+  jobAssignments JobAssignment[]
+  evidences      ServiceRequestEvidence[]
+
+  @@index([organizationId, branchId, status])
+  @@index([propertyId, unitId])
+}
+
+model ServiceRequestEvidence {
+  id               String   @id
+  serviceRequestId String
+  uploadedByUserId String
+  mediaType        String
+  fileName         String
+  mimeType         String
+  filePath         String
+  fileSizeBytes    Int
+  createdAt        DateTime @default(now())
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([serviceRequestId, createdAt])
+}
+
+model Lease {
+  id               String    @id
+  organizationId   String
+  branchId         String
+  propertyId       String
+  unitId           String
+  tenantUserId     String
+  leaseType        String
+  rentAmount       Float
+  depositAmount    Float?
+  startDate        DateTime
+  endDate          DateTime
+  paymentFrequency String
+  status           String
+  signedAt         DateTime?
+  terminatedAt     DateTime?
+  createdBy        String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  rentInvoices RentInvoice[]
+}
+
+model ProfessionalProfile {
+  id                 String   @id
+  userId             String
+  organizationId     String?
+  branchId           String?
+  profession         String
+  skillsCsv          String
+  rating             Float    @default(0)
+  verificationStatus String
+  bio                String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organizationId, branchId, isActive])
+}
+
+model JobAssignment {
+  id                 String         @id
+  serviceRequestId   String
+  professionalUserId String
+  assignmentStatus   String
+  quotedAmount       Float?
+  agreedAmount       Float?
+  assignedBy         String
+  assignedAt         DateTime       @default(now())
+  acceptedAt         DateTime?
+  completedAt        DateTime?
+  notes              String?
+  ServiceRequest     ServiceRequest @relation(fields: [serviceRequestId], references: [id])
+
+  @@index([serviceRequestId, professionalUserId])
+}
+
+model AuditLog {
+  id           String   @id
+  userId       String
+  role         String
+  action       String
+  resourceType String
+  resourceId   String
+  branchId     String?
+  orgId        String?
+  beforeJson   String?
+  afterJson    String?
+  timestamp    DateTime @default(now())
+}
+
+model Wallet {
+  id         String   @id
+  ownerId    String
+  ownerType  String
+  walletType String
+  currency   String   @default("KES")
+  isFrozen   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  fromTransactions Transaction[] @relation("transaction_from_wallet")
+  toTransactions   Transaction[] @relation("transaction_to_wallet")
+  ledgerEntries    LedgerEntry[]
+  fundHolds        FundHold[]
+
+  @@index([ownerType, ownerId, walletType])
+}
+
+model LedgerEntry {
+  id                String   @id
+  walletId          String
+  transactionId     String?
+  entryType         String
+  amountKes         Float
+  runningBalanceKes Float?
+  description       String?
+  referenceId       String?
+  referenceType     String?
+  createdAt         DateTime @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+  @@index([transactionId])
+}
+
+model Transaction {
+  id                    String    @id
+  organizationId        String?
+  propertyId            String?
+  unitId                String?
+  fromWalletId          String?
+  toWalletId            String?
+  amountKes             Float
+  feeKes                Float     @default(0)
+  netKes                Float
+  transactionType       String
+  paymentMethod         String
+  mpesaReference        String?
+  bankReference         String?
+  idempotencyKey        String?
+  status                String
+  description           String?
+  metadataJson          String?
+  createdAt             DateTime  @default(now())
+  reversedAt            DateTime?
+  reversalTransactionId String?
+
+  fromWallet Wallet? @relation("transaction_from_wallet", fields: [fromWalletId], references: [id], onDelete: SetNull)
+  toWallet   Wallet? @relation("transaction_to_wallet", fields: [toWalletId], references: [id], onDelete: SetNull)
+
+  @@unique([idempotencyKey])
+  @@index([organizationId, propertyId, transactionType, createdAt])
+}
+
+model IdempotencyKey {
+  key          String    @id
+  requestHash  String
+  responseJson String?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime?
+}
+
+model EscrowAccount {
+  id         String    @id
+  leaseId    String
+  tenantId   String
+  landlordId String
+  propertyId String
+  unitId     String
+  amountKes  Float
+  status     String
+  heldAt     DateTime?
+  releasedAt DateTime?
+  disputeId  String?
+  createdAt  DateTime  @default(now())
+
+  @@index([leaseId, status])
+}
+
+model FundHold {
+  id               String    @id
+  walletId         String
+  amountKes        Float
+  reason           String
+  heldByUserId     String
+  releasedByUserId String?
+  isActive         Boolean   @default(true)
+  heldAt           DateTime  @default(now())
+  releasedAt       DateTime?
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+}
+
+model RentInvoice {
+  id              String    @id
+  leaseId         String
+  tenantId        String
+  landlordId      String
+  propertyId      String
+  unitId          String
+  invoiceNumber   String    @unique
+  periodStart     DateTime
+  periodEnd       DateTime
+  dueDate         DateTime
+  rentAmountKes   Float
+  lateFeeKes      Float     @default(0)
+  otherChargesKes Float     @default(0)
+  totalDueKes     Float
+  amountPaidKes   Float     @default(0)
+  balanceKes      Float
+  status          String
+  paymentMethod   String?
+  mpesaReference  String?
+  sentAt          DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  Lease           Lease     @relation(fields: [leaseId], references: [id])
+
+  @@index([leaseId, dueDate, status])
+}
+
+model ReconciliationReport {
+  id             String    @id
+  runAt          DateTime  @default(now())
+  periodStart    DateTime
+  periodEnd      DateTime
+  expectedKes    Float
+  actualKes      Float
+  discrepancyKes Float
+  status         String
+  resolvedAt     DateTime?
+}
+
+model Listing {
+  id             String    @id
+  organizationId String
+  branchId       String
+  propertyId     String
+  unitId         String
+  title          String
+  description    String
+  rentKes        Float
+  depositKes     Float
+  availableFrom  DateTime?
+  amenitiesCsv   String?
+  photosCsv      String?
+  contactMethod  String
+  status         String
+  createdAt      DateTime  @default(now())
+
+  tenantApplications TenantApplication[]
+
+  @@index([organizationId, branchId, status])
+}
+
+model TenantApplication {
+  id               String    @id
+  listingId        String
+  unitId           String
+  applicantName    String
+  applicantEmail   String
+  applicantPhone   String
+  nationalIdNumber String?
+  employerName     String?
+  monthlyIncomeKes Float?
+  referencesJson   String?
+  motivationLetter String?
+  status           String
+  appliedAt        DateTime  @default(now())
+  reviewedAt       DateTime?
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, status])
+}
+
+model Unit {
+  id               String   @id
+  organizationId   String
+  branchId         String
+  propertyId       String
+  unitNumber       String
+  floor            String?
+  unitType         String
+  category         String   @default("residential")
+  bedrooms         Int?
+  bathrooms        Float?
+  sizeSqft         Float?
+  rentAmountKes    Float?
+  depositAmountKes Float?
+  isFurnished      Boolean  @default(false)
+  amenitiesCsv     String?
+  parkingBay       String?
+  specialNotes     String?
+  status           String
+  currentTenantId  String?
+  currentLeaseId   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([organizationId, branchId, propertyId, status])
+}
+
+model Property {
+  id                   String   @id
+  organizationId       String
+  branchId             String
+  ownerUserId          String?
+  managerUserId        String?
+  name                 String
+  propertyCode         String?
+  propertyType         String
+  ownershipType        String?
+  addressLine1         String
+  addressLine2         String?
+  county               String?
+  subCounty            String?
+  ward                 String?
+  city                 String?
+  state                String?
+  country              String
+  postalCode           String?
+  gpsLatitude          Float?
+  gpsLongitude         Float?
+  landReferenceNumber  String?
+  titleDeedNumber      String?
+  descriptionNotes     String?
+  yearBuilt            Int?
+  totalUnits           Int?
+  totalSqft            Float?
+  lotSizeSqft          Float?
+  totalBathrooms       Float?
+  totalParkingSpaces   Int?
+  purchasePriceKes     Float?
+  acquisitionDate      DateTime?
+  currentValueKes      Float?
+  mortgageBalanceKes   Float?
+  marketRentEstimateKes Float?
+  noiEstimateKes       Float?
+  capRateEstimate      Float?
+  propertyTaxAnnualKes Float?
+  insuranceProvider    String?
+  insurancePremiumAnnualKes Float?
+  insurancePolicyNumber String?
+  insuranceExpiryDate  DateTime?
+  hoaFeeMonthlyKes     Float?
+  mortgageLender       String?
+  mortgageInterestRate Float?
+  mortgageLoanTermMonths Int?
+  mortgageMonthlyPaymentKes Float?
+  mortgageStartDate    DateTime?
+  mortgageMaturityDate DateTime?
+  listingUrl           String?
+  shortTermRentalPlatform String?
+  tagsCsv              String?
+  amenitiesCsv         String?
+  photosCsv            String?
+  videosCsv            String?
+  floorPlanUrl         String?
+  titleDeedScanUrl     String?
+  category             String   @default("residential")
+  managementMode       String   @default("self_managed")
+  categoryAttributesJson String?
+  status               String
+  createdBy            String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  roleAssignments PropertyRoleAssignment[]
+
+  @@index([organizationId, branchId, status])
+  @@index([propertyType])
+}
+
+model Organization {
+  id            String   @id
+  name          String
+  type          String
+  country       String
+  email         String
+  phone         String?
+  status        String   @default("active")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branches        Branch[]
+  roleAssignments UserRoleAssignment[]
+
+  @@index([status])
+}
+
+model Branch {
+  id             String   @id
+  organizationId String
+  name           String
+  location       String?
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  roleAssignments UserRoleAssignment[]
+
+  @@index([organizationId, status])
+}
+
+model AppUser {
+  id           String   @id
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions        ApiSession[]
+  roleAssignments UserRoleAssignment[]
+  kycDocuments    KycDocument[]
+}
+
+model Role {
+  id          String   @id
+  slug        String   @unique
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions     RolePermission[]
+  userAssignments UserRoleAssignment[]
+}
+
+model Permission {
+  id          String   @id
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id           String   @id
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRoleAssignment {
+  id             String   @id
+  userId         String
+  roleId         String
+  organizationId String
+  branchId       String
+  status         String   @default("active")
+  createdAt      DateTime @default(now())
+
+  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([organizationId, branchId])
+}
+
+model ApiSession {
+  token      String   @id
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  revokedAt  DateTime?
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model KycDocument {
+  id             String   @id
+  userId         String
+  organizationId String?
+  branchId       String?
+  documentType   String
+  fileName       String
+  mimeType       String
+  filePath       String
+  fileSizeBytes  Int
+  status         String   @default("pending")
+  uploadedAt     DateTime @default(now())
+  reviewedAt     DateTime?
+  reviewedByUserId String?
+  rejectionReason String?
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, uploadedAt])
+}
+
+model PropertyRoleAssignment {
+  id         String   @id
+  propertyId String
+  userId     String
+  roleType   String
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, roleType])
+  @@index([userId, roleType])
+}
+
+model Expense {
+  id             String   @id
+  organizationId String
+  branchId       String
+  propertyId     String
+  unitId         String?
+  category       String
+  description    String
+  amountKes      Float
+  date           DateTime
+  vendorName     String?
+  receiptUrl     String?
+  paymentMethod  String?
+  isRecurring    Boolean  @default(false)
+  recurringFreq  String?
+  notes          String?
+  createdBy      String
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, branchId, propertyId, date])
+  @@index([category, date])
+}
+
+model FinancialReport {
+  id              String   @id
+  organizationId  String
+  branchId        String
+  propertyId      String?
+  reportType      String
+  periodStart     DateTime
+  periodEnd       DateTime
+  totalIncomeKes  Float
+  totalExpenseKes Float
+  netKes          Float
+  reportJson      String
+  generatedBy     String
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId, propertyId, reportType, periodStart])
+}
+
+model LeaseRenewalAlert {
+  id           String   @id
+  leaseId      String
+  propertyId   String
+  unitId       String
+  tenantUserId String
+  expiryDate   DateTime
+  alertSentAt  DateTime?
+  status       String
+  createdAt    DateTime @default(now())
+
+  @@index([expiryDate, status])
+}
+
+model SubscriptionPlan {
+  id               String   @id
+  code             String   @unique
+  name             String
+  priceKesMonthly  Float
+  priceKesAnnual   Float?
+  featureJson      String
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+}
+
+model UserSubscription {
+  id                String   @id
+  userId            String
+  organizationId    String?
+  planCode          String
+  status            String
+  billingCycle      String
+  startedAt         DateTime
+  nextBillingAt     DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime @default(now())
+}
+
+model TenantScreeningReport {
+  id                 String   @id
+  applicationId      String
+  applicantName      String
+  nationalIdNumber   String?
+  score              Int?
+  recommendation     String
+  riskFlagsJson      String?
+  notes              String?
+  status             String
+  generatedBy        String
+  createdAt          DateTime @default(now())
+}
+
+model DocumentTemplate {
+  id                 String   @id
+  name               String
+  category           String
+  jurisdiction       String
+  templateBody       String
+  variablesCsv       String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model ESignRequest {
+  id                 String   @id
+  templateId         String?
+  leaseId            String?
+  title              String
+  documentUrl        String?
+  signerUserId       String
+  signerEmail        String
+  status             String
+  sentAt             DateTime?
+  signedAt           DateTime?
+  expiresAt          DateTime?
+  createdBy          String
+  createdAt          DateTime @default(now())
+}
+
+model ReminderSchedule {
+  id                 String   @id
+  organizationId     String?
+  branchId           String?
+  targetType         String
+  targetId           String
+  channel            String
+  scheduleOffsetDays Int
+  messageTemplate    String
+  isEnabled          Boolean  @default(true)
+  createdAt          DateTime @default(now())
+}
+
+model TeamInvitation {
+  id              String    @id
+  organizationId  String
+  branchId        String
+  invitedByUserId String
+  inviteeEmail    String
+  roleSlug        String
+  propertyIdsCsv  String?
+  status          String    @default("pending")
+  inviteToken     String    @unique
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([organizationId, status])
+  @@index([inviteeEmail])
+}
