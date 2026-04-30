@@ -41,7 +41,13 @@
       "Bash(curl -s -m 20 http://localhost:4000/api/v1/health)",
       "Bash(curl *)",
       "Bash(node transform-routes.mjs \"./Secure-Living-Backend\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(find \"C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01\\\\\\\\Secure-Living-Backend\" -name \"*.ts\" -not -path \"*/node_modules/*\")",
+      "Bash(find \"C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01\\\\\\\\Secure-Living-Frontend\" -name \"*.ts\" -not -path \"*/node_modules/*\")",
+      "Bash(find \"C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01\\\\\\\\Secure-Living-Backend\\\\\\\\app\" -name \"route.ts\" -not -path \"*/node_modules/*\")",
+      "Bash(grep -r \"Access-Control\\\\|CORS\\\\|cors\\(\" \"C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01\\\\\\\\Secure-Living-Backend\" --include=\"*.ts\" --include=\"*.js\" --exclude-dir=node_modules)",
+      "Bash(grep -r \"Access-Control\\\\|CORS\\\\|cors\\(\" \"C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01\\\\\\\\Secure-Living-Frontend\" --include=\"*.ts\" --include=\"*.js\" --exclude-dir=node_modules)",
+      "Bash(find C:\\\\\\\\Users\\\\\\\\~Bilal Ishaquee\\\\\\\\Documents\\\\\\\\ALEX001\\\\\\\\ALEX01 *)"
     ]
   }
 }
