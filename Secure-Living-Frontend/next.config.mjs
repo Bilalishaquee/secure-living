@@ -13,7 +13,7 @@ const nextConfig = {
     const isDev = process.env.NODE_ENV === "development";
     const backendOrigin = isDev
       ? "http://localhost:4000"
-      : "https://secure-living-ldt8.vercel.app";
+      : "https://secure-living.vercel.app";
     return [
       {
         source: "/api/:path*",
