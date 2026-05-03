@@ -6,7 +6,7 @@ import type { PlatformRoleSlug } from "@/types/profile-system";
  */
 export type UserRole = PlatformRoleSlug | "admin";
 
-export type RegisterableRole = "landlord" | "tenant" | "professional" | "staff";
+export type RegisterableRole = "landlord" | "tenant" | "staff";
 
 export type RoleAssignmentSummary = {
   id: string;

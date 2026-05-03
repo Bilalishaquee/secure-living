@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, Building2, Check, House, KeyRound, ShieldCheck, UserCog, Users } from "lucide-react";
+import { ArrowRight, Building2, Check, House, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
@@ -39,16 +39,6 @@ const roles: {
       "Pay rent through protected escrow rails.",
       "Upload KYC and track verification status.",
       "Access maintenance and document center.",
-    ],
-  },
-  {
-    id: "professional",
-    label: "Professional",
-    icon: UserCog,
-    lines: [
-      "Join the verified contractor network.",
-      "Get matched to vetted landlords.",
-      "Log jobs and milestone completions.",
     ],
   },
   {
