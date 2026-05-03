@@ -141,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: user.email.trim().toLowerCase(),
         fullName: user.name,
         password: user.password,
+        role: user.role || undefined,
         orgName: user.orgName || undefined,
         orgCode: user.orgCode || undefined,
       }),

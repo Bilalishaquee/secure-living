@@ -106,7 +106,7 @@ const landlordGroups: NavGroup[] = [
   },
 ];
 
-const adminGroups: NavGroup[] = [
+const superAdminGroups: NavGroup[] = [
   {
     label: "Core Operations",
     items: [
@@ -147,7 +147,7 @@ const adminGroups: NavGroup[] = [
   {
     label: "Organisation & Users",
     items: [
-      { href: "/admin/organizations", label: "Organisations", icon: Building2 },
+      { href: "/admin/organizations", label: "Organisations", icon: Globe },
       { href: "/admin/rbac", label: "Roles & Permissions", icon: Shield },
       { href: "/team", label: "Team Invitations", icon: UserPlus },
     ],
@@ -168,11 +168,117 @@ const adminGroups: NavGroup[] = [
   },
 ];
 
+const adminGroups: NavGroup[] = [
+  {
+    label: "Core Operations",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/properties", label: "Properties", icon: Building2 },
+      { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Financial System",
+    items: [
+      { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/accounting", label: "Accounting", icon: ReceiptText },
+      { href: "/banking", label: "Wallets & Payouts", icon: BarChart3 },
+      { href: "/expenses", label: "Expenses", icon: Receipt },
+      { href: "/reports", label: "Reports", icon: BarChart2 },
+    ],
+  },
+  {
+    label: "Trust & Compliance",
+    items: [
+      { href: "/kyc", label: "KYC", icon: Upload },
+      { href: "/screening", label: "Screening", icon: FileSearch },
+      { href: "/admin/audit-logs", label: "Audit Logs", icon: ClipboardList },
+    ],
+  },
+  {
+    label: "Services & Marketplace",
+    items: [
+      { href: "/services", label: "Professionals", icon: Briefcase },
+      { href: "/investments", label: "Investments", icon: LineChart },
+    ],
+  },
+  {
+    label: "Organisation",
+    items: [
+      { href: "/admin/organizations", label: "Organisations", icon: Globe },
+      { href: "/team", label: "Team", icon: UserPlus },
+    ],
+  },
+  {
+    label: "More",
+    items: [
+      { href: "/import", label: "Data Import", icon: FileInput },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
+const staffGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/properties", label: "Properties", icon: Building2 },
+      { href: "/tenants", label: "Tenants", icon: Users },
+    ],
+  },
+  {
+    label: "Work",
+    items: [
+      { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/services", label: "Services", icon: Wrench },
+    ],
+  },
+  {
+    label: "More",
+    items: [
+      { href: "/kyc", label: "KYC", icon: Upload },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
+const tenantGroups: NavGroup[] = [
+  {
+    label: "My Home",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/leasing", label: "My Lease", icon: FileText },
+      { href: "/maintenance", label: "Maintenance", icon: Hammer },
+    ],
+  },
+  {
+    label: "Payments",
+    items: [
+      { href: "/rent-collection", label: "Payments", icon: Banknote },
+    ],
+  },
+  {
+    label: "More",
+    items: [
+      { href: "/kyc", label: "KYC & Docs", icon: Upload },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
 function getGroups(role: UserRole): NavGroup[] {
-  if (role === "admin" || role === "super_admin" || role === "staff") {
-    return adminGroups;
+  switch (role) {
+    case "super_admin": return superAdminGroups;
+    case "admin":       return adminGroups;
+    case "staff":       return staffGroups;
+    case "tenant":      return tenantGroups;
+    default:            return landlordGroups;
   }
-  return landlordGroups;
 }
 
 export function Sidebar() {

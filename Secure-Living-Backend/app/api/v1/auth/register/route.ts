@@ -10,6 +10,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     email?: string;
     password?: string;
     fullName?: string;
+    role?: string;
     orgName?: string;
     orgCode?: string;
   };
@@ -63,13 +64,15 @@ export const POST = withErrorHandler(async (req: Request) => {
     },
   });
 
-  const landlordRole = await prisma.role.findUnique({ where: { slug: "landlord" } });
-  if (landlordRole) {
+  const allowedRoles = ["landlord", "tenant", "staff"];
+  const roleSlug = allowedRoles.includes(body.role ?? "") ? body.role! : "landlord";
+  const assignedRole = await prisma.role.findUnique({ where: { slug: roleSlug } });
+  if (assignedRole) {
     await prisma.userRoleAssignment.create({
       data: {
         id: randomUUID(),
         userId: user.id,
-        roleId: landlordRole.id,
+        roleId: assignedRole.id,
         organizationId: orgId,
         branchId: branchId,
       },
