@@ -5,6 +5,21 @@ import { updateLeaseSchema } from "@/lib/server/validation";
 
 type Ctx = { params: { id: string } };
 
+export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
+  const actor = requireActor(req);
+  if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "lease:view");
+  if (denied) return denied;
+
+  const lease = await prisma.lease.findUnique({ where: { id: params.id } });
+  if (!lease) return jsonError(404, "Lease not found");
+
+  const scoped = requireScope(actor, lease.organizationId, lease.branchId);
+  if (scoped) return scoped;
+
+  return Response.json({ data: lease });
+});
+
 export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;

@@ -16,7 +16,8 @@ export const GET = withErrorHandler(async (req: Request) => {
       headers: { "content-type": "application/json" },
     });
   }
-  const where = actor.permissions.includes("*")
+  const isGlobal = actor.role === "super_admin" || actor.permissions.includes("*");
+  const where = isGlobal
     ? {}
     : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } };
   const rows = await prisma.property.findMany({ where, orderBy: { createdAt: "desc" } });

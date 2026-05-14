@@ -24,6 +24,7 @@ type LeaseRow = {
 
 type Row = {
   id: string;
+  tenantUserId: string;
   name: string;
   property: string;
   propertyId: string;
@@ -59,6 +60,7 @@ export default function TenantsPage() {
       const json = (await res.json()) as { data: LeaseRow[] };
       const mapped = json.data.map((l) => ({
         id: l.id,
+        tenantUserId: l.tenantUserId,
         name: l.tenantUserId,
         property: `${l.propertyId} / ${l.unitId}`,
         propertyId: l.propertyId,
@@ -132,6 +134,9 @@ export default function TenantsPage() {
           >
             <MessageSquare className="h-3.5 w-3.5" aria-hidden />
             SMS
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-8" asChild>
+            <Link href={`/tenants/${r.tenantUserId}`}>View</Link>
           </Button>
           <Button type="button" variant="outline" size="sm" className="h-8" asChild>
             <Link href={`/properties/${r.propertyId}`}>Property</Link>
