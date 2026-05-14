@@ -67,17 +67,19 @@ export const POST = withErrorHandler(async (req: Request) => {
   const allowedRoles = ["landlord", "tenant", "staff"];
   const roleSlug = allowedRoles.includes(body.role ?? "") ? body.role! : "landlord";
   const assignedRole = await prisma.role.findUnique({ where: { slug: roleSlug } });
-  if (assignedRole) {
-    await prisma.userRoleAssignment.create({
-      data: {
-        id: randomUUID(),
-        userId: user.id,
-        roleId: assignedRole.id,
-        organizationId: orgId,
-        branchId: branchId,
-      },
-    });
+  if (!assignedRole) {
+    await prisma.appUser.delete({ where: { id: user.id } });
+    return jsonError(503, "System roles not configured. Contact an administrator.");
   }
+  await prisma.userRoleAssignment.create({
+    data: {
+      id: randomUUID(),
+      userId: user.id,
+      roleId: assignedRole.id,
+      organizationId: orgId,
+      branchId: branchId,
+    },
+  });
 
   const access = await buildUserAccess(user.id);
   const token = createAuthToken({

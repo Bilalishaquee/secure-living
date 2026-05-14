@@ -36,6 +36,13 @@ import {
   Tags,
   Ticket,
   Globe,
+  Layers,
+  LogOut,
+  ClipboardCheck,
+  BedDouble,
+  Package,
+  Megaphone,
+  CalendarDays,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, type ComponentType } from "react";
@@ -65,6 +72,7 @@ const landlordGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/containers", label: "Containers", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
     ],
@@ -81,7 +89,11 @@ const landlordGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/listings", label: "Listings", icon: Megaphone },
+      { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
+      { href: "/short-stay", label: "Short Stay", icon: BedDouble },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
       { href: "/services", label: "Services", icon: Wrench },
       { href: "/expenses", label: "Expenses", icon: Receipt },
@@ -111,9 +123,12 @@ const superAdminGroups: NavGroup[] = [
     label: "Core Operations",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/containers", label: "Containers", icon: Layers },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
       { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/listings", label: "Listings", icon: Megaphone },
+      { href: "/vacating", label: "Vacating", icon: LogOut },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
     ],
@@ -140,7 +155,9 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "Services & Marketplace",
     items: [
-      { href: "/services", label: "Professionals", icon: Briefcase },
+      { href: "/services", label: "Services", icon: Briefcase },
+      { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
+      { href: "/short-stay", label: "Short Stay", icon: BedDouble },
       { href: "/investments", label: "Investments", icon: LineChart },
     ],
   },
@@ -149,6 +166,8 @@ const superAdminGroups: NavGroup[] = [
     items: [
       { href: "/admin/organizations", label: "Organisations", icon: Globe },
       { href: "/admin/rbac", label: "Roles & Permissions", icon: Shield },
+      { href: "/admin/service-categories", label: "Service Categories", icon: Tags },
+      { href: "/admin/service-enquiries", label: "Service Enquiries", icon: Ticket },
       { href: "/team", label: "Team Invitations", icon: UserPlus },
     ],
   },
@@ -254,6 +273,8 @@ const tenantGroups: NavGroup[] = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/leasing", label: "My Lease", icon: FileText },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/tenant/vacate", label: "Move-Out Notice", icon: LogOut },
+      { href: "/tenant/checklist", label: "My Checklist", icon: ClipboardCheck },
     ],
   },
   {

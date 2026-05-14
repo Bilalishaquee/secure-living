@@ -9,6 +9,7 @@ const importSchema = z.object({
   branchId: z.string().min(1),
   entity: z.enum(["properties", "units", "tenants", "leases"]),
   rows: z.array(z.record(z.string(), z.unknown())).min(1).max(1000),
+  mappings: z.record(z.string(), z.string()).optional(),
 });
 
 type ImportResult = { imported: number; errors: { row: number; reason: string }[] };
@@ -160,9 +161,57 @@ async function importTenants(
   return { imported, errors };
 }
 
+async function dryRunProperties(rows: Record<string, unknown>[]): Promise<ImportResult> {
+  const errors: { row: number; reason: string }[] = [];
+  let valid = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const name = String(r.name ?? "").trim();
+    const address = String(r.addressLine1 ?? r.address ?? "").trim();
+    if (!name) { errors.push({ row: i + 1, reason: "Missing property name" }); continue; }
+    if (!address) { errors.push({ row: i + 1, reason: "Missing address" }); continue; }
+    valid++;
+  }
+  return { imported: valid, errors };
+}
+
+async function dryRunUnits(rows: Record<string, unknown>[], orgId: string): Promise<ImportResult> {
+  const errors: { row: number; reason: string }[] = [];
+  let valid = 0;
+  const properties = await prisma.property.findMany({ where: { organizationId: orgId }, select: { id: true, name: true } });
+  const propMap = new Map(properties.map((p) => [p.name.toLowerCase(), p.id]));
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const propRef = String(r.propertyName ?? "").trim();
+    const unitNumber = String(r.unitNumber ?? "").trim();
+    if (!propRef || !unitNumber) { errors.push({ row: i + 1, reason: "Missing property or unit number" }); continue; }
+    if (!propMap.has(propRef.toLowerCase())) { errors.push({ row: i + 1, reason: `Property '${propRef}' not found` }); continue; }
+    valid++;
+  }
+  return { imported: valid, errors };
+}
+
+async function dryRunTenants(rows: Record<string, unknown>[]): Promise<ImportResult> {
+  const errors: { row: number; reason: string }[] = [];
+  let valid = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const email = String(r.email ?? "").trim().toLowerCase();
+    const fullName = String(r.fullName ?? r.name ?? "").trim();
+    if (!email || !fullName) { errors.push({ row: i + 1, reason: "Missing email or name" }); continue; }
+    const existing = await prisma.appUser.findUnique({ where: { email } });
+    if (existing) { errors.push({ row: i + 1, reason: `Email '${email}' already registered` }); continue; }
+    valid++;
+  }
+  return { imported: valid, errors };
+}
+
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+
+  const url = new URL(req.url);
+  const dryRun = url.searchParams.get("dryRun") === "true";
 
   const parsed = await parseBody(req, importSchema);
   if (!parsed.ok) return parsed.response;
@@ -174,25 +223,33 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   let result: ImportResult;
   if (entity === "properties") {
-    result = await importProperties(rows as Record<string, unknown>[], organizationId, branchId, actor.userId);
+    result = dryRun
+      ? await dryRunProperties(rows as Record<string, unknown>[])
+      : await importProperties(rows as Record<string, unknown>[], organizationId, branchId, actor.userId);
   } else if (entity === "units") {
-    result = await importUnits(rows as Record<string, unknown>[], organizationId, branchId);
+    result = dryRun
+      ? await dryRunUnits(rows as Record<string, unknown>[], organizationId)
+      : await importUnits(rows as Record<string, unknown>[], organizationId, branchId);
   } else if (entity === "tenants") {
-    result = await importTenants(rows as Record<string, unknown>[], organizationId, branchId);
+    result = dryRun
+      ? await dryRunTenants(rows as Record<string, unknown>[])
+      : await importTenants(rows as Record<string, unknown>[], organizationId, branchId);
   } else {
     return Response.json({ error: "Lease import not yet supported via API — use unit/tenant import first" }, { status: 400 });
   }
 
-  await appendAudit({
-    userId: actor.userId,
-    role: actor.role,
-    action: "import.completed",
-    resourceType: entity,
-    resourceId: organizationId,
-    orgId: organizationId,
-    branchId,
-    afterJson: { entity, imported: result.imported, errors: result.errors.length },
-  });
+  if (!dryRun) {
+    await appendAudit({
+      userId: actor.userId,
+      role: actor.role,
+      action: "import.completed",
+      resourceType: entity,
+      resourceId: organizationId,
+      orgId: organizationId,
+      branchId,
+      afterJson: { entity, imported: result.imported, errors: result.errors.length },
+    });
+  }
 
   return Response.json({ data: result }, { status: 200 });
 })

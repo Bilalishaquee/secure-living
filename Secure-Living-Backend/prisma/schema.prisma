@@ -8,6 +8,458 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ContainerType {
+  STANDALONE
+  ESTATE
+  COMPLEX
+  COURTYARD
+  MALL
+}
+
+enum VacatingStatus {
+  PENDING
+  ACKNOWLEDGED
+  INSPECTION_SCHEDULED
+  INSPECTION_DONE
+  DEPOSIT_PROCESSING
+  COMPLETED
+}
+
+enum InspectionStatus {
+  PROPOSED
+  ACCEPTED
+  RESCHEDULED
+  COMPLETED
+}
+
+enum RefundStatus {
+  PENDING
+  APPROVED
+  PAID
+  DISPUTED
+}
+
+enum ChecklistType {
+  MOVE_IN
+  MOVE_OUT
+}
+
+enum ListingStatus {
+  DRAFT
+  PUBLISHED
+  UNDER_OFFER
+  LET
+  WITHDRAWN
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWING
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+}
+
+enum EnquiryStatus {
+  NEW
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+  NO_SHOW
+}
+
+// ─── Container Hierarchy ──────────────────────────────────────────────────────
+
+model Container {
+  id             String        @id @default(cuid())
+  organizationId String
+  branchId       String?
+  name           String
+  type           ContainerType
+  description    String?
+  address        String?
+  city           String?
+  country        String?
+  coverImage     String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id])
+  properties   Property[]
+  managers     ContainerManager[]
+
+  @@index([organizationId])
+}
+
+model ContainerManager {
+  id          String   @id @default(cuid())
+  containerId String
+  userId      String
+  role        String
+  assignedAt  DateTime @default(now())
+
+  container Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  user      AppUser   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([containerId])
+  @@index([userId])
+}
+
+// ─── Vacating & Move-Out Workflow ─────────────────────────────────────────────
+
+model VacatingNotice {
+  id               String         @id @default(cuid())
+  leaseId          String         @unique
+  unitId           String
+  tenantId         String
+  organizationId   String
+  noticeDate       DateTime       @default(now())
+  intendedMoveOut  DateTime
+  enforcedMoveOut  DateTime
+  noticePeriodDays Int            @default(30)
+  status           VacatingStatus @default(PENDING)
+  tenantNote       String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  lease         Lease              @relation(fields: [leaseId], references: [id])
+  unit          Unit               @relation(fields: [unitId], references: [id])
+  inspection    MoveOutInspection?
+  depositRefund DepositRefund?
+
+  @@index([organizationId, status])
+  @@index([unitId])
+  @@index([tenantId])
+}
+
+model MoveOutInspection {
+  id               String           @id @default(cuid())
+  vacatingNoticeId String           @unique
+  organizationId   String
+  scheduledDate    DateTime
+  status           InspectionStatus @default(PROPOSED)
+  inspectedBy      String?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  vacatingNotice VacatingNotice        @relation(fields: [vacatingNoticeId], references: [id])
+  deductions     InspectionDeduction[]
+
+  @@index([organizationId])
+}
+
+model InspectionDeduction {
+  id           String   @id @default(cuid())
+  inspectionId String
+  description  String
+  amount       Float
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+
+  inspection MoveOutInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+}
+
+model DepositRefund {
+  id               String       @id @default(cuid())
+  vacatingNoticeId String       @unique
+  organizationId   String
+  depositAmount    Float
+  totalDeductions  Float        @default(0)
+  refundAmount     Float
+  status           RefundStatus @default(PENDING)
+  voucherNumber    String?
+  paidAt           DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  vacatingNotice VacatingNotice @relation(fields: [vacatingNoticeId], references: [id])
+
+  @@index([organizationId, status])
+}
+
+// ─── Move-In Checklist ────────────────────────────────────────────────────────
+
+model ChecklistTemplate {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items            ChecklistTemplateItem[]
+  tenantChecklists TenantChecklist[]
+
+  @@index([organizationId])
+}
+
+model ChecklistTemplateItem {
+  id         String @id @default(cuid())
+  templateId String
+  section    String
+  item       String
+  order      Int
+
+  template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, order])
+}
+
+model TenantChecklist {
+  id         String        @id @default(cuid())
+  leaseId    String
+  unitId     String
+  tenantId   String
+  templateId String
+  type       ChecklistType
+  status     String        @default("PENDING")
+  signedAt   DateTime?
+  createdAt  DateTime      @default(now())
+
+  lease    Lease                 @relation(fields: [leaseId], references: [id])
+  unit     Unit                  @relation(fields: [unitId], references: [id])
+  template ChecklistTemplate     @relation(fields: [templateId], references: [id])
+  entries  TenantChecklistEntry[]
+
+  @@index([leaseId])
+  @@index([unitId])
+  @@index([tenantId])
+}
+
+model TenantChecklistEntry {
+  id          String  @id @default(cuid())
+  checklistId String
+  itemId      String
+  condition   String
+  note        String?
+  photoUrl    String?
+
+  checklist TenantChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId])
+}
+
+// ─── Listing Module ───────────────────────────────────────────────────────────
+
+model Listing {
+  id             String        @id @default(cuid())
+  organizationId String
+  unitId         String        @unique
+  title          String
+  description    String?
+  rentAmount     Float
+  currency       String        @default("KES")
+  availableFrom  DateTime
+  leaseDuration  String?
+  furnished      Boolean       @default(false)
+  petFriendly    Boolean       @default(false)
+  features       String[]
+  photos         String[]
+  status         ListingStatus @default(DRAFT)
+  publishedAt    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  unit         Unit               @relation(fields: [unitId], references: [id])
+  applications RentalApplication[]
+
+  @@index([organizationId, status])
+}
+
+model RentalApplication {
+  id          String            @id @default(cuid())
+  listingId   String
+  applicantId String
+  message     String?
+  status      ApplicationStatus @default(PENDING)
+  submittedAt DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, status])
+}
+
+// ─── Accounting Enhancements ──────────────────────────────────────────────────
+
+model MonthlyRentSummary {
+  id             String   @id @default(cuid())
+  organizationId String
+  branchId       String?
+  periodYear     Int
+  periodMonth    Int
+  openingBalance Float    @default(0)
+  totalRentDue   Float    @default(0)
+  totalCollected Float    @default(0)
+  totalArrears   Float    @default(0)
+  closingBalance Float    @default(0)
+  totalExpenses  Float    @default(0)
+  notes          String?
+  generatedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, periodYear, periodMonth])
+  @@index([organizationId])
+}
+
+// ─── Role Context ─────────────────────────────────────────────────────────────
+
+model UserRoleContext {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String
+  containerId    String?
+  role           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+}
+
+// ─── Supporting Services ──────────────────────────────────────────────────────
+
+model ServiceCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  tagline     String?
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  enquiries ServiceEnquiry[]
+
+  @@index([isActive, order])
+}
+
+model ServiceEnquiry {
+  id                String        @id @default(cuid())
+  organizationId    String?
+  userId            String?
+  serviceCategoryId String
+  name              String
+  email             String
+  phone             String?
+  message           String
+  status            EnquiryStatus @default(NEW)
+  assignedTo        String?
+  assignedAt        DateTime?
+  resolvedAt        DateTime?
+  internalNotes     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  serviceCategory ServiceCategory @relation(fields: [serviceCategoryId], references: [id])
+
+  @@index([serviceCategoryId, status])
+  @@index([status, createdAt])
+}
+
+// ─── Airbnb / Short-Stay Module ───────────────────────────────────────────────
+
+model ShortStayProperty {
+  id             String   @id @default(cuid())
+  unitId         String   @unique
+  organizationId String
+  checkInTime    String   @default("14:00")
+  checkOutTime   String   @default("11:00")
+  nightlyRate    Float
+  currency       String   @default("KES")
+  cleaningFee    Float    @default(0)
+  minNights      Int      @default(1)
+  maxNights      Int      @default(30)
+  houseRules     String?
+  wifiPassword   String?
+  accessNotes    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  unit     Unit               @relation(fields: [unitId], references: [id])
+  bookings ShortStayBooking[]
+  stock    StockItem[]
+
+  @@index([organizationId])
+}
+
+model ShortStayBooking {
+  id              String        @id @default(cuid())
+  shortStayId     String
+  organizationId  String
+  guestName       String
+  guestEmail      String
+  guestPhone      String?
+  guestIdNumber   String?
+  checkInDate     DateTime
+  checkOutDate    DateTime
+  checkInTime     String?
+  checkOutTime    String?
+  numberOfGuests  Int           @default(1)
+  totalAmount     Float
+  amountPaid      Float         @default(0)
+  status          BookingStatus @default(CONFIRMED)
+  specialRequests String?
+  internalNotes   String?
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  shortStay  ShortStayProperty  @relation(fields: [shortStayId], references: [id])
+  stockUsage BookingStockUsage[]
+
+  @@index([shortStayId, status])
+  @@index([organizationId, checkInDate])
+}
+
+model StockItem {
+  id              String   @id @default(cuid())
+  shortStayId     String
+  name            String
+  unit            String
+  unitCost        Float
+  quantityInStock Int      @default(0)
+  reorderLevel    Int      @default(5)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shortStay ShortStayProperty  @relation(fields: [shortStayId], references: [id])
+  usages    BookingStockUsage[]
+
+  @@index([shortStayId])
+}
+
+model BookingStockUsage {
+  id          String @id @default(cuid())
+  bookingId   String
+  stockItemId String
+  quantity    Int
+  totalCost   Float
+
+  booking   ShortStayBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  stockItem StockItem        @relation(fields: [stockItemId], references: [id])
+
+  @@index([bookingId])
+}
+
+// ─── Existing Core Models ─────────────────────────────────────────────────────
+
 model ServiceRequest {
   id               String    @id
   organizationId   String
@@ -79,7 +531,9 @@ model Lease {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  rentInvoices RentInvoice[]
+  rentInvoices     RentInvoice[]
+  vacatingNotice   VacatingNotice?
+  tenantChecklists TenantChecklist[]
 }
 
 model ProfessionalProfile {
@@ -273,49 +727,6 @@ model ReconciliationReport {
   resolvedAt     DateTime?
 }
 
-model Listing {
-  id             String    @id
-  organizationId String
-  branchId       String
-  propertyId     String
-  unitId         String
-  title          String
-  description    String
-  rentKes        Float
-  depositKes     Float
-  availableFrom  DateTime?
-  amenitiesCsv   String?
-  photosCsv      String?
-  contactMethod  String
-  status         String
-  createdAt      DateTime  @default(now())
-
-  tenantApplications TenantApplication[]
-
-  @@index([organizationId, branchId, status])
-}
-
-model TenantApplication {
-  id               String    @id
-  listingId        String
-  unitId           String
-  applicantName    String
-  applicantEmail   String
-  applicantPhone   String
-  nationalIdNumber String?
-  employerName     String?
-  monthlyIncomeKes Float?
-  referencesJson   String?
-  motivationLetter String?
-  status           String
-  appliedAt        DateTime  @default(now())
-  reviewedAt       DateTime?
-
-  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([listingId, status])
-}
-
 model Unit {
   id               String   @id
   organizationId   String
@@ -340,93 +751,102 @@ model Unit {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  vacatingNotices  VacatingNotice[]
+  tenantChecklists TenantChecklist[]
+  shortStayProperty ShortStayProperty?
+  listing          Listing?
+
   @@index([organizationId, branchId, propertyId, status])
 }
 
 model Property {
-  id                   String   @id
-  organizationId       String
-  branchId             String
-  ownerUserId          String?
-  managerUserId        String?
-  name                 String
-  propertyCode         String?
-  propertyType         String
-  ownershipType        String?
-  addressLine1         String
-  addressLine2         String?
-  county               String?
-  subCounty            String?
-  ward                 String?
-  city                 String?
-  state                String?
-  country              String
-  postalCode           String?
-  gpsLatitude          Float?
-  gpsLongitude         Float?
-  landReferenceNumber  String?
-  titleDeedNumber      String?
-  descriptionNotes     String?
-  yearBuilt            Int?
-  totalUnits           Int?
-  totalSqft            Float?
-  lotSizeSqft          Float?
-  totalBathrooms       Float?
-  totalParkingSpaces   Int?
-  purchasePriceKes     Float?
-  acquisitionDate      DateTime?
-  currentValueKes      Float?
-  mortgageBalanceKes   Float?
-  marketRentEstimateKes Float?
-  noiEstimateKes       Float?
-  capRateEstimate      Float?
-  propertyTaxAnnualKes Float?
-  insuranceProvider    String?
+  id                        String    @id
+  organizationId            String
+  branchId                  String
+  containerId               String?
+  ownerUserId               String?
+  managerUserId             String?
+  name                      String
+  propertyCode              String?
+  propertyType              String
+  ownershipType             String?
+  addressLine1              String
+  addressLine2              String?
+  county                    String?
+  subCounty                 String?
+  ward                      String?
+  city                      String?
+  state                     String?
+  country                   String
+  postalCode                String?
+  gpsLatitude               Float?
+  gpsLongitude              Float?
+  landReferenceNumber       String?
+  titleDeedNumber           String?
+  descriptionNotes          String?
+  yearBuilt                 Int?
+  totalUnits                Int?
+  totalSqft                 Float?
+  lotSizeSqft               Float?
+  totalBathrooms            Float?
+  totalParkingSpaces        Int?
+  purchasePriceKes          Float?
+  acquisitionDate           DateTime?
+  currentValueKes           Float?
+  mortgageBalanceKes        Float?
+  marketRentEstimateKes     Float?
+  noiEstimateKes            Float?
+  capRateEstimate           Float?
+  propertyTaxAnnualKes      Float?
+  insuranceProvider         String?
   insurancePremiumAnnualKes Float?
-  insurancePolicyNumber String?
-  insuranceExpiryDate  DateTime?
-  hoaFeeMonthlyKes     Float?
-  mortgageLender       String?
-  mortgageInterestRate Float?
-  mortgageLoanTermMonths Int?
+  insurancePolicyNumber     String?
+  insuranceExpiryDate       DateTime?
+  hoaFeeMonthlyKes          Float?
+  mortgageLender            String?
+  mortgageInterestRate      Float?
+  mortgageLoanTermMonths    Int?
   mortgageMonthlyPaymentKes Float?
-  mortgageStartDate    DateTime?
-  mortgageMaturityDate DateTime?
-  listingUrl           String?
-  shortTermRentalPlatform String?
-  tagsCsv              String?
-  amenitiesCsv         String?
-  photosCsv            String?
-  videosCsv            String?
-  floorPlanUrl         String?
-  titleDeedScanUrl     String?
-  category             String   @default("residential")
-  managementMode       String   @default("self_managed")
-  categoryAttributesJson String?
-  status               String
-  createdBy            String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  mortgageStartDate         DateTime?
+  mortgageMaturityDate      DateTime?
+  listingUrl                String?
+  shortTermRentalPlatform   String?
+  tagsCsv                   String?
+  amenitiesCsv              String?
+  photosCsv                 String?
+  videosCsv                 String?
+  floorPlanUrl              String?
+  titleDeedScanUrl          String?
+  category                  String   @default("residential")
+  managementMode            String   @default("self_managed")
+  categoryAttributesJson    String?
+  status                    String
+  createdBy                 String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
+  container       Container?               @relation(fields: [containerId], references: [id])
   roleAssignments PropertyRoleAssignment[]
 
   @@index([organizationId, branchId, status])
   @@index([propertyType])
+  @@index([containerId])
 }
 
 model Organization {
-  id            String   @id
-  name          String
-  type          String
-  country       String
-  email         String
-  phone         String?
-  status        String   @default("active")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id
+  name      String
+  type      String
+  country   String
+  email     String
+  phone     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   branches        Branch[]
   roleAssignments UserRoleAssignment[]
+  containers      Container[]
 
   @@index([status])
 }
@@ -455,9 +875,11 @@ model AppUser {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  sessions        ApiSession[]
-  roleAssignments UserRoleAssignment[]
-  kycDocuments    KycDocument[]
+  sessions             ApiSession[]
+  roleAssignments      UserRoleAssignment[]
+  kycDocuments         KycDocument[]
+  containerManagements ContainerManager[]
+  roleContexts         UserRoleContext[]
 }
 
 model Role {
@@ -502,21 +924,21 @@ model UserRoleAssignment {
   status         String   @default("active")
   createdAt      DateTime @default(now())
 
-  user         AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role         Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user         AppUser      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([organizationId, branchId])
 }
 
 model ApiSession {
-  token      String   @id
-  userId     String
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  revokedAt  DateTime?
+  token     String    @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
 
   user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -524,20 +946,20 @@ model ApiSession {
 }
 
 model KycDocument {
-  id             String   @id
-  userId         String
-  organizationId String?
-  branchId       String?
-  documentType   String
-  fileName       String
-  mimeType       String
-  filePath       String
-  fileSizeBytes  Int
-  status         String   @default("pending")
-  uploadedAt     DateTime @default(now())
-  reviewedAt     DateTime?
+  id               String    @id
+  userId           String
+  organizationId   String?
+  branchId         String?
+  documentType     String
+  fileName         String
+  mimeType         String
+  filePath         String
+  fileSizeBytes    Int
+  status           String    @default("pending")
+  uploadedAt       DateTime  @default(now())
+  reviewedAt       DateTime?
   reviewedByUserId String?
-  rejectionReason String?
+  rejectionReason  String?
 
   user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -558,7 +980,7 @@ model PropertyRoleAssignment {
 }
 
 model Expense {
-  id             String   @id
+  id             String    @id
   organizationId String
   branchId       String
   propertyId     String
@@ -570,13 +992,13 @@ model Expense {
   vendorName     String?
   receiptUrl     String?
   paymentMethod  String?
-  isRecurring    Boolean  @default(false)
+  isRecurring    Boolean   @default(false)
   recurringFreq  String?
   notes          String?
   createdBy      String
   deletedAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([organizationId, branchId, propertyId, date])
   @@index([category, date])
@@ -601,7 +1023,7 @@ model FinancialReport {
 }
 
 model LeaseRenewalAlert {
-  id           String   @id
+  id           String    @id
   leaseId      String
   propertyId   String
   unitId       String
@@ -609,75 +1031,75 @@ model LeaseRenewalAlert {
   expiryDate   DateTime
   alertSentAt  DateTime?
   status       String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
 
   @@index([expiryDate, status])
 }
 
 model SubscriptionPlan {
-  id               String   @id
-  code             String   @unique
-  name             String
-  priceKesMonthly  Float
-  priceKesAnnual   Float?
-  featureJson      String
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  id              String   @id
+  code            String   @unique
+  name            String
+  priceKesMonthly Float
+  priceKesAnnual  Float?
+  featureJson     String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
 }
 
 model UserSubscription {
-  id                String   @id
-  userId            String
-  organizationId    String?
-  planCode          String
-  status            String
-  billingCycle      String
-  startedAt         DateTime
-  nextBillingAt     DateTime?
-  canceledAt        DateTime?
-  createdAt         DateTime @default(now())
+  id             String    @id
+  userId         String
+  organizationId String?
+  planCode       String
+  status         String
+  billingCycle   String
+  startedAt      DateTime
+  nextBillingAt  DateTime?
+  canceledAt     DateTime?
+  createdAt      DateTime  @default(now())
 }
 
 model TenantScreeningReport {
-  id                 String   @id
-  applicationId      String
-  applicantName      String
-  nationalIdNumber   String?
-  score              Int?
-  recommendation     String
-  riskFlagsJson      String?
-  notes              String?
-  status             String
-  generatedBy        String
-  createdAt          DateTime @default(now())
+  id               String   @id
+  applicationId    String
+  applicantName    String
+  nationalIdNumber String?
+  score            Int?
+  recommendation   String
+  riskFlagsJson    String?
+  notes            String?
+  status           String
+  generatedBy      String
+  createdAt        DateTime @default(now())
 }
 
 model DocumentTemplate {
-  id                 String   @id
-  name               String
-  category           String
-  jurisdiction       String
-  templateBody       String
-  variablesCsv       String?
-  isActive           Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id           String   @id
+  name         String
+  category     String
+  jurisdiction String
+  templateBody String
+  variablesCsv String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model ESignRequest {
-  id                 String   @id
-  templateId         String?
-  leaseId            String?
-  title              String
-  documentUrl        String?
-  signerUserId       String
-  signerEmail        String
-  status             String
-  sentAt             DateTime?
-  signedAt           DateTime?
-  expiresAt          DateTime?
-  createdBy          String
-  createdAt          DateTime @default(now())
+  id           String    @id
+  templateId   String?
+  leaseId      String?
+  title        String
+  documentUrl  String?
+  signerUserId String
+  signerEmail  String
+  status       String
+  sentAt       DateTime?
+  signedAt     DateTime?
+  expiresAt    DateTime?
+  createdBy    String
+  createdAt    DateTime  @default(now())
 }
 
 model ReminderSchedule {

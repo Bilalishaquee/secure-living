@@ -9,10 +9,10 @@ export const marketing = {
 
   hero: {
     badge: "Verified listings · Kenya · Secure transactions",
-    headline: "Find verified & secure homes in Kenya",
-    headlineAccent: "No scams. Verified listings only.",
+    headline: "Complete Property Management,",
+    headlineAccent: "Simplified.",
     subhead:
-      "We verify listings and agents before you pay. Search with confidence, close through escrow-backed rails, and manage or exit with legal oversight — for local buyers and the diaspora alike.",
+      "From tenant onboarding to move-out inspections, rent collection to short-stay bookings — manage every aspect of your property portfolio in one secure platform built for Kenya.",
     aiDemoLine:
       "Avoid fake listings. Preview live listings below or explore the platform command center.",
     trustChips: [

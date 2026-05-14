@@ -470,9 +470,10 @@ export default function PropertyDetailPage({ params }: Props) {
         {filteredUnits.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
             {filteredUnits.map((unit) => (
-              <div
+              <Link
                 key={unit.id}
-                className={`rounded-xl border-2 p-3 transition-shadow hover:shadow-md ${UNIT_STATUS_COLORS[unit.status] ?? "bg-slate-50 border-slate-200"}`}
+                href={`/properties/${params.id}/units/${unit.id}`}
+                className={`block rounded-xl border-2 p-3 transition-shadow hover:shadow-md hover:scale-[1.01] ${UNIT_STATUS_COLORS[unit.status] ?? "bg-slate-50 border-slate-200"}`}
               >
                 <div className="flex items-start justify-between gap-1">
                   <p className="text-base font-bold">{unit.unitNumber}</p>
@@ -495,7 +496,7 @@ export default function PropertyDetailPage({ params }: Props) {
                 <p className="mt-1 capitalize text-[11px] font-semibold opacity-90">
                   {unit.status.replace(/_/g, " ")}
                 </p>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

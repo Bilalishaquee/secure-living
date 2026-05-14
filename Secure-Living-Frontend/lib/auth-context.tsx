@@ -109,9 +109,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const raw = readStoredUser();
-    const user = raw ? reconcileUserFromSeed(raw) : null;
-    if (user && raw) persistUser(user);
-    dispatch({ type: "HYDRATE", user });
+    const base = raw ? reconcileUserFromSeed(raw) : null;
+
+    if (!base?.authToken) {
+      if (base && raw) persistUser(base);
+      dispatch({ type: "HYDRATE", user: base });
+      return;
+    }
+
+    // Refresh token from the server before hydrating so that stale permission
+    // caches (from before role-permission seeding) never reach protected routes.
+    fetch("/api/v1/me/refresh-token", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${base.authToken}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { data?: { token?: string; role?: string; permissions?: string[] } } | null) => {
+        if (json?.data?.token) {
+          const fresh: AuthUser = {
+            ...base,
+            authToken: json.data.token,
+            role: (json.data.role as AuthUser["role"]) ?? base.role,
+            permissions: json.data.permissions ?? base.permissions ?? [],
+          };
+          persistUser(fresh);
+          dispatch({ type: "HYDRATE", user: fresh });
+        } else {
+          persistUser(base);
+          dispatch({ type: "HYDRATE", user: base });
+        }
+      })
+      .catch(() => {
+        persistUser(base);
+        dispatch({ type: "HYDRATE", user: base });
+      });
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
