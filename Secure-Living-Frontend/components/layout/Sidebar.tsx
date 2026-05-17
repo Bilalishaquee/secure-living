@@ -48,7 +48,8 @@ import {
   CheckSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, type ComponentType } from "react";
+import { useState, useRef, useEffect, type ComponentType } from "react";
+
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { UserRole } from "@/types/auth";
@@ -317,21 +318,32 @@ function getGroups(role: UserRole): NavGroup[] {
   }
 }
 
-export function Sidebar() {
-  const pathname = usePathname();
-  const { user, logout } = useAuth();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+interface SidebarNavProps {
+  groups: NavGroup[];
+  collapsed: boolean;
+  pathname: string;
+  onNavigate?: () => void;
+}
 
-  const role = (user?.role ?? "landlord") as UserRole;
-  const groups = getGroups(role);
+function SidebarNav({ groups, collapsed, pathname, onNavigate }: SidebarNavProps) {
+  const navRef = useRef<HTMLElement>(null);
+  const scrollRef = useRef<number>(0);
+
+  // Save scroll position before pathname changes, restore after
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    el.scrollTop = scrollRef.current;
+  }, [pathname]);
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(`${href}/`);
   }
 
-  const NavContent = ({ onNavigate }: { onNavigate?: () => void }) => (
+  return (
     <nav
+      ref={navRef}
+      onScroll={(e) => { scrollRef.current = (e.currentTarget as HTMLElement).scrollTop; }}
       className="relative z-10 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-2 py-2 [scrollbar-width:thin]"
       aria-label="Main"
     >
@@ -369,6 +381,16 @@ export function Sidebar() {
       ))}
     </nav>
   );
+}
+
+export function Sidebar() {
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const role = (user?.role ?? "landlord") as UserRole;
+  const groups = getGroups(role);
 
   const userBlock = (
     <div
@@ -471,7 +493,7 @@ export function Sidebar() {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <NavContent onNavigate={() => setMobileOpen(false)} />
+              <SidebarNav groups={groups} collapsed={false} pathname={pathname} onNavigate={() => setMobileOpen(false)} />
               <div className="relative mt-auto shrink-0">{userBlock}</div>
             </motion.aside>
           </motion.div>
@@ -513,7 +535,7 @@ export function Sidebar() {
             )}
           </Button>
         </div>
-        <NavContent />
+        <SidebarNav groups={groups} collapsed={collapsed} pathname={pathname} />
         <div className="relative mt-auto shrink-0">{userBlock}</div>
       </aside>
     </div>
