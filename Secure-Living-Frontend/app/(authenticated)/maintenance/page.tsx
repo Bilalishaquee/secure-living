@@ -38,6 +38,13 @@ export default function MaintenancePage() {
 
   return (
     <div className="w-full space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+        <div>
+          <p className="font-medium text-blue-900">Service requests have moved</p>
+          <p className="text-sm text-blue-700">Maintenance and all service workflows are now managed in the new Service Requests module.</p>
+        </div>
+        <a href="/service-requests" className="text-blue-600 font-medium hover:underline whitespace-nowrap ml-4">Go to Service Requests →</a>
+      </div>
       <div className="app-page-toolbar">
         <div>
           <h1 className="app-page-title">Maintenance Tracking</h1>

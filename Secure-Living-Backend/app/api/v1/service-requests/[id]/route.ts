@@ -1,15 +1,54 @@
+import { z } from "zod";
+import { SrStatus, SrPriority } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
-import { parseBody, requireActor, requirePermission, requireScope, jsonError , withErrorHandler } from "@/lib/server/http";
-import { updateServiceRequestSchema } from "@/lib/server/validation";
-import { canApproveService, canEscalateService, canTransitionServiceStatus } from "@/lib/server/service-fsm";
+import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 
 type Ctx = { params: { id: string } };
 
-export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
+// ── GET ────────────────────────────────────────────────────────────────────────
+
+export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "maintenance:update");
+  const denied = requirePermission(actor, "service-request:view");
+  if (denied) return denied;
+
+  const sr = await prisma.serviceRequest.findUnique({
+    where: { id: params.id },
+    include: {
+      srHistory: { orderBy: { changedAt: "desc" } },
+      srAssignments: { orderBy: { assignedAt: "desc" } },
+      escalations: { orderBy: { escalatedAt: "desc" } },
+      quotes: { orderBy: { createdAt: "desc" } },
+      evidences: { orderBy: { createdAt: "desc" } },
+    },
+  });
+  if (!sr) return jsonError(404, "Not found");
+
+  const scoped = requireScope(actor, sr.organizationId, sr.branchId);
+  if (scoped) return scoped;
+
+  return Response.json({ data: sr });
+});
+
+// ── PUT ────────────────────────────────────────────────────────────────────────
+
+const updateSrSchema = z.object({
+  title: z.string().min(3).max(160).optional(),
+  description: z.string().min(5).max(5000).optional(),
+  srPriority: z.nativeEnum(SrPriority).optional(),
+  scheduledDate: z.string().datetime().optional(),
+  internalNotes: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  dueAt: z.string().datetime().optional(),
+  guestAvailabilityWindow: z.string().optional(),
+});
+
+export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
+  const actor = requireActor(req);
+  if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "service-request:manage");
   if (denied) return denied;
 
   const existing = await prisma.serviceRequest.findUnique({ where: { id: params.id } });
@@ -18,29 +57,25 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const scoped = requireScope(actor, existing.organizationId, existing.branchId);
   if (scoped) return scoped;
 
-  const parsed = await parseBody(req, updateServiceRequestSchema);
+  if (existing.srStatus !== SrStatus.DRAFT) {
+    return jsonError(409, `Cannot edit service request in status ${existing.srStatus}. Only DRAFT requests can be edited.`);
+  }
+
+  const parsed = await parseBody(req, updateSrSchema);
   if (!parsed.ok) return parsed.response;
-  if (parsed.data.status && !canTransitionServiceStatus(existing.status, parsed.data.status)) {
-    return jsonError(409, `Invalid status transition: ${existing.status} -> ${parsed.data.status}`);
-  }
-  if (parsed.data.status === "approved" && !canApproveService(actor)) {
-    return jsonError(403, "Only approvers can approve a request");
-  }
-  if (parsed.data.status === "escalated" && !canEscalateService(actor)) {
-    return jsonError(403, "Only escalation-capable users can escalate");
-  }
-  if (parsed.data.status === "escalated" && !parsed.data.escalatedReason) {
-    return jsonError(400, "Escalation reason is required");
-  }
+  const body = parsed.data;
 
   const updated = await prisma.serviceRequest.update({
     where: { id: params.id },
     data: {
-      ...parsed.data,
-      approvedAt: parsed.data.status === "approved" ? new Date() : undefined,
-      completedDate: parsed.data.status === "completed" ? new Date() : undefined,
-      escalatedAt: parsed.data.status === "escalated" ? new Date() : undefined,
-      closedAt: parsed.data.status === "completed" || parsed.data.status === "cancelled" ? new Date() : undefined,
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
+      ...(body.srPriority !== undefined ? { srPriority: body.srPriority } : {}),
+      ...(body.scheduledDate !== undefined ? { scheduledDate: new Date(body.scheduledDate) } : {}),
+      ...(body.internalNotes !== undefined ? { internalNotes: body.internalNotes } : {}),
+      ...(body.metadata !== undefined ? { metadata: body.metadata as import("@prisma/client").Prisma.InputJsonValue } : {}),
+      ...(body.dueAt !== undefined ? { dueAt: new Date(body.dueAt) } : {}),
+      ...(body.guestAvailabilityWindow !== undefined ? { guestAvailabilityWindow: body.guestAvailabilityWindow } : {}),
     },
   });
 
@@ -57,4 +92,4 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
   });
 
   return Response.json({ data: updated });
-})
+});
