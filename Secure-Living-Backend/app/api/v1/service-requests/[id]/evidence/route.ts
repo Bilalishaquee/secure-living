@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/server/db";
-import { requireActor, requirePermission, requireScope, jsonError , withErrorHandler } from "@/lib/server/http";
+import { requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 
 const uploadRoot = path.join(process.cwd(), "uploads", "service-evidence");
 
@@ -11,7 +11,7 @@ type Ctx = { params: { id: string } };
 export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "maintenance:view");
+  const denied = requirePermission(actor, "service-request:view");
   if (denied) return denied;
 
   const sr = await prisma.serviceRequest.findUnique({ where: { id: params.id } });
@@ -24,13 +24,14 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orderBy: { createdAt: "desc" },
   });
   return Response.json({ data: rows });
-})
+});
 
 export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "maintenance:update");
+  const denied = requirePermission(actor, "service-request:evidence:upload");
   if (denied) return denied;
+
   const sr = await prisma.serviceRequest.findUnique({ where: { id: params.id } });
   if (!sr) return jsonError(404, "Service request not found");
   const scoped = requireScope(actor, sr.organizationId, sr.branchId);
@@ -61,4 +62,4 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     },
   });
   return Response.json({ data: row }, { status: 201 });
-})
+});

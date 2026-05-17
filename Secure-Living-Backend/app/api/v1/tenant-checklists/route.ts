@@ -12,8 +12,8 @@ export const GET = withErrorHandler(async (req: Request) => {
   const checklists = await prisma.tenantChecklist.findMany({
     where: { tenantId },
     include: {
-      template: { select: { id: true, name: true, type: true } },
-      entries: { include: { item: true } },
+      template: { select: { id: true, name: true } },
+      entries: true,
     },
     orderBy: { createdAt: "desc" },
   });

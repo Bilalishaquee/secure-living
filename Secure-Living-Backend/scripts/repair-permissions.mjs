@@ -58,6 +58,15 @@ const PERMISSION_CODES = [
   "role-context:switch",
   "unit-history:view",
   "tenant-lifecycle:view",
+  // Phase 3 permissions
+  "service-request:view",
+  "service-request:create",
+  "service-request:manage",
+  "service-request:execute",
+  "service-request:dispute",
+  "service-request:evidence:upload",
+  "provider:view",
+  "provider:manage",
   "*",
 ];
 
@@ -87,6 +96,9 @@ const ROLES = [
       "service-enquiry:view", "service-enquiry:manage",
       "service-category:view", "service-category:manage",
       "unit-history:view", "tenant-lifecycle:view",
+      "service-request:view", "service-request:create", "service-request:manage",
+      "service-request:execute", "service-request:dispute", "service-request:evidence:upload",
+      "provider:view", "provider:manage",
     ],
   },
   {
@@ -111,6 +123,9 @@ const ROLES = [
       "service-category:view",
       "unit-history:view", "tenant-lifecycle:view",
       "role-context:switch",
+      "service-request:view", "service-request:create", "service-request:manage",
+      "service-request:dispute",
+      "provider:view", "provider:manage",
     ],
   },
   {
@@ -131,6 +146,9 @@ const ROLES = [
       "accounting:view",
       "short-stay:view", "short-stay:manage",
       "unit-history:view",
+      "service-request:view", "service-request:create", "service-request:execute",
+      "service-request:evidence:upload",
+      "provider:view",
     ],
   },
   {
@@ -144,6 +162,7 @@ const ROLES = [
       "vacating:create", "vacating:view",
       "checklist:view",
       "role-context:switch",
+      "service-request:view", "service-request:create", "service-request:dispute",
     ],
   },
 ];
@@ -333,6 +352,29 @@ async function main() {
     });
   }
   console.log(`   ✓ ${SERVICE_CATEGORIES.length} service categories seeded\n`);
+
+  // 8. Seed service type configs
+  console.log("8. Seeding service type configs...");
+  const serviceTypeConfigs = [
+    { serviceType: "MAINTENANCE", quoteRequired: false, supervisorApprovalRequired: false, evidenceRequirements: ["before_photo", "after_photo", "receipt", "resolution_notes"], assignmentRestrictions: "open" },
+    { serviceType: "INSPECTION", quoteRequired: false, supervisorApprovalRequired: true, evidenceRequirements: ["geotagged_photos", "meter_readings", "supervisor_signoff"], assignmentRestrictions: "internal" },
+    { serviceType: "LEGAL", quoteRequired: true, supervisorApprovalRequired: true, evidenceRequirements: ["legal_documents", "counterparty_acknowledgment"], assignmentRestrictions: "internal" },
+    { serviceType: "PROXY", quoteRequired: true, supervisorApprovalRequired: false, evidenceRequirements: ["document_photo", "acknowledgment_receipt", "site_visit_report"], assignmentRestrictions: "internal" },
+    { serviceType: "VALUATION", quoteRequired: true, supervisorApprovalRequired: false, evidenceRequirements: ["valuation_certificate", "market_analysis"], assignmentRestrictions: "open" },
+    { serviceType: "CLEANING", quoteRequired: false, supervisorApprovalRequired: false, evidenceRequirements: ["before_after_photos", "cleaning_checklist", "stock_items_used"], assignmentRestrictions: "open" },
+    { serviceType: "FOOD_DELIVERY", quoteRequired: false, supervisorApprovalRequired: false, evidenceRequirements: ["delivery_photo", "guest_acknowledgment"], assignmentRestrictions: "open" },
+    { serviceType: "AIRPORT_TRANSFER", quoteRequired: false, supervisorApprovalRequired: false, evidenceRequirements: ["pickup_confirmation", "dropoff_confirmation", "guest_signature"], assignmentRestrictions: "open" },
+    { serviceType: "GUEST_ASSISTANCE", quoteRequired: false, supervisorApprovalRequired: false, evidenceRequirements: ["service_photo", "guest_rating"], assignmentRestrictions: "open" },
+    { serviceType: "CUSTOM", quoteRequired: true, supervisorApprovalRequired: true, evidenceRequirements: [], assignmentRestrictions: "open" },
+  ];
+  for (const config of serviceTypeConfigs) {
+    await prisma.serviceTypeConfig.upsert({
+      where: { serviceType: config.serviceType },
+      update: config,
+      create: { id: randomUUID(), ...config },
+    });
+  }
+  console.log(`   ✓ ${serviceTypeConfigs.length} service type configs seeded\n`);
 
   console.log("=== Repair complete ===");
   console.log("\nNEXT STEP: Have all users log out and log back in to get a fresh token with correct permissions.");

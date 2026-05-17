@@ -77,6 +77,109 @@ enum BookingStatus {
   NO_SHOW
 }
 
+// ─── Phase 3 Enums ────────────────────────────────────────────────────────────
+
+enum ServiceRequestType {
+  MAINTENANCE
+  INSPECTION
+  LEGAL
+  PROXY
+  VALUATION
+  CLEANING
+  FOOD_DELIVERY
+  AIRPORT_TRANSFER
+  GUEST_ASSISTANCE
+  CUSTOM
+}
+
+enum SrStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  QUOTING
+  AWAITING_FUNDING
+  FUNDED
+  ASSIGNED
+  SCHEDULING_PENDING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum SrPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ServiceMode {
+  MANAGED
+  MARKETPLACE
+  INTERNAL
+}
+
+enum SrCategory {
+  OPERATIONAL
+  GUEST_SERVICE
+  EMERGENCY
+}
+
+enum BlockedReasonType {
+  AWAITING_LANDLORD_APPROVAL
+  TENANT_UNAVAILABLE
+  PROVIDER_UNAVAILABLE
+  MISSING_MATERIALS
+  LEGAL_DEPENDENCY
+  PAYMENT_PENDING
+  WEATHER_ACCESS_ISSUE
+  OTHER
+}
+
+enum RequestSource {
+  MOBILE_APP
+  WHATSAPP
+  QR_CODE
+  WEB_PORTAL
+  RECEPTION
+  IN_ROOM_TABLET
+  TELEPHONE
+}
+
+enum ProviderCategory {
+  INTERNAL
+  VERIFIED_MARKETPLACE
+  LANDLORD_PREFERRED
+  AGENCY_PREFERRED
+  TENANT_REFERRED
+}
+
+enum ProviderStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  BLACKLISTED
+  REJECTED
+}
+
+enum QuoteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUPERSEDED
+}
+
+enum UnitReadiness {
+  PENDING_CLEAN
+  PENDING_INSPECTION
+  READY
+  BLOCKED
+}
+
 // ─── Container Hierarchy ──────────────────────────────────────────────────────
 
 model Container {
@@ -461,14 +564,15 @@ model BookingStockUsage {
 // ─── Existing Core Models ─────────────────────────────────────────────────────
 
 model ServiceRequest {
-  id               String    @id
+  id               String              @id @default(cuid())
   organizationId   String
   branchId         String
   propertyId       String?
   unitId           String?
   tenantUserId     String?
   assignedToUserId String?
-  type             String    @default("maintenance")
+  // Legacy string field kept for backward compat
+  type             String              @default("maintenance")
   title            String
   description      String
   category         String
@@ -479,20 +583,64 @@ model ServiceRequest {
   completedDate    DateTime?
   notes            String?
   evidenceUrlsCsv  String?
-  status           String
+  status           String              @default("DRAFT")
   escalatedAt      DateTime?
   escalatedReason  String?
   approvedAt       DateTime?
   createdBy        String
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
   closedAt         DateTime?
 
-  jobAssignments JobAssignment[]
-  evidences      ServiceRequestEvidence[]
+  // Phase 3 fields
+  serviceType           ServiceRequestType  @default(MAINTENANCE)
+  serviceMode           ServiceMode         @default(MARKETPLACE)
+  srCategory            SrCategory          @default(OPERATIONAL)
+  srStatus              SrStatus            @default(DRAFT)
+  srPriority            SrPriority          @default(NORMAL)
+  requestSource         RequestSource       @default(MOBILE_APP)
+  blockedReasonType     BlockedReasonType?
+  blockedReason         String?
+  idempotencyKey        String?             @unique
+  metadata              Json?
+  internalNotes         String?
+  rejectionReason       String?
+  disputeReason         String?
+  resolutionNotes       String?
+  startedAt             DateTime?
+  dueAt                 DateTime?
+  resolvedAt            DateTime?
+  // SLA tracking
+  activeWorkDurationSec Int                 @default(0)
+  blockedDurationSec    Int                 @default(0)
+  waitingForClientSec   Int                 @default(0)
+  waitingForProviderSec Int                 @default(0)
+  slaPolicyId           String?
+  // Short-stay / hospitality
+  shortStayBookingId    String?
+  guestId               String?
+  bookingCheckInAt      DateTime?
+  bookingCheckOutAt     DateTime?
+  turnaroundDeadline    DateTime?
+  guestAvailabilityWindow String?
+  // Payment
+  paymentStatus         String              @default("PENDING")
+  paymentResponsibility String              @default("MANAGEMENT")
+  serviceChargeAmount   Float?
+
+  jobAssignments  JobAssignment[]
+  evidences       ServiceRequestEvidence[]
+  srHistory       ServiceRequestHistory[]
+  srAssignments   ServiceRequestAssignment[]
+  escalations     ServiceRequestEscalation[]
+  quotes          ServiceRequestQuote[]
+  outboxEvents    OutboxEvent[]
 
   @@index([organizationId, branchId, status])
+  @@index([organizationId, branchId, srStatus])
   @@index([propertyId, unitId])
+  @@index([serviceType, srStatus])
+  @@index([shortStayBookingId])
 }
 
 model ServiceRequestEvidence {
@@ -751,12 +899,15 @@ model Unit {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
+  readinessStatus  UnitReadiness     @default(READY)
+
   vacatingNotices  VacatingNotice[]
   tenantChecklists TenantChecklist[]
   shortStayProperty ShortStayProperty?
   listing          Listing?
 
   @@index([organizationId, branchId, propertyId, status])
+  @@index([readinessStatus])
 }
 
 model Property {
@@ -1132,4 +1283,179 @@ model TeamInvitation {
 
   @@index([organizationId, status])
   @@index([inviteeEmail])
+}
+
+// ─── Phase 3 Models ───────────────────────────────────────────────────────────
+
+model ServiceRequestHistory {
+  id               String    @id @default(cuid())
+  serviceRequestId String
+  changedBy        String
+  fromStatus       SrStatus
+  toStatus         SrStatus
+  note             String?
+  changedAt        DateTime  @default(now())
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([serviceRequestId, changedAt])
+}
+
+model ServiceRequestAssignment {
+  id               String    @id @default(cuid())
+  serviceRequestId String
+  assignedTo       String
+  assignedBy       String
+  role             String    @default("primary")
+  assignedAt       DateTime  @default(now())
+  acceptedAt       DateTime?
+  declinedAt       DateTime?
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([serviceRequestId])
+  @@index([assignedTo])
+}
+
+model ServiceRequestEscalation {
+  id               String    @id @default(cuid())
+  serviceRequestId String
+  escalatedBy      String
+  escalatedTo      String
+  reason           String
+  escalatedAt      DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([serviceRequestId])
+}
+
+model ServiceRequestQuote {
+  id               String      @id @default(cuid())
+  serviceRequestId String
+  submittedBy      String
+  amount           Float
+  scopeDescription String
+  validUntil       DateTime?
+  status           QuoteStatus @default(PENDING)
+  rejectionReason  String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  serviceRequest ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+
+  @@index([serviceRequestId, status])
+}
+
+model SlaPolicy {
+  id                          String   @id @default(cuid())
+  name                        String
+  serviceType                 String
+  responseDeadlineMinutes     Int      @default(60)
+  completionDeadlineMinutes   Int      @default(1440)
+  escalationAfterMinutes      Int      @default(120)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@unique([serviceType])
+}
+
+model ServiceProvider {
+  id               String           @id @default(cuid())
+  userId           String
+  organizationId   String?
+  category         ProviderCategory @default(LANDLORD_PREFERRED)
+  status           ProviderStatus   @default(PENDING_APPROVAL)
+  specializations  String[]
+  coverageAreas    String[]
+  bio              String?
+  qrCodeUrl        String?
+  verificationLevel String          @default("Unverified")
+  trustScore       Float            @default(0)
+  suspensionReason String?
+  blacklistReason  String?
+  suspendedAt      DateTime?
+  blacklistedAt    DateTime?
+  approvedAt       DateTime?
+  approvedBy       String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  auditLogs   ServiceProviderAuditLog[]
+  performance ServiceProviderPerformance?
+
+  @@index([organizationId, status])
+  @@index([userId])
+}
+
+model ServiceProviderAuditLog {
+  id           String   @id @default(cuid())
+  providerId   String
+  action       String
+  fromStatus   String?
+  toStatus     String?
+  reason       String?
+  reviewedBy   String
+  createdAt    DateTime @default(now())
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId, createdAt])
+}
+
+model ServiceProviderPerformance {
+  id                     String   @id @default(cuid())
+  providerId             String   @unique
+  responseTimeSec        Float    @default(0)
+  completionTimeSec      Float    @default(0)
+  disputeRate            Float    @default(0)
+  reassignmentRate       Float    @default(0)
+  cancellationRate       Float    @default(0)
+  reworkRate             Float    @default(0)
+  totalJobsCompleted     Int      @default(0)
+  updatedAt              DateTime @updatedAt
+
+  provider ServiceProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+
+model OutboxEvent {
+  id               String    @id @default(cuid())
+  eventType        String
+  payload          Json
+  processed        Boolean   @default(false)
+  retryCount       Int       @default(0)
+  createdAt        DateTime  @default(now())
+  processedAt      DateTime?
+  serviceRequestId String?
+
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
+
+  @@index([processed, createdAt])
+  @@index([eventType])
+}
+
+model CustomTypeDefinition {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  metadataSchema Json
+  serviceMode    ServiceMode @default(MANAGED)
+  defaultPriority SrPriority @default(NORMAL)
+  slaPolicyId    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ServiceTypeConfig {
+  id                        String   @id @default(cuid())
+  serviceType               String   @unique
+  quoteRequired             Boolean  @default(false)
+  supervisorApprovalRequired Boolean @default(false)
+  evidenceRequirements      String[]
+  assignmentRestrictions    String   @default("open")
+  escrowRules               String?
+  slaPolicyId               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 }

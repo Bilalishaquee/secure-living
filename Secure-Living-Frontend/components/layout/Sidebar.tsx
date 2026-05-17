@@ -43,6 +43,9 @@ import {
   Package,
   Megaphone,
   CalendarDays,
+  ConciergeBell,
+  HardHat,
+  CheckSquare,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, type ComponentType } from "react";
@@ -91,6 +94,9 @@ const landlordGroups: NavGroup[] = [
       { href: "/leasing", label: "Leasing", icon: Landmark },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
@@ -155,6 +161,9 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "Services & Marketplace",
     items: [
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/services", label: "Services", icon: Briefcase },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
@@ -220,6 +229,9 @@ const adminGroups: NavGroup[] = [
   {
     label: "Services & Marketplace",
     items: [
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/services", label: "Professionals", icon: Briefcase },
       { href: "/investments", label: "Investments", icon: LineChart },
     ],
@@ -252,6 +264,8 @@ const staffGroups: NavGroup[] = [
   {
     label: "Work",
     items: [
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/leasing", label: "Leases", icon: Landmark },
       { href: "/services", label: "Services", icon: Wrench },
@@ -272,6 +286,7 @@ const tenantGroups: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/leasing", label: "My Lease", icon: FileText },
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/tenant/vacate", label: "Move-Out Notice", icon: LogOut },
       { href: "/tenant/checklist", label: "My Checklist", icon: ClipboardCheck },

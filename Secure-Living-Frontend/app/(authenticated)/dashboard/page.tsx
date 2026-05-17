@@ -16,6 +16,7 @@ import {
   XCircle,
   RefreshCw,
   FileText,
+  ConciergeBell,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatKes } from "@/lib/utils";
@@ -244,11 +245,55 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
   }
 }
 
+type SRStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "QUOTING"
+  | "AWAITING_FUNDING"
+  | "FUNDED"
+  | "ASSIGNED"
+  | "SCHEDULING_PENDING"
+  | "IN_PROGRESS"
+  | "BLOCKED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "DISPUTED";
+
+type SRWidgetItem = {
+  id: string;
+  title: string;
+  srStatus: SRStatus;
+  serviceType: string;
+  createdAt: string;
+};
+
+function srStatusLabel(status: SRStatus): { label: string; className: string } {
+  const map: Partial<Record<SRStatus, { label: string; className: string }>> = {
+    SUBMITTED: { label: "Submitted", className: "bg-blue-100 text-blue-700" },
+    IN_PROGRESS: { label: "In Progress", className: "bg-blue-100 text-blue-700" },
+    BLOCKED: { label: "Blocked", className: "bg-red-100 text-red-700" },
+    COMPLETED: { label: "Completed", className: "bg-emerald-100 text-emerald-700" },
+    ASSIGNED: { label: "Assigned", className: "bg-indigo-100 text-indigo-700" },
+  };
+  return map[status] ?? { label: status.replace(/_/g, " "), className: "bg-slate-100 text-slate-600" };
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  // Phase 3 SR widgets
+  const [myRequests, setMyRequests] = useState<SRWidgetItem[]>([]);
+  const [myRequestsLoading, setMyRequestsLoading] = useState(true);
+  const [queueSubmitted, setQueueSubmitted] = useState(0);
+  const [queueBlocked, setQueueBlocked] = useState(0);
+  const [queueOverdue, setQueueOverdue] = useState(0);
+  const [myJobs, setMyJobs] = useState<SRWidgetItem[]>([]);
+  const [myJobsLoading, setMyJobsLoading] = useState(true);
 
   const role = (user?.role ?? "landlord") as UserRole;
   const config = getRoleConfig(role);
@@ -270,9 +315,90 @@ export default function DashboardPage() {
     }
   }, [user?.authToken]);
 
+  // Load "My Service Requests" widget
+  const loadMyRequests = useCallback(async () => {
+    if (!user?.authToken) return;
+    setMyRequestsLoading(true);
+    try {
+      const res = await fetch("/api/v1/service-requests?limit=5", {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { data: SRWidgetItem[] };
+        setMyRequests(json.data ?? []);
+      }
+    } finally {
+      setMyRequestsLoading(false);
+    }
+  }, [user?.authToken]);
+
+  // Load manager queue widget
+  const loadManagerQueue = useCallback(async () => {
+    if (!user?.authToken) return;
+    try {
+      const [submittedRes, blockedRes, allRes] = await Promise.all([
+        fetch("/api/v1/service-requests?srStatus=SUBMITTED&limit=1", {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        }),
+        fetch("/api/v1/service-requests?srStatus=BLOCKED&limit=1", {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        }),
+        fetch("/api/v1/service-requests?limit=100", {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        }),
+      ]);
+      if (submittedRes.ok) {
+        const j = (await submittedRes.json()) as { meta?: { total?: number }; data: unknown[] };
+        setQueueSubmitted(j.meta?.total ?? j.data?.length ?? 0);
+      }
+      if (blockedRes.ok) {
+        const j = (await blockedRes.json()) as { meta?: { total?: number }; data: unknown[] };
+        setQueueBlocked(j.meta?.total ?? j.data?.length ?? 0);
+      }
+      if (allRes.ok) {
+        const j = (await allRes.json()) as { data: SRWidgetItem[] };
+        const now = new Date();
+        const terminal: SRStatus[] = ["COMPLETED", "CANCELLED"];
+        const overdueCount = (j.data ?? []).filter(
+          (r: SRWidgetItem & { dueAt?: string }) =>
+            (r as SRWidgetItem & { dueAt?: string }).dueAt &&
+            new Date((r as SRWidgetItem & { dueAt?: string }).dueAt!) < now &&
+            !terminal.includes(r.srStatus)
+        ).length;
+        setQueueOverdue(overdueCount);
+      }
+    } catch {
+      // ignore
+    }
+  }, [user?.authToken]);
+
+  // Load staff "My Jobs" widget
+  const loadMyJobs = useCallback(async () => {
+    if (!user?.authToken) return;
+    setMyJobsLoading(true);
+    try {
+      const res = await fetch("/api/v1/service-requests?srStatus=IN_PROGRESS&limit=5", {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { data: SRWidgetItem[] };
+        setMyJobs(json.data ?? []);
+      }
+    } finally {
+      setMyJobsLoading(false);
+    }
+  }, [user?.authToken]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadMyRequests();
+    if (role === "admin" || role === "super_admin" || role === "landlord") {
+      void loadManagerQueue();
+    }
+    if (role === "staff") {
+      void loadMyJobs();
+    }
+  }, [load, loadMyRequests, loadManagerQueue, loadMyJobs, role]);
 
   const topMetrics = stats ? buildMetrics(stats, role) : [];
   const quickActions = getQuickActions(role);
@@ -414,6 +540,165 @@ export default function DashboardPage() {
           </section>
         ) : null}
       </div>
+
+      {/* Phase 3: Service Request Widgets */}
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+          Service Requests
+        </h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* My Service Requests — all roles */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2">
+                  <ConciergeBell className="h-4 w-4 text-blue-500" />
+                  My Service Requests
+                </span>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/service-requests" className="text-xs text-blue-600 hover:underline">
+                    View all →
+                  </Link>
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {myRequestsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-slate-100" />)}
+                </div>
+              ) : myRequests.length === 0 ? (
+                <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-slate-400" />
+                  No active service requests
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {myRequests.map((sr) => {
+                    const badge = srStatusLabel(sr.srStatus);
+                    return (
+                      <Link
+                        key={sr.id}
+                        href={`/service-requests/${sr.id}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-2 hover:bg-slate-50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                            {sr.title}
+                          </p>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            {sr.serviceType.replace(/_/g, " ")} · {timeAgo(sr.createdAt)}
+                          </p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
+                          {badge.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Manager Queue widget */}
+          {(role === "admin" || role === "super_admin" || role === "landlord") && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-500" />
+                    Request Queue
+                  </span>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/service-requests" className="text-xs text-blue-600 hover:underline">
+                      Manage →
+                    </Link>
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-col items-center rounded-xl border border-blue-100 bg-blue-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-blue-700">{queueSubmitted}</p>
+                    <p className="text-xs text-blue-600">Awaiting Approval</p>
+                  </div>
+                  <div className="flex flex-col items-center rounded-xl border border-red-100 bg-red-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-red-700">{queueBlocked}</p>
+                    <p className="text-xs text-red-600">Blocked</p>
+                  </div>
+                  <div className="flex flex-col items-center rounded-xl border border-orange-100 bg-orange-50 p-3 text-center">
+                    <p className="text-2xl font-bold text-orange-700">{queueOverdue}</p>
+                    <p className="text-xs text-orange-600">Overdue</p>
+                  </div>
+                </div>
+                {queueSubmitted > 0 && (
+                  <div className="mt-3">
+                    <Button variant="secondary" size="sm" className="w-full" asChild>
+                      <Link href="/service-requests?status=SUBMITTED">
+                        Review {queueSubmitted} pending request{queueSubmitted !== 1 ? "s" : ""}
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Staff "My Jobs" widget */}
+          {role === "staff" && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-blue-500" />
+                    My Jobs
+                  </span>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/service-requests" className="text-xs text-blue-600 hover:underline">
+                      View all →
+                    </Link>
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {myJobsLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-slate-100" />)}
+                  </div>
+                ) : myJobs.length === 0 ? (
+                  <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-slate-400" />
+                    No jobs in progress
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {myJobs.map((sr) => (
+                      <Link
+                        key={sr.id}
+                        href={`/service-requests/${sr.id}`}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-2 hover:bg-slate-50"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
+                            {sr.title}
+                          </p>
+                          <p className="text-xs text-[var(--text-secondary)]">
+                            {sr.serviceType.replace(/_/g, " ")} · {timeAgo(sr.createdAt)}
+                          </p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                          In Progress
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </section>
 
       {/* Quick Actions */}
       <section>
