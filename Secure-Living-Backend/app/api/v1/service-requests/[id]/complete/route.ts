@@ -31,6 +31,21 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const parsed = await parseBody(req, completeSchema);
   if (!parsed.ok) return parsed.response;
 
+  // Evidence enforcement: check required evidence types are uploaded
+  if (existing.serviceType) {
+    const typeConfig = await prisma.serviceTypeConfig.findUnique({
+      where: { serviceType: existing.serviceType },
+    });
+    if (typeConfig && Array.isArray(typeConfig.evidenceRequirements) && typeConfig.evidenceRequirements.length > 0) {
+      const evidenceCount = await prisma.serviceRequestEvidence.count({
+        where: { serviceRequestId: params.id },
+      });
+      if (evidenceCount === 0) {
+        return jsonError(422, `At least one evidence item is required before completing a ${existing.serviceType} request. Required types: ${(typeConfig.evidenceRequirements as string[]).join(", ")}`);
+      }
+    }
+  }
+
   const now = new Date();
 
   const updated = await prisma.$transaction(async (tx) => {

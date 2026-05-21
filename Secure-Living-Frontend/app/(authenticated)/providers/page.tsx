@@ -311,6 +311,7 @@ export default function ProvidersPage() {
   // Action modals
   const [suspendTarget, setSuspendTarget] = useState<string | null>(null);
   const [reactivateTarget, setReactivateTarget] = useState<string | null>(null);
+  const [blacklistTarget, setBlacklistTarget] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.authToken) return;
@@ -556,6 +557,19 @@ export default function ProvidersPage() {
                           Reactivate
                         </Button>
                       )}
+                      {(user?.role === "admin" || user?.role === "super_admin") &&
+                        p.status !== "BLACKLISTED" &&
+                        p.status !== "REJECTED" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-red-500 bg-red-50 text-red-900 hover:bg-red-100"
+                            disabled={actionLoading}
+                            onClick={() => setBlacklistTarget(p.id)}
+                          >
+                            Blacklist
+                          </Button>
+                        )}
                     </div>
                   </td>
                 </tr>
@@ -601,6 +615,22 @@ export default function ProvidersPage() {
         description="Provide justification for reactivating this provider"
         label="Justification"
         confirmLabel="Reactivate"
+        loading={actionLoading}
+      />
+
+      <ActionTextModal
+        open={!!blacklistTarget}
+        onClose={() => setBlacklistTarget(null)}
+        onConfirm={(text) => {
+          if (!blacklistTarget) return;
+          void providerAction(blacklistTarget, "blacklist", { reason: text }).then(() => {
+            setBlacklistTarget(null);
+          });
+        }}
+        title="Blacklist Provider"
+        description="This action permanently bans the provider. Provide a detailed reason."
+        label="Reason for blacklisting"
+        confirmLabel="Blacklist Provider"
         loading={actionLoading}
       />
     </div>

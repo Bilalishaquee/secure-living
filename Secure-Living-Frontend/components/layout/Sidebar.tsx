@@ -96,6 +96,7 @@ const landlordGroups: NavGroup[] = [
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
       { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
@@ -163,6 +164,7 @@ const superAdminGroups: NavGroup[] = [
     label: "Services & Marketplace",
     items: [
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
       { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/services", label: "Services", icon: Briefcase },
@@ -231,6 +233,7 @@ const adminGroups: NavGroup[] = [
     label: "Services & Marketplace",
     items: [
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
       { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/services", label: "Professionals", icon: Briefcase },
@@ -266,6 +269,7 @@ const staffGroups: NavGroup[] = [
     label: "Work",
     items: [
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/my-queue", label: "My Job Queue", icon: ClipboardList },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/leasing", label: "Leases", icon: Landmark },

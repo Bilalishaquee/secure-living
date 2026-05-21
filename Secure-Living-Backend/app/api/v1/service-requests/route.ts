@@ -3,7 +3,7 @@ import { z } from "zod";
 import { SrStatus, ServiceRequestType, SrPriority, ServiceMode, SrCategory, RequestSource } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
-import { parseBody, requireActor, requirePermission, requireScope, withErrorHandler } from "@/lib/server/http";
+import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
 import { SR_EVENT_MAP } from "@/lib/server/service-fsm";
 
@@ -114,6 +114,16 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   const scoped = requireScope(actor, body.organizationId, body.branchId);
   if (scoped) return scoped;
+
+  // CUSTOM type must have a registered CustomTypeDefinition
+  if (body.serviceType === ServiceRequestType.CUSTOM) {
+    const customDef = await prisma.customTypeDefinition.findFirst({
+      where: { isActive: true },
+    });
+    if (!customDef) {
+      return jsonError(422, "Cannot create a CUSTOM service request: no active CustomTypeDefinition exists. Please register a custom type first.");
+    }
+  }
 
   // Idempotency check
   if (body.idempotencyKey) {
