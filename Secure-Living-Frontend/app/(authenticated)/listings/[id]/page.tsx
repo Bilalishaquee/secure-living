@@ -135,6 +135,17 @@ export default function ListingDetailPage({ params }: Props) {
               <div><p className="text-xs text-slate-500">Furnished</p><p className="font-semibold">{listing.furnished ? "Yes" : "No"}</p></div>
               <div><p className="text-xs text-slate-500">Pet Friendly</p><p className="font-semibold">{listing.petFriendly ? "Yes" : "No"}</p></div>
             </div>
+
+            {/* Required fee disclosure — Section 5.1 */}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold mb-1">Property Inspection Facilitation Fee</p>
+              <p>
+                <strong>Contact unlock fee:</strong> KES 50 — paid to the platform when a tenant requests the exact address and agent contact for this listing. Non-refundable.
+              </p>
+              <p className="mt-2 text-xs">
+                <strong>Important:</strong> The property inspection facilitation fee (KES 500–1,000) is optional and set by the agent. Secure Living does not collect it. You pay the agent directly (cash or M-Pesa) after the inspection, if you attend.
+              </p>
+            </div>
             {(listing.features as string[])?.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase text-slate-500">Features</p>

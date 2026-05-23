@@ -23,6 +23,7 @@ import { formatKes } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import type { UserRole } from "@/types/auth";
+import { TrustSignals } from "@/components/dashboard/TrustSignals";
 
 type DashboardStats = {
   totalEscrowKes: number;
@@ -699,6 +700,16 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
+
+      {/* Verified Trust Signals */}
+      {(role === "landlord" || role === "agency" || role === "staff") && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            Your Verified Record
+          </h2>
+          <TrustSignals />
+        </section>
+      )}
 
       {/* Quick Actions */}
       <section>

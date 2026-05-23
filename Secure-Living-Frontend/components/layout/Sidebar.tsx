@@ -46,6 +46,7 @@ import {
   ConciergeBell,
   HardHat,
   CheckSquare,
+  Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect, type ComponentType } from "react";
@@ -76,7 +77,7 @@ const landlordGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/containers", label: "Containers", icon: Layers },
+      { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
     ],
@@ -104,6 +105,7 @@ const landlordGroups: NavGroup[] = [
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
       { href: "/services", label: "Services", icon: Wrench },
+      { href: "/utilities", label: "Utilities", icon: Zap },
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
     ],
@@ -120,7 +122,7 @@ const landlordGroups: NavGroup[] = [
     items: [
       { href: "/investments", label: "Investments", icon: LineChart },
       { href: "/reports", label: "Reports", icon: BarChart2 },
-      { href: "/kyc", label: "KYC", icon: Upload },
+      { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
@@ -131,7 +133,7 @@ const superAdminGroups: NavGroup[] = [
     label: "Core Operations",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/containers", label: "Containers", icon: Layers },
+      { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
       { href: "/leasing", label: "Leases", icon: Landmark },
@@ -285,6 +287,90 @@ const staffGroups: NavGroup[] = [
   },
 ];
 
+const agencyGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/containers", label: "Managed Properties", icon: Layers },
+      { href: "/properties", label: "Properties & Units", icon: Building2 },
+      { href: "/tenants", label: "Tenants", icon: Users },
+    ],
+  },
+  {
+    label: "Financial",
+    items: [
+      { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/accounting", label: "Accounting", icon: ReceiptText },
+      { href: "/banking", label: "Agency Banking", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/listings", label: "Listings", icon: Megaphone },
+      { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
+      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
+      { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
+      { href: "/short-stay", label: "Short Stay", icon: BedDouble },
+      { href: "/screening", label: "Tenant Screening", icon: FileSearch },
+      { href: "/utilities", label: "Utilities", icon: Zap },
+      { href: "/expenses", label: "Expenses", icon: Receipt },
+      { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Organisation",
+    items: [
+      { href: "/team", label: "Agency Team", icon: UserPlus },
+      { href: "/import", label: "Data Import", icon: FileInput },
+    ],
+  },
+  {
+    label: "More",
+    items: [
+      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/kyc", label: "KYC & Verification", icon: Upload },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
+const agencyManagerGroups: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/properties", label: "Managed Properties", icon: Building2 },
+      { href: "/tenants", label: "Tenants", icon: Users },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/listings", label: "Listings", icon: Megaphone },
+      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
+      { href: "/maintenance", label: "Maintenance", icon: Hammer },
+      { href: "/screening", label: "Tenant Screening", icon: FileSearch },
+      { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
+    ],
+  },
+  {
+    label: "More",
+    items: [
+      { href: "/kyc", label: "KYC & Docs", icon: Upload },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
+];
+
 const tenantGroups: NavGroup[] = [
   {
     label: "My Home",
@@ -301,6 +387,7 @@ const tenantGroups: NavGroup[] = [
     label: "Payments",
     items: [
       { href: "/rent-collection", label: "Payments", icon: Banknote },
+      { href: "/deposit-transfer", label: "Deposit Transfer", icon: Banknote },
     ],
   },
   {
@@ -314,11 +401,13 @@ const tenantGroups: NavGroup[] = [
 
 function getGroups(role: UserRole): NavGroup[] {
   switch (role) {
-    case "super_admin": return superAdminGroups;
-    case "admin":       return adminGroups;
-    case "staff":       return staffGroups;
-    case "tenant":      return tenantGroups;
-    default:            return landlordGroups;
+    case "super_admin":     return superAdminGroups;
+    case "admin":           return adminGroups;
+    case "staff":           return staffGroups;
+    case "tenant":          return tenantGroups;
+    case "agency":          return agencyGroups;
+    case "agency_manager":  return agencyManagerGroups;
+    default:                return landlordGroups;
   }
 }
 

@@ -139,6 +139,53 @@ export const POST = withErrorHandler(async (req: Request) => {
     if (existing) return Response.json({ data: existing }, { status: 200 });
   }
 
+  // ── Package-based service request gating ──────────────────────────────────
+  const subscription = await prisma.userPackageSubscription.findFirst({
+    where: { userId: actor.userId, status: "active" },
+    include: { package: true },
+    orderBy: { startedAt: "desc" },
+  });
+
+  if (subscription) {
+    const pkg = subscription.package;
+
+    // Listing-Only packages: no service requests at all
+    if (pkg.isListingOnly || !pkg.hasServiceRequests) {
+      return Response.json(
+        { error: "Your current plan does not include service requests. Upgrade to Starter or higher." },
+        { status: 403 }
+      );
+    }
+
+    // Free tier: monthly limit (default 3)
+    if (pkg.serviceRequestMonthlyLimit !== null) {
+      // Reset counter if new month
+      const now = new Date();
+      const counterReset = new Date(subscription.srCounterResetAt);
+      const isSameMonth = now.getFullYear() === counterReset.getFullYear() && now.getMonth() === counterReset.getMonth();
+      let usedCount = isSameMonth ? subscription.srUsedThisMonth : 0;
+
+      if (!isSameMonth) {
+        await prisma.userPackageSubscription.update({
+          where: { id: subscription.id },
+          data: { srUsedThisMonth: 0, srCounterResetAt: now },
+        });
+        usedCount = 0;
+      }
+
+      if (usedCount >= pkg.serviceRequestMonthlyLimit) {
+        return Response.json(
+          {
+            error: `You have used your ${pkg.serviceRequestMonthlyLimit} free service requests this month. Upgrade to Starter to unlock unlimited requests.`,
+            srUsed: usedCount,
+            srLimit: pkg.serviceRequestMonthlyLimit,
+          },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
   const id = randomUUID();
 
   const row = await prisma.$transaction(async (tx) => {
@@ -180,6 +227,14 @@ export const POST = withErrorHandler(async (req: Request) => {
 
     return sr;
   });
+
+  // Increment SR counter for gated packages
+  if (subscription && subscription.package.serviceRequestMonthlyLimit !== null) {
+    await prisma.userPackageSubscription.update({
+      where: { id: subscription.id },
+      data: { srUsedThisMonth: { increment: 1 } },
+    });
+  }
 
   await appendAudit({
     userId: actor.userId,
