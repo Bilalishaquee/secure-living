@@ -1,0 +1,409 @@
+﻿Secure Living
+Phase 3 — What Gets Built
+Service Request Engine  ·  Complete Feature List
+Phases Done
+2 of 12
+Service Types
+10 built-in
+API Routes
+37 new
+New DB Models
+12+
+Phase 3 builds one unified engine that handles all service workflows — maintenance, inspections, legal, proxy, valuation, cleaning, and hospitality — as variants of the same system. All functionalities listed below are implemented in this phase.
+1.  Core Engine
+Service Request Types — 10 built-in
+MAINTENANCE: Plumbing, electrical, HVAC, pest control, painting, carpentry, general repairs
+INSPECTION: Move-in, move-out, routine, and fire safety inspections
+LEGAL: Legal case tracking, eviction proceedings, court representation, compliance filings
+PROXY: Site visits, document collection, meeting attendance, auction representation on behalf of diaspora clients
+VALUATION: Property valuations for insurance, sale, refinancing, or annual reporting
+CLEANING: Post-checkout and routine cleaning, linked to short-stay booking records
+FOOD_DELIVERY: In-room food and drinks requests from guests during active stays
+AIRPORT_TRANSFER: Pre-arrival and post-checkout transport coordination for guests
+GUEST_ASSISTANCE: Extra bedding, towels, in-house cooking, general guest support
+CUSTOM: Open-ended type for future categories — requires a CustomTypeDefinition record
+Service Mode — every request is classified as
+MANAGED: Handled directly by Secure Living staff — legal, proxy, inspections, due diligence, construction oversight, property sourcing
+MARKETPLACE: Fulfilled by vetted external providers — cleaning, plumbing, electrical, pest control, handyman work
+INTERNAL: Staff-only operational tasks — compliance reviews, fraud investigations, document verification, internal audits
+Service Category — for short-stay workflows
+OPERATIONAL: Turnover tasks — checkout cleaning, linen, inventory restocking, inspections, maintenance dispatch
+GUEST_SERVICE: During-stay requests — food, airport transfers, extra amenities, guest assistance
+EMERGENCY: Urgent dispatch — no hot water, lockout, power outage, plumbing emergency, urgent maintenance
+2.  Status Machine
+Status Transition
+Who Can Act
+What Happens
+DRAFT → SUBMITTED
+Requester
+Request submitted for manager review. Fields locked.
+SUBMITTED → APPROVED
+Manager / Admin
+Request approved. Enters assignment queue.
+SUBMITTED → REJECTED
+Manager / Admin
+Mandatory rejection reason logged.
+APPROVED → QUOTING
+Manager / Admin
+Quote phase initiated (optional per service type).
+QUOTING → AWAITING_FUNDING
+Manager / Admin
+Quote approved by client. Awaiting escrow funding.
+AWAITING_FUNDING → FUNDED
+System
+Escrow funded. Ready for assignment.
+FUNDED / APPROVED → ASSIGNED
+Manager / Admin
+Provider assigned. Assignment record created.
+ASSIGNED → SCHEDULING_PENDING
+Manager / Admin
+Awaiting time confirmation before work starts.
+ASSIGNED → IN_PROGRESS
+Assigned Provider
+Work started. startedAt timestamp recorded.
+IN_PROGRESS → BLOCKED
+Assigned Provider
+Blocker raised. blockedReasonType required. SLA timer paused.
+BLOCKED → IN_PROGRESS
+Manager / Admin
+Blocker resolved. RESOLUTION_NOTES required.
+IN_PROGRESS → COMPLETED
+Assigned Provider
+Evidence and resolution notes required.
+COMPLETED → DISPUTED
+Requester
+Dispute raised. Phase 5 escrow frozen until resolved.
+Any → CANCELLED
+Manager / Admin
+Mandatory reason. Not allowed from COMPLETED.
+All transitions are enforced server-side — illegal transitions return 400 Bad Request
+Every transition writes an immutable ServiceRequestHistory row
+3.  BLOCKED State — Structured Reasons
+blockedReasonType
+When it applies
+AWAITING_LANDLORD_APPROVAL
+Work needs explicit landlord sign-off before proceeding
+TENANT_UNAVAILABLE
+Provider arrived but tenant was not present to grant access
+PROVIDER_UNAVAILABLE
+Assigned provider has a scheduling conflict or emergency
+MISSING_MATERIALS
+Required parts or materials are not yet on-site
+LEGAL_DEPENDENCY
+Waiting on a court date, permit, or notice period
+PAYMENT_PENDING
+Funds not yet secured before work can begin
+WEATHER_ACCESS_ISSUE
+External conditions prevent site access or safe completion
+OTHER
+Free-text reason required
+4.  SLA Enforcement
+SLA Policy fields per service type
+response_deadline_minutes: Maximum time from ASSIGNED to provider's first action
+completion_deadline_minutes: Maximum time from IN_PROGRESS to COMPLETED (excludes BLOCKED time)
+escalation_after_minutes: Time after breach before system auto-escalates to supervisor
+Background enforcement job
+Response breach: Detects overdue provider response, creates escalation, notifies supervisor
+Completion breach: Detects overdue completion, escalates, alerts manager
+Auto-escalation: Escalates to assigned supervisor after escalation_after_minutes with no action
+Outbox event: Emits request.sla_breached event on every breach
+SLA time-tracking fields on every request
+active_work_duration: Total time spent in IN_PROGRESS across all intervals
+blocked_duration: Total BLOCKED time — excluded from SLA calculations
+waiting_for_client_duration: Time awaiting landlord or tenant approval
+waiting_for_provider_duration: Time from ASSIGNED to provider's first action
+5.  Quote / Estimation Lifecycle
+Enabled per service type — can be skipped for simple requests
+Multiple quote revisions supported per request
+Quote model fields: amount, scopeDescription, validUntil, status (PENDING / APPROVED / REJECTED / SUPERSEDED)
+Approving a quote automatically moves the request to AWAITING_FUNDING
+Full quote history visible in the request detail page
+6.  Event / Outbox Architecture
+Domain Event
+Triggered By
+request.submitted
+DRAFT → SUBMITTED
+request.approved
+SUBMITTED → APPROVED
+request.quoted
+Quote submitted by provider
+request.funded
+AWAITING_FUNDING → FUNDED
+request.assigned
+→ ASSIGNED
+request.started
+→ IN_PROGRESS
+request.blocked
+→ BLOCKED
+request.completed
+→ COMPLETED
+request.disputed
+→ DISPUTED
+request.sla_breached
+SLA enforcement background job
+provider.qr_scanned
+Provider QR code scan
+OutboxEvent table: id, event_type, payload (JSON), processed, retry_count, created_at, processed_at
+Events written in the same database transaction as the status change
+Background processor picks up, delivers, marks processed, retries on failure
+Initially in-process — queue infrastructure (BullMQ/RabbitMQ) can be added later without schema changes
+7.  Provider Management System
+Provider categories
+INTERNAL: Secure Living salaried staff — full access, all properties
+VERIFIED_MARKETPLACE: Vetted external providers approved by Secure Living for the public marketplace
+LANDLORD_PREFERRED: Approved by a specific landlord for their properties only
+AGENCY_PREFERRED: Approved at organisation level — available across all properties in that org
+TENANT_REFERRED: Introduced by a tenant — initially restricted to that property
+Provider lifecycle statuses
+PENDING_APPROVAL: Under review — cannot receive assignments
+ACTIVE: Approved and available for assignment
+INACTIVE: Temporarily unavailable — excluded from new assignments
+SUSPENDED: Removed from all assignments globally — suspension reason logged
+BLACKLISTED: Permanently excluded — requires senior admin action to review
+REJECTED: Application rejected at onboarding — reason logged immutably
+Assignment logic
+Preferred priority: Landlord/agency preferred providers shown first in assignment UI
+Property-specific pools: Providers scoped to specific properties only — not org-wide
+Service-area restrictions: Providers define coverage area — assignment UI filters by property proximity
+Status validation: Provider active/suspension status checked before every assignment is created
+Global enforcement: SUSPENDED and BLACKLISTED providers excluded for all landlords — no exceptions
+Marketplace graduation: High-performing LANDLORD_PREFERRED providers can be promoted to VERIFIED_MARKETPLACE by admin
+Provider onboarding workflow
+Landlord/agency introduction: Landlords and agencies introduce their own trusted providers into the platform
+Trusted network start: New providers initially work within the introducing landlord's property network only
+Promotion path: Secure Living promotes high-performing providers into the public marketplace
+Onboarding review: All providers pass a review before receiving their first assignment
+Provider trust scoring & verification architecture
+Trust score: Composite score from performance metrics, dispute history, supervisor reviews, SLA compliance
+Verification levels: Unverified → ID Verified → Trade Verified → Secure Living Certified
+Marketplace graduation workflow: Formal process to elevate a trusted private provider to public marketplace status
+Provider analytics: Per-provider performance dashboard visible to admins and approving landlords
+Disciplinary actions: Formal warnings, performance notices, and dispute outcomes tracked per provider
+Provider performance metrics captured
+response_time_seconds: ASSIGNED to provider's first status action
+completion_time_seconds: IN_PROGRESS to COMPLETED, excluding BLOCKED duration
+dispute_rate: Percentage of completed jobs later disputed
+reassignment_rate: Percentage of jobs where provider was replaced before completion
+cancellation_rate: Percentage of accepted assignments cancelled by provider
+rework_rate: Percentage of completed jobs where same-type request raised for same unit within 30 days
+Provider QR codes
+Permanent URL: Each provider has a permanent QR code — URL never changes
+Live profile: Page shows current status — suspended providers show suspension clearly
+Identity verification: Scan on-site confirms provider identity matches the assignment
+Attendance logging: Scan on arrival creates timestamped check-in against the service request
+Assignment confirmation: Scan confirms right provider at right property for right job
+Job verification: Scan at completion initiates the evidence upload flow on provider's device
+Audit trail: Every scan logged with timestamp, GPS location, and linked service request
+Provider audit log — immutable record of
+Approval history: Who approved the provider, at what level, and when
+Suspension reasons: Full reason text, reviewer, and date on every suspension
+Blacklist reasons: Full reason text, senior admin action, and date
+Reactivation history: Who reinstated a provider, when, and with what justification
+Disciplinary history: Warnings, performance notices, dispute outcomes per provider
+8.  Short-Stay Operations & Hospitality
+Guest communication channels (source enum)
+MOBILE_APP: Guest or staff submits via Secure Living app
+WHATSAPP: WhatsApp Business API message converted to a service request
+QR_CODE: Guest scans in-room or door QR — pre-populates unit context
+WEB_PORTAL: Guest-facing web dashboard submission
+RECEPTION: Hospitality coordinator creates request on behalf of guest
+IN_ROOM_TABLET: Dedicated tablet device in the room
+TELEPHONE: Phone-based request logging
+Booking-linked fields on requests
+shortStayBookingId: Links the request to the active booking record
+guestId: The guest who raised or benefits from the request
+bookingCheckInAt / bookingCheckOutAt: Booking window for context and SLA calculation
+turnaroundDeadline: When the unit must be ready — fed into the SLA engine
+guestAvailabilityWindow: When the guest is present or absent for access coordination
+Unit readiness workflow
+PENDING_CLEAN: Checkout done — cleaning request created, not yet complete
+PENDING_INSPECTION: Cleaning done — inspection request in progress
+READY: Cleaning complete, inspection passed, maintenance resolved, consumables restocked
+BLOCKED: Unresolved issue — unit cannot be re-listed until cleared
+Internal hospitality team assignment
+Housekeeping teams: Assignment engine supports assignment to internal housekeeping teams, not only external providers
+Concierge / support staff: Concierge and guest support staff assignable within the same engine
+Caretakers: Property caretakers assignable for routine operational tasks
+Hospitality coordinators: Internal hospitality coordinators can be assigned and tracked like external providers
+Internal operations staff: All internal staff roles covered — no separate dispatch system required
+Guest availability & access scheduling
+Guest-present fulfillment: Requests that require the guest to be present are flagged and scheduled accordingly
+Guest-absent fulfillment: Requests that require the guest to be away are scheduled within absence windows
+Access coordination: Access instructions and key handoff tracked per request
+Quiet-hour restrictions: Requests respect quiet-hour windows — no dispatch during restricted hours
+Scheduled availability windows: guestAvailabilityWindow field defines when the provider can enter the unit
+Automated operational triggers
+Guest checkout: Auto-creates CLEANING + INSPECTION service requests
+Guest complaint: Auto-creates GUEST_ASSISTANCE request
+Low inventory: Auto-creates restock request
+Emergency issue during stay: Creates urgent dispatch with priority: HIGH
+Lightweight payment tracking on hospitality requests
+paymentStatus: PENDING · PAID · COMPLIMENTARY · WAIVED
+paymentResponsibility: GUEST · MANAGEMENT · PROPERTY_OWNER · INCLUDED_IN_BOOKING
+serviceChargeAmount: Numeric charge amount — Phase 5 wallet integration processes this
+9.  Database — New Models
+Model
+What It Stores
+ServiceRequest
+Core record — all fields including serviceMode, serviceCategory, source, blockedReasonType, SLA fields, booking fields, payment fields
+ServiceRequestEvidence
+Photo, video, and document uploads per request
+ServiceRequestHistory
+Immutable status transition log — who, when, from, to, notes
+ServiceRequestAssignment
+Provider assignment records with acceptance/decline timestamps
+ServiceRequestEscalation
+Escalation records with reason, escalated-to, and resolution
+ServiceRequestQuote
+Quote revisions — amount, scope, validUntil, status
+SlaPolicy
+SLA configuration per service type — response/completion/escalation deadlines
+ServiceProvider
+Provider profile — category, status, areas, QR URL, suspension/blacklist reasons
+ServiceProviderAuditLog
+Immutable record of all provider status changes with reviewer and reason
+ServiceProviderPerformance
+Running performance metrics per provider
+OutboxEvent
+Domain events — type, payload, processed flag, retry count
+CustomTypeDefinition
+Governance record for CUSTOM requests — schema, mode, priority, SLA policy
+10.  API Routes
+Group
+Routes
+Count
+Core CRUD
+POST · GET list · GET detail · PUT · soft-DELETE
+5
+Status Transitions
+/submit · /approve · /reject · /assign · /start · /block · /unblock · /complete · /cancel · /dispute
+10
+Evidence
+POST upload · GET list · DELETE by id
+3
+Escalation
+/escalate · /resolve-escalation
+2
+Quotation
+/quotes POST · /quotes/approve · /quotes/reject
+3
+Provider Management
+/providers CRUD · /approve · /suspend · /blacklist · /reactivate · /qr
+9
+SLA Policies
+/sla-policies CRUD
+4
+Custom Types
+/custom-type-definitions CRUD
+4
+Total
+40
+Idempotency keys enforced on /submit, /approve, and /complete
+All routes use RBAC — six permissions gate every action
+11.  Frontend Views
+View
+What It Provides
+Service Requests List
+Tabs by type. Filters by status, priority, mode, category, assignee, date. Badge system.
+Create / Edit Modal
+Type + serviceMode + serviceCategory selectors. Source enum for hospitality. Evidence upload. Property/Unit cascading selects.
+Request Detail Page
+Status timeline stepper. Evidence gallery. Quote history. BLOCKED reason display. Booking context. SLA indicator. Assignment history. Role-gated action buttons.
+Professional Queue
+My assigned jobs. QR scan trigger. Quick-action cards: Start / Block (with reason picker) / Complete.
+Manager Queue
+Submitted requests. QUOTING items. SLA breach countdown indicators. Escalated requests at top.
+Unit Readiness Dashboard
+Short-stay properties only. Grid of units with PENDING_CLEAN / PENDING_INSPECTION / READY / BLOCKED status. Links to blocking service requests.
+Dashboard Widgets (all 5 roles)
+Landlord: open/overdue counts + unit readiness. Manager: queue + SLA breaches. Professional: my jobs today. Tenant/Guest: my requests.
+12.  Permissions
+Permission
+Roles
+What It Allows
+service-request:view
+All roles
+See requests within the user's org and branch scope
+service-request:create
+Tenant, Landlord, Staff
+Submit new requests
+service-request:manage
+Manager, Admin
+Approve, reject, assign, cancel, escalate, quote-approve
+service-request:execute
+Professional, Caretaker
+Start, block, complete — the provider's action set
+service-request:dispute
+Original Requester
+Raise a dispute on a completed request
+service-request:evidence:upload
+All assigned parties
+Attach photos, videos, or documents
+13.  Evidence Requirements
+Service Type
+Required Before COMPLETED
+MAINTENANCE
+Before and after photos · receipt for parts · resolution notes
+INSPECTION
+Geotagged room photos · meter readings · supervisor sign-off
+LEGAL
+Scanned legal documents · signed counterparty acknowledgment
+PROXY
+Document photo · recipient office acknowledgment · site visit report
+VALUATION
+Signed valuation certificate · comparable market analysis
+CLEANING
+Before/after photos per room · cleaning checklist · stock items used
+FOOD_DELIVERY
+Photo of delivered items · guest acknowledgment
+AIRPORT_TRANSFER
+Pickup and drop-off confirmation timestamps · guest signature
+GUEST_ASSISTANCE
+Photo of service delivered · guest satisfaction rating
+14.  Custom Request Governance
+Every CUSTOM service request must reference a CustomTypeDefinition record. Free-form requests without a registered definition are rejected.
+name — human-readable name for the custom type
+metadata_schema — JSON schema defining the allowed metadata fields
+service_mode — MANAGED / MARKETPLACE / INTERNAL
+default_priority — LOW / MEDIUM / HIGH / CRITICAL
+sla_policy_id — links to the SLA policy that governs this type
+15.  Service Type Configuration — First-Class System
+Service type behaviour is centralised in configurable ServiceTypeConfig records rather than scattered across hardcoded conditions. Each service type definition can specify:
+ServiceTypeConfig fields
+allowed_transitions: Which status moves are valid for this service type
+evidence_requirements: What evidence is mandatory before COMPLETED is accepted
+quote_required: Whether the QUOTING lifecycle is enforced for this type
+quote_requirements: Scope and format requirements for quotes submitted against this type
+escrow_rules: How escrow is applied, held, and released on completion
+assignment_restrictions: Whether assignment is limited to internal staff, preferred providers, or open marketplace
+supervisor_approval_required: Whether a manager must countersign before COMPLETED is accepted — enforced for MANAGED workflows
+sla_policy: Which SLA policy governs response and completion deadlines for this type
+Phase 3 seeds the initial configuration for all 10 service types
+New service types can be added by creating a new config record — no code changes required
+16.  Data Migration
+All Phase 2 maintenance records migrated into the unified engine
+serviceMode set to MARKETPLACE, serviceCategory set to OPERATIONAL
+Full status history preserved per migrated record
+Old table kept read-only for two weeks, then dropped
+All /maintenance frontend routes redirected to /service-requests?type=MAINTENANCE
+17.  Future Capabilities — Architecture Prepared in Phase 3
+Guest experience & operational analytics
+Guest satisfaction analytics: Ratings and feedback tracked per completed guest service request
+Operational response tracking: Time-to-response and time-to-completion per hospitality request type
+Hospitality staff performance: Per-staff completion rates, guest ratings, SLA compliance
+Repeat guest personalisation: Service history linked to guest profile for returning guests
+Service usage analytics: Which services are requested most, by which guest types, at which properties
+Complimentary service reporting: Track and report on all COMPLIMENTARY and WAIVED service requests
+Hospitality expansion opportunities
+Concierge-style packages: Bundled operational packages for premium short-stay properties
+Integrated housekeeping orchestration: Full shift and team scheduling within the engine
+QR-based in-room service: Guests scan room QR to access the full service catalogue
+WhatsApp-driven operations: Full request lifecycle via WhatsApp for operators without apps
+Corporate housing support: Extended-stay and corporate housing operational workflows
+Serviced living operations: Long-term serviced apartment coordination via the same engine
+Recurring hospitality subscriptions: Weekly cleaning, linen change, and inspection packages
+AI-assisted guest personalisation: Phase 12 AI using service history to anticipate guest needs
+Operational forecasting: Staffing and demand prediction based on booking calendar and historical patterns
+Partner-based fulfillment: Orchestrate third-party hospitality partners through the same provider system
+Secure Living  ·  Phase 3 What Gets Built  ·  May 2026
+Stack: Next.js 14 · TypeScript · Prisma ORM · PostgreSQL (Neon) · JWT HMAC-SHA256

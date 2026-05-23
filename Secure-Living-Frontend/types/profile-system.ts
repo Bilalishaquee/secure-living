@@ -11,6 +11,8 @@ export type PlatformRoleSlug =
   | "supervisor"
   | "staff"
   | "landlord"
+  | "agency"
+  | "agency_manager"
   | "tenant"
   | "buyer"
   | "seller"

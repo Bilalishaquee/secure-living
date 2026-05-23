@@ -10,6 +10,97 @@ datasource db {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
+enum VerificationLevel {
+  UNVERIFIED         // 0 – account only
+  IDENTITY_VERIFIED  // 1 – Didit.me face match
+  COMPLIANCE_VERIFIED // 2 – IPRS confirmed
+  TRUSTED_PERSONNEL  // 3 – Good Conduct + history
+  ENTERPRISE_VERIFIED // 4 – agency/business full review
+}
+
+enum FreezeType {
+  SOFT // prevents new listings & SR creation
+  HARD // hides listings, suspends account
+}
+
+enum FreezeStatus {
+  ACTIVE
+  LIFTED
+  EXPIRED
+}
+
+enum AppealStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  UPHELD
+  OVERTURNED
+}
+
+enum UtilityType {
+  WATER
+  ELECTRICITY
+}
+
+enum BillingModel {
+  FLAT_RATE
+  SUB_METERED_MANUAL
+  SUB_METERED_IOT
+}
+
+enum AllocationMethod {
+  PRO_RATA
+  FLAT_AMOUNT
+}
+
+enum DisputeStatus {
+  OPEN
+  LANDLORD_RESPONDED
+  ESCALATED
+  RESOLVED_ACCEPTED
+  RESOLVED_REJECTED
+}
+
+enum DepositTransferStatus {
+  LISTED
+  BUYER_PAID
+  LANDLORD_APPROVED
+  INSPECTION_COMPLETE
+  RELEASED
+  EXPIRED
+  CANCELLED
+}
+
+enum PackageTier {
+  FREE
+  LISTING_ONLY
+  STARTER
+  PROFESSIONAL
+  BUSINESS
+  ENTERPRISE
+  CUSTOM
+}
+
+enum TrustedPersonnelStatus {
+  PENDING
+  APPROVED
+  DENIED
+  REVOKED
+}
+
+enum DocumentRequestEnforcement {
+  REMINDER
+  SOFT_FREEZE
+  HARD_FREEZE
+}
+
+enum DocumentRequestStatus {
+  PENDING
+  UPLOADED
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
 enum ContainerType {
   STANDALONE
   ESTATE
@@ -1018,19 +1109,40 @@ model Branch {
 }
 
 model AppUser {
-  id           String   @id
-  email        String   @unique
-  passwordHash String
-  fullName     String
-  status       String   @default("active")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                    String            @id
+  email                 String            @unique
+  passwordHash          String
+  fullName              String
+  phone                 String?
+  status                String            @default("active")
+  // Verification
+  verificationLevel     VerificationLevel @default(UNVERIFIED)
+  verificationLevelSetAt DateTime?
+  diditSessionId        String?
+  iprsCheckedAt         DateTime?
+  iprsResult            String?
+  // Level 3 – Trusted Personnel
+  trustedPersonnelStatus TrustedPersonnelStatus?
+  goodConductUploadedAt  DateTime?
+  goodConductExpiresAt   DateTime?
+  trustedPersonnelReviewedAt DateTime?
+  trustedPersonnelReviewedBy String?
+  // Fraud scoring (internal, never shown to user)
+  fraudScore            Int               @default(0)
+  // Deferred: QR token (Phase 4 – do not expose endpoint yet)
+  qrToken               String?
+  qrTokenRotatedAt      DateTime?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
   sessions             ApiSession[]
   roleAssignments      UserRoleAssignment[]
   kycDocuments         KycDocument[]
   containerManagements ContainerManager[]
   roleContexts         UserRoleContext[]
+  accountFreezes       AccountFreeze[]
+  freezeAppeals        FreezeAppeal[]
+  documentRequests     UserDocumentRequest[]
 }
 
 model Role {
@@ -1458,4 +1570,233 @@ model ServiceTypeConfig {
   slaPolicyId               String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
+}
+
+// ─── Subscription Package ─────────────────────────────────────────────────────
+
+model Package {
+  id                       String      @id @default(cuid())
+  name                     String      @unique
+  tier                     PackageTier @unique
+  listingSlots             Int
+  hasServiceRequests       Boolean     @default(true)
+  serviceRequestMonthlyLimit Int?      // null = unlimited; 0 = blocked
+  monthlyPriceKes          Decimal     @default(0)
+  isListingOnly            Boolean     @default(false)
+  annualDiscountEligible   Boolean     @default(true)
+  overageSlotFeeKes        Decimal     @default(150)
+  isActive                 Boolean     @default(true)
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
+
+  userSubscriptions UserPackageSubscription[]
+}
+
+model UserPackageSubscription {
+  id             String      @id @default(cuid())
+  userId         String
+  organizationId String?
+  packageId      String
+  status         String      @default("active") // active, cancelled, expired
+  billingCycle   String      @default("monthly") // monthly, annual
+  startedAt      DateTime    @default(now())
+  nextBillingAt  DateTime?
+  canceledAt     DateTime?
+  srUsedThisMonth Int        @default(0)
+  srCounterResetAt DateTime  @default(now())
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  package Package @relation(fields: [packageId], references: [id])
+
+  @@index([userId, status])
+  @@index([organizationId])
+}
+
+// ─── Account Freeze & Appeals ─────────────────────────────────────────────────
+
+model AccountFreeze {
+  id            String       @id @default(cuid())
+  userId        String
+  freezeType    FreezeType
+  status        FreezeStatus @default(ACTIVE)
+  reason        String
+  requiredAction String?
+  appliedBy     String       // admin user id or "system"
+  appliedAt     DateTime     @default(now())
+  liftedAt      DateTime?
+  liftedBy      String?
+  liftReason    String?
+  notifiedAt    DateTime?
+  createdAt     DateTime     @default(now())
+
+  user    AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appeals FreezeAppeal[]
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+model FreezeAppeal {
+  id          String       @id @default(cuid())
+  freezeId    String
+  userId      String
+  reason      String
+  evidenceUrls String[]
+  status      AppealStatus @default(SUBMITTED)
+  submittedAt DateTime     @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  decisionReason String?
+  isSecondAppeal Boolean   @default(false)
+
+  freeze AccountFreeze @relation(fields: [freezeId], references: [id], onDelete: Cascade)
+  user   AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([freezeId])
+  @@index([userId, status])
+}
+
+// ─── Blacklist ────────────────────────────────────────────────────────────────
+
+model BlacklistEntry {
+  id               String   @id @default(cuid())
+  nationalIdHash   String?
+  phoneNumbers     String[]
+  emailAddresses   String[]
+  deviceFingerprints String[]
+  reason           String
+  evidenceLinks    String[]
+  addedBy          String
+  addedAt          DateTime @default(now())
+  reviewedAt       DateTime?
+  reviewedBy       String?
+
+  @@index([nationalIdHash])
+}
+
+// ─── Admin Document Requests ──────────────────────────────────────────────────
+
+model UserDocumentRequest {
+  id               String                     @id @default(cuid())
+  userId           String
+  requestedBy      String
+  documentType     String
+  description      String?
+  deadline         DateTime?
+  enforcement      DocumentRequestEnforcement @default(REMINDER)
+  status           DocumentRequestStatus      @default(PENDING)
+  uploadedDocUrl   String?
+  uploadedAt       DateTime?
+  reviewedAt       DateTime?
+  reviewedBy       String?
+  rejectionReason  String?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  user AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, deadline])
+}
+
+// ─── Utility Management ───────────────────────────────────────────────────────
+
+model UtilityMeter {
+  id           String       @id @default(cuid())
+  unitId       String
+  meterNumber  String
+  type         UtilityType
+  billingModel BillingModel @default(FLAT_RATE)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  readings UtilityReading[]
+
+  @@index([unitId, isActive])
+}
+
+model UtilityReading {
+  id               String        @id @default(cuid())
+  meterId          String
+  readingDate      DateTime
+  previousReading  Float
+  currentReading   Float
+  consumption      Float
+  flatRateAmountKes Float?
+  imageUrl         String?
+  createdBy        String
+  isDisputed       Boolean       @default(false)
+  disputeStatus    DisputeStatus?
+  originalReadingId String?      // set on revision records
+  revisionReason   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  meter    UtilityMeter     @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  disputes UtilityDispute[]
+
+  @@index([meterId, readingDate])
+}
+
+model ServiceCharge {
+  id               String           @id @default(cuid())
+  propertyId       String
+  name             String
+  allocationMethod AllocationMethod @default(PRO_RATA)
+  amountKes        Decimal?         // required when FLAT_AMOUNT
+  isActive         Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([propertyId, isActive])
+}
+
+model UtilityDispute {
+  id              String        @id @default(cuid())
+  readingId       String
+  raisedByUserId  String
+  reason          String
+  status          DisputeStatus @default(OPEN)
+  landlordResponse String?
+  landlordRespondedAt DateTime?
+  adminDecision   String?
+  adminDecidedAt  DateTime?
+  adminDecidedBy  String?
+  resolvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  reading UtilityReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
+
+  @@index([readingId, status])
+}
+
+// ─── Deposit Transfer ─────────────────────────────────────────────────────────
+
+model DepositTransfer {
+  id                  String                @id @default(cuid())
+  leaseId             String
+  outgoingTenantId    String
+  propertyId          String
+  unitId              String
+  depositAmountKes    Decimal
+  platformFeeKes      Decimal               @default(500)
+  incomingTenantId    String?
+  status              DepositTransferStatus @default(LISTED)
+  listedAt            DateTime              @default(now())
+  buyerPaidAt         DateTime?
+  landlordApprovedAt  DateTime?
+  inspectionCompletedAt DateTime?
+  releasedAt          DateTime?
+  expiresAt           DateTime
+  cancelledAt         DateTime?
+  escrowAccountId     String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  @@index([outgoingTenantId, status])
+  @@index([unitId, status])
+  @@index([status, expiresAt])
 }

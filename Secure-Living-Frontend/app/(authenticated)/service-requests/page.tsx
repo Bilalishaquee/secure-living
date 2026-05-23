@@ -714,6 +714,13 @@ function CreateRequestModal({
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
+interface SrGatingInfo {
+  isBlocked: boolean;
+  isListingOnly: boolean;
+  srUsed: number;
+  srLimit: number | null; // null = unlimited
+}
+
 export default function ServiceRequestsPage() {
   const { user } = useAuth();
 
@@ -728,12 +735,37 @@ export default function ServiceRequestsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showCreate, setShowCreate] = useState(false);
+  const [gating, setGating] = useState<SrGatingInfo | null>(null);
 
   // KPI counts
   const [kpiOpen, setKpiOpen] = useState(0);
   const [kpiBlocked, setKpiBlocked] = useState(0);
   const [kpiCompleted, setKpiCompleted] = useState(0);
   const [kpiOverdue, setKpiOverdue] = useState(0);
+
+  // Fetch subscription gating info
+  useEffect(() => {
+    if (!user?.authToken) return;
+    void fetch("/api/v1/subscriptions?current=true", {
+      headers: { Authorization: `Bearer ${user.authToken}` },
+    })
+      .then((r) => r.json())
+      .then((j: { data?: { srUsedThisMonth?: number; package?: { serviceRequestMonthlyLimit?: number | null; isListingOnly?: boolean; hasServiceRequests?: boolean } } }) => {
+        const sub = j.data;
+        if (!sub) return;
+        const pkg = sub.package;
+        if (!pkg) return;
+        const limit = pkg.serviceRequestMonthlyLimit ?? null;
+        const used = sub.srUsedThisMonth ?? 0;
+        setGating({
+          isBlocked: !pkg.hasServiceRequests || pkg.isListingOnly === true,
+          isListingOnly: pkg.isListingOnly === true,
+          srUsed: used,
+          srLimit: limit,
+        });
+      })
+      .catch(() => {});
+  }, [user?.authToken]);
 
   const load = useCallback(async () => {
     if (!user?.authToken) return;
@@ -807,6 +839,9 @@ export default function ServiceRequestsPage() {
     void load();
   }, [load]);
 
+  const srLimitReached = gating !== null && gating.srLimit !== null && gating.srUsed >= gating.srLimit;
+  const srCreateBlocked = gating !== null && (gating.isBlocked || srLimitReached);
+
   return (
     <div className="w-full space-y-6">
       {/* Header */}
@@ -815,10 +850,38 @@ export default function ServiceRequestsPage() {
           <h1 className="app-page-title">Service Requests</h1>
           <p className="app-page-lead">Manage all service requests across your portfolio</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>
+        <Button
+          onClick={() => { if (!srCreateBlocked) setShowCreate(true); }}
+          disabled={srCreateBlocked}
+          title={srCreateBlocked ? (gating?.isListingOnly ? "Your plan does not include service requests" : `You have used all ${gating?.srLimit ?? 0} free requests this month`) : undefined}
+        >
           <Plus className="mr-1.5 h-4 w-4" /> New Request
         </Button>
       </div>
+
+      {/* SR gating banner */}
+      {gating && gating.srLimit !== null && (
+        <div className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${srLimitReached ? "border-red-200 bg-red-50 text-red-800" : "border-blue-200 bg-blue-50 text-blue-800"}`}>
+          <span>
+            {srLimitReached
+              ? `You have used your ${gating.srLimit} free service requests this month. Upgrade to Starter to unlock unlimited requests.`
+              : `${gating.srUsed} of ${gating.srLimit} service requests used this month.`}
+          </span>
+          {srLimitReached && (
+            <a href="/settings?tab=subscription" className="ml-4 shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+              Upgrade to Starter
+            </a>
+          )}
+        </div>
+      )}
+      {gating?.isListingOnly && (
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <span>Your Listing-Only plan does not include service requests.</span>
+          <a href="/settings?tab=subscription" className="ml-4 shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
+            Upgrade Plan
+          </a>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
