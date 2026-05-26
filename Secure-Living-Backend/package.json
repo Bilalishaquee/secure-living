@@ -6,7 +6,7 @@
     "clean": "npx rimraf .next",
     "dev": "next dev -p 4000",
     "dev:clean": "npm run clean && next dev -p 4000",
-    "build": "prisma generate && next build",
+    "build": "prisma migrate deploy && prisma generate && next build",
     "start": "next start -p 4000",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",
