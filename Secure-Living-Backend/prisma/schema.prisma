@@ -466,24 +466,31 @@ model Listing {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  unit         Unit               @relation(fields: [unitId], references: [id])
-  applications RentalApplication[]
+  unit          Unit               @relation(fields: [unitId], references: [id])
+  applications  RentalApplication[]
+  qrApplications QrApplication[]
 
   @@index([organizationId, status])
 }
 
 model RentalApplication {
-  id          String            @id @default(cuid())
-  listingId   String
-  applicantId String
-  message     String?
-  status      ApplicationStatus @default(PENDING)
-  submittedAt DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  id           String            @id @default(cuid())
+  listingId    String
+  applicantId  String
+  message      String?
+  status       ApplicationStatus @default(PENDING)
+  reviewerId   String?
+  reviewedAt   DateTime?
+  adminNotes   String?
+  submittedAt  DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
-  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing  Listing                     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  evidences ApplicationEvidence[]
+  customFieldValues ApplicationCustomFieldValue[]
 
   @@index([listingId, status])
+  @@index([applicantId])
 }
 
 // ─── Accounting Enhancements ──────────────────────────────────────────────────
@@ -585,9 +592,10 @@ model ShortStayProperty {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  unit     Unit               @relation(fields: [unitId], references: [id])
-  bookings ShortStayBooking[]
-  stock    StockItem[]
+  unit         Unit               @relation(fields: [unitId], references: [id])
+  bookings     ShortStayBooking[]
+  stock        StockItem[]
+  otherCharges OtherCharge[]
 
   @@index([organizationId])
 }
@@ -615,8 +623,9 @@ model ShortStayBooking {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  shortStay  ShortStayProperty  @relation(fields: [shortStayId], references: [id])
-  stockUsage BookingStockUsage[]
+  shortStay     ShortStayProperty @relation(fields: [shortStayId], references: [id])
+  stockUsage    BookingStockUsage[]
+  otherCharges  OtherCharge[]
 
   @@index([shortStayId, status])
   @@index([organizationId, checkInDate])
@@ -1067,8 +1076,10 @@ model Property {
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
-  container       Container?               @relation(fields: [containerId], references: [id])
-  roleAssignments PropertyRoleAssignment[]
+  container           Container?                   @relation(fields: [containerId], references: [id])
+  roleAssignments     PropertyRoleAssignment[]
+  onboardingConfig    PropertyOnboardingConfig?
+  transferRecords     PropertyTransferRecord[]
 
   @@index([organizationId, branchId, status])
   @@index([propertyType])
@@ -1771,6 +1782,463 @@ model UtilityDispute {
   reading UtilityReading @relation(fields: [readingId], references: [id], onDelete: Cascade)
 
   @@index([readingId, status])
+}
+
+// ─── Phase 3 New Models ────────────────────────────────────────────────────────
+
+// ─── 1. CRM Dashboard Customization ─────────────────────────────────────────────
+
+model DashboardWidget {
+  id             String   @id @default(cuid())
+  userId         String
+  organizationId String?
+  widgetType     String   // e.g. "properties_overview", "rent_collected", "occupancy", "maintenance", "visitors", "compliance", "income"
+  label          String?
+  position       Int      @default(0)
+  isVisible      Boolean  @default(true)
+  configJson     Json?    // widget-specific configuration (filters, date range, etc.)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, widgetType])
+  @@index([userId, position])
+  @@index([organizationId])
+}
+
+// ─── 2. Application Form + Evidence ─────────────────────────────────────────────
+
+model ApplicationCustomField {
+  id             String   @id @default(cuid())
+  organizationId String
+  fieldLabel     String
+  fieldType      String   // text, dropdown, checkbox, upload, date, number
+  fieldOptions   String[] // dropdown options
+  isRequired     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  displayOrder   Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  fieldValues ApplicationCustomFieldValue[]
+
+  @@index([organizationId, isActive])
+}
+
+model ApplicationCustomFieldValue {
+  id          String                 @id @default(cuid())
+  applicationId String
+  fieldId     String
+  value       String?
+  fileUrl     String?
+
+  application RentalApplication     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  field       ApplicationCustomField @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId])
+  @@index([fieldId])
+}
+
+model ApplicationEvidence {
+  id             String   @id @default(cuid())
+  applicationId  String
+  evidenceType   String   // e.g. "id_front", "id_back", "payslip", "bank_statement", "cr12", "guarantor", "photo", "proof_of_address"
+  fileName       String
+  mimeType       String
+  filePath       String
+  fileSizeBytes  Int
+  isRequired     Boolean  @default(false)
+  uploadedAt     DateTime @default(now())
+
+  application    RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+}
+
+// Enhance RentalApplication with new fields
+// Adding: evidenceEnabled, customFieldsEnabled, reviewerId, reviewedAt, notes
+
+// ─── 3. Onboarding Custom Fields ─────────────────────────────────────────────────
+
+model PropertyOnboardingConfig {
+  id                        String   @id @default(cuid())
+  propertyId                String   @unique
+  isShortStayEnabled        Boolean  @default(false)
+  visitorApprovalRequired   Boolean  @default(false)
+  gateAccessRequired        Boolean  @default(false)
+  maintenanceSla            String?
+  customOnboardingFields    Json?    // flexible JSON for landlord-specific fields
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// ─── 4. Data Migration & Past Rent Records ──────────────────────────────────────
+
+model DataImportJob {
+  id             String   @id @default(cuid())
+  organizationId String
+  branchId       String?
+  importType     String   // "properties", "units", "tenants", "leases", "past_rent", "utilities"
+  fileName       String
+  fileFormat     String   // "csv", "excel", "json"
+  recordCount    Int      @default(0)
+  successCount   Int      @default(0)
+  errorCount     Int      @default(0)
+  errorsJson     Json?    // array of error details
+  columnMapping  Json?    // column mapping configuration
+  status         String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  completedAt    DateTime?
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([importType, createdAt])
+}
+
+model PastRentRecord {
+  id              String   @id @default(cuid())
+  organizationId  String
+  tenantId        String
+  unitId          String
+  propertyId      String?
+  periodYear      Int
+  periodMonth     Int
+  rentAmountKes   Float
+  paidAmountKes   Float    @default(0)
+  balanceKes      Float    @default(0)
+  dueDate         DateTime?
+  paidDate        DateTime?
+  paymentMethod   String?  // mpesa, bank, cash, etc.
+  mpesaReference  String?
+  notes           String?
+  importJobId     String?
+  isMigrated      Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, unitId, periodYear, periodMonth])
+  @@index([organizationId, tenantId])
+  @@index([tenantId, periodYear, periodMonth])
+}
+
+// ─── 5. Rent Receipts ───────────────────────────────────────────────────────────
+
+model RentReceipt {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  receiptNumber   String   @unique
+  tenantId        String
+  landlordId      String
+  propertyId      String
+  unitId          String
+  amountKes       Float
+  paymentMethod   String
+  mpesaReference  String?
+  bankReference   String?
+  receiptDate     DateTime @default(now())
+  deliveryChannel String?  // email, whatsapp, pdf, print
+  deliveredAt     DateTime?
+  pdfUrl          String?  // generated PDF URL
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@index([invoiceId])
+  @@index([tenantId, receiptDate])
+  @@index([receiptNumber])
+}
+
+// ─── 6. Utility Linked to Rent (Household) ──────────────────────────────────────
+
+model UtilityHouseholdCharge {
+  id               String   @id @default(cuid())
+  unitId           String
+  propertyId       String
+  invoiceId        String?
+  utilityReadingId String?
+  name             String   // water, electricity, garbage, internet, security, cleaning, parking, wifi, etc.
+  amountKes        Float
+  billingMethod    String   // metered, fixed, variable, shared, included_in_rent
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  isLinkedToRent   Boolean  @default(true) // when true, appears on rent invoice
+  evidenceUrl      String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([unitId, isLinkedToRent])
+  @@index([invoiceId])
+  @@index([propertyId])
+}
+
+// ─── 7. Nightgrab / Other Charges (Short Stay) ──────────────────────────────────
+
+model OtherCharge {
+  id              String   @id @default(cuid())
+  shortStayId     String
+  bookingId       String?
+  name            String   // cleaning, breakfast, airport_pickup, laundry, late_checkout, deposit, custom
+  description     String?
+  amountKes       Float
+  chargeType      String   // fixed, percentage, seasonal, optional
+  isRefundable    Boolean  @default(false)
+  isOptional      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shortStay       ShortStayProperty? @relation(fields: [shortStayId], references: [id], onDelete: Cascade)
+  booking         ShortStayBooking?  @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([shortStayId])
+  @@index([bookingId])
+}
+
+// ─── 8. Property Sale / Ownership Transfer ─────────────────────────────────────
+
+model PropertyTransferRecord {
+  id                String   @id @default(cuid())
+  propertyId        String
+  previousOwnerId   String
+  newOwnerId        String
+  transferDate      DateTime @default(now())
+  transferType      String   // sale, gift, inheritance, company_transfer
+  saleAmountKes     Float?
+  notes             String?
+  preservedJson     Json?    // snapshot of preserved data (tenants, leases, balances, utilities, receipts)
+  completedAt       DateTime?
+  createdBy         String
+  createdAt         DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([previousOwnerId])
+  @@index([newOwnerId])
+}
+
+// ─── 9. Lease Template Upload ───────────────────────────────────────────────────
+
+model LeaseTemplate {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  description     String?
+  fileUrl         String   // uploaded PDF/Word file URL
+  fileFormat      String   // pdf, docx
+  fileSizeBytes   Int?
+  isActive        Boolean  @default(true)
+  propertyId      String?  // optional: specific to a property
+  unitId          String?  // optional: specific to a unit
+  assignedCount   Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, isActive])
+  @@index([propertyId])
+  @@index([unitId])
+}
+
+// ─── 10. MoveScore & Live Intelligence ──────────────────────────────────────────
+
+model MoveScoreRecord {
+  id              String   @id @default(cuid())
+  propertyId      String
+  unitId          String?
+  score           Float    // 0-100
+  riskLevel       String   // low, medium, high
+  factorsJson     Json?    // contributing factors
+  predictedDate   DateTime?
+  generatedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([score])
+}
+
+model LiveIntelligenceSnapshot {
+  id              String   @id @default(cuid())
+  organizationId  String
+  snapshotType    String   // moveout_risk, vacancy_trend, utility_trend, payment_behavior
+  label           String
+  value           Float
+  previousValue   Float?
+  trend           String   // up, down, stable
+  dataJson        Json?
+  generatedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([organizationId, snapshotType])
+  @@index([generatedAt])
+}
+
+// ─── 11. Rent Score ─────────────────────────────────────────────────────────────
+
+model RentScoreRecord {
+  id              String   @id @default(cuid())
+  tenantId        String   @unique
+  score           Int      // 0-100
+  consistency     Float    // payment consistency score
+  totalPaidOnTime  Int     @default(0)
+  totalPaidLate   Int      @default(0)
+  totalArrears    Float    @default(0)
+  averageDaysEarly Int     @default(0)
+  lastUpdatedAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([score])
+}
+
+// ─── 12. Secure Living Compliance Number ────────────────────────────────────────
+
+model ComplianceNumber {
+  id              String   @id @default(cuid())
+  organizationId  String
+  tenantId        String
+  propertyId      String?
+  unitId          String?
+  complianceId    String   @unique // e.g. SLC-NAI-004821
+  status          String   @default("ACTIVE") // ACTIVE, SUSPENDED, EXPIRED, REVOKED
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  revokedReason   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  records ComplianceRecord[]
+
+  @@index([organizationId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([complianceId])
+}
+
+model ComplianceRecord {
+  id              String   @id @default(cuid())
+  complianceNumberId String
+  recordType      String   // tenant_verification, property_inspection, lease_audit, utility_check, visitor_compliance, microbehavior
+  status          String   // PASS, FAIL, PENDING, WAIVED
+  description     String?
+  evidenceUrl     String?
+  checkedBy       String
+  checkedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  complianceNumber ComplianceNumber @relation(fields: [complianceNumberId], references: [id], onDelete: Cascade)
+
+  @@index([complianceNumberId])
+  @@index([recordType, status])
+}
+
+// ─── 13. MicroBehavior ──────────────────────────────────────────────────────────
+
+model MicroBehaviorRecord {
+  id              String   @id @default(cuid())
+  tenantId        String
+  behaviorType    String   // early_payment, utility_spike, visitor_frequency, repeated_complaint, late_payment, maintenance_request_pattern
+  label           String   // "Pays on the 2nd of each month", "Utility spike detected"
+  value           String?
+  score           Float?   // influence score
+  detectedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([behaviorType, detectedAt])
+}
+
+// ─── 14. QR Applications & Access ───────────────────────────────────────────────
+
+model QrApplication {
+  id              String   @id @default(cuid())
+  listingId       String?
+  unitId          String?
+  applicantName   String
+  applicantPhone  String
+  applicantEmail  String?
+  qrToken         String   @unique
+  status          String   // PENDING, VERIFIED, APPLIED, COMPLETED, EXPIRED
+  metadataJson    Json?
+  scannedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  listing         Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@index([unitId])
+  @@index([status])
+}
+
+model QrAccessLog {
+  id              String   @id @default(cuid())
+  qrToken         String
+  userId          String?
+  visitorId       String?
+  accessType      String   // entry, exit, gate, unit_door, amenity
+  granted         Boolean  @default(true)
+  reason          String?
+  accessedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([qrToken])
+  @@index([userId])
+  @@index([visitorId])
+  @@index([accessedAt])
+}
+
+// ─── 15. Visitors Management ────────────────────────────────────────────────────
+
+model Visitor {
+  id              String   @id @default(cuid())
+  organizationId  String
+  propertyId      String?
+  unitId          String?
+  name            String
+  phone           String?
+  email           String?
+  idNumber        String?
+  vehicleNumber   String?
+  photoUrl        String?
+  isBlacklisted   Boolean  @default(false)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  logs VisitorLog[]
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([unitId])
+  @@index([phone])
+}
+
+model VisitorLog {
+  id              String   @id @default(cuid())
+  visitorId       String
+  propertyId      String?
+  unitId          String?
+  purpose         String
+  checkInAt       DateTime @default(now())
+  checkOutAt      DateTime?
+  authorizedBy    String?  // tenant or caretaker user ID
+  approvalStatus  String   // PENDING, APPROVED, DENIED, AUTO_APPROVED
+  approvalMethod  String?  // tenant, caretaker, auto, qr
+  notes           String?
+  idVerified      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  visitor Visitor @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId, checkInAt])
+  @@index([propertyId, checkInAt])
+  @@index([unitId, approvalStatus])
+  @@index([approvalStatus])
 }
 
 // ─── Deposit Transfer ─────────────────────────────────────────────────────────
