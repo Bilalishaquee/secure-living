@@ -47,6 +47,19 @@ import {
   HardHat,
   CheckSquare,
   Zap,
+  ScanQrCode,
+  DoorOpen,
+  GitCompare,
+  ScrollText,
+  BrainCircuit,
+  Award,
+  Fingerprint,
+  Eye,
+  Hotel,
+  QrCode,
+  GanttChartSquare,
+  ListChecks,
+  NotebookText,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect, type ComponentType } from "react";
@@ -77,6 +90,7 @@ const landlordGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
@@ -86,6 +100,7 @@ const landlordGroups: NavGroup[] = [
     label: "Financial",
     items: [
       { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/rent-collection/receipts", label: "Rent Receipts", icon: NotebookText },
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Landlord Banking", icon: BarChart3 },
     ],
@@ -94,6 +109,7 @@ const landlordGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
@@ -103,24 +119,41 @@ const landlordGroups: NavGroup[] = [
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
+      { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
+      { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
+      { href: "/screening/rent-score", label: "Rent Score", icon: Award },
       { href: "/services", label: "Services", icon: Wrench },
       { href: "/utilities", label: "Utilities", icon: Zap },
+      { href: "/utilities/household-charges", label: "Utility Charges", icon: ListChecks },
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Compliance & Access",
+    items: [
+      { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
+      { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
+      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
+      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
+      { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
   },
   {
     label: "Organisation",
     items: [
       { href: "/team", label: "Team", icon: UserPlus },
-      { href: "/import", label: "Data Import", icon: FileInput },
+      { href: "/data-import", label: "Data Migration", icon: FileInput },
+      { href: "/crm/custom-fields", label: "App Custom Fields", icon: FileText },
     ],
   },
   {
     label: "More",
     items: [
       { href: "/investments", label: "Investments", icon: LineChart },
+      { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
       { href: "/reports", label: "Reports", icon: BarChart2 },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
@@ -133,10 +166,12 @@ const superAdminGroups: NavGroup[] = [
     label: "Core Operations",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
       { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Vacating", icon: LogOut },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
@@ -147,6 +182,7 @@ const superAdminGroups: NavGroup[] = [
     label: "Financial System",
     items: [
       { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/rent-collection/receipts", label: "Rent Receipts", icon: NotebookText },
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Wallets & Payouts", icon: BarChart3 },
       { href: "/expenses", label: "Expenses", icon: Receipt },
@@ -158,6 +194,10 @@ const superAdminGroups: NavGroup[] = [
     items: [
       { href: "/kyc", label: "KYC", icon: Upload },
       { href: "/screening", label: "Screening", icon: FileSearch },
+      { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
+      { href: "/screening/rent-score", label: "Rent Score", icon: Award },
+      { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
+      { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
       { href: "/admin/audit-logs", label: "Audit Logs", icon: ClipboardList },
       { href: "/admin/disputes", label: "Disputes", icon: AlertTriangle },
     ],
@@ -172,7 +212,17 @@ const superAdminGroups: NavGroup[] = [
       { href: "/services", label: "Services", icon: Briefcase },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
+      { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
       { href: "/investments", label: "Investments", icon: LineChart },
+    ],
+  },
+  {
+    label: "Access & Visitors",
+    items: [
+      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
+      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
+      { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
   },
   {
@@ -188,7 +238,7 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "System Configuration",
     items: [
-      { href: "/import", label: "Data Import", icon: FileInput },
+      { href: "/data-import", label: "Data Migration", icon: FileInput },
       { href: "/admin/taxonomies", label: "Taxonomies", icon: Tags },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
@@ -206,9 +256,11 @@ const adminGroups: NavGroup[] = [
     label: "Core Operations",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
       { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
     ],
@@ -217,6 +269,7 @@ const adminGroups: NavGroup[] = [
     label: "Financial System",
     items: [
       { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/rent-collection/receipts", label: "Rent Receipts", icon: NotebookText },
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Wallets & Payouts", icon: BarChart3 },
       { href: "/expenses", label: "Expenses", icon: Receipt },
@@ -228,6 +281,10 @@ const adminGroups: NavGroup[] = [
     items: [
       { href: "/kyc", label: "KYC", icon: Upload },
       { href: "/screening", label: "Screening", icon: FileSearch },
+      { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
+      { href: "/screening/rent-score", label: "Rent Score", icon: Award },
+      { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
+      { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
       { href: "/admin/audit-logs", label: "Audit Logs", icon: ClipboardList },
     ],
   },
@@ -239,7 +296,18 @@ const adminGroups: NavGroup[] = [
       { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/services", label: "Professionals", icon: Briefcase },
+      { href: "/short-stay", label: "Short Stay", icon: BedDouble },
+      { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
       { href: "/investments", label: "Investments", icon: LineChart },
+    ],
+  },
+  {
+    label: "Access & Visitors",
+    items: [
+      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
+      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
+      { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
   },
   {
@@ -252,7 +320,8 @@ const adminGroups: NavGroup[] = [
   {
     label: "More",
     items: [
-      { href: "/import", label: "Data Import", icon: FileInput },
+      { href: "/data-import", label: "Data Migration", icon: FileInput },
+      { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
@@ -265,6 +334,7 @@ const staffGroups: NavGroup[] = [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
     ],
   },
   {
@@ -275,7 +345,9 @@ const staffGroups: NavGroup[] = [
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/leasing", label: "Leases", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/services", label: "Services", icon: Wrench },
+      { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
     ],
   },
   {
@@ -292,6 +364,7 @@ const agencyGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/containers", label: "Managed Properties", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
@@ -301,6 +374,7 @@ const agencyGroups: NavGroup[] = [
     label: "Financial",
     items: [
       { href: "/rent-collection", label: "Payments & Escrow", icon: Banknote },
+      { href: "/rent-collection/receipts", label: "Rent Receipts", icon: NotebookText },
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Agency Banking", icon: BarChart3 },
     ],
@@ -309,6 +383,7 @@ const agencyGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
@@ -318,23 +393,39 @@ const agencyGroups: NavGroup[] = [
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
+      { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
+      { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
+      { href: "/screening/rent-score", label: "Rent Score", icon: Award },
       { href: "/utilities", label: "Utilities", icon: Zap },
+      { href: "/utilities/household-charges", label: "Utility Charges", icon: ListChecks },
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Compliance & Access",
+    items: [
+      { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
+      { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
+      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
+      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
+      { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
   },
   {
     label: "Organisation",
     items: [
       { href: "/team", label: "Agency Team", icon: UserPlus },
-      { href: "/import", label: "Data Import", icon: FileInput },
+      { href: "/data-import", label: "Data Migration", icon: FileInput },
     ],
   },
   {
     label: "More",
     items: [
       { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
@@ -346,19 +437,24 @@ const agencyManagerGroups: NavGroup[] = [
     label: "Overview",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/properties", label: "Managed Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
     ],
   },
   {
     label: "Operations",
     items: [
       { href: "/leasing", label: "Leasing", icon: Landmark },
+      { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
       { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
+      { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
+      { href: "/screening/rent-score", label: "Rent Score", icon: Award },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
     ],
   },
@@ -366,6 +462,7 @@ const agencyManagerGroups: NavGroup[] = [
     label: "More",
     items: [
       { href: "/kyc", label: "KYC & Docs", icon: Upload },
+      { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
@@ -381,12 +478,14 @@ const tenantGroups: NavGroup[] = [
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/tenant/vacate", label: "Move-Out Notice", icon: LogOut },
       { href: "/tenant/checklist", label: "My Checklist", icon: ClipboardCheck },
+      { href: "/visitors", label: "Visitors", icon: DoorOpen },
     ],
   },
   {
     label: "Payments",
     items: [
       { href: "/rent-collection", label: "Payments", icon: Banknote },
+      { href: "/rent-collection/receipts", label: "Rent Receipts", icon: NotebookText },
       { href: "/deposit-transfer", label: "Deposit Transfer", icon: Banknote },
     ],
   },
@@ -394,6 +493,7 @@ const tenantGroups: NavGroup[] = [
     label: "More",
     items: [
       { href: "/kyc", label: "KYC & Docs", icon: Upload },
+      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
