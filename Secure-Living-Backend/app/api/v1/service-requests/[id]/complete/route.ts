@@ -37,11 +37,17 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       where: { serviceType: existing.serviceType },
     });
     if (typeConfig && Array.isArray(typeConfig.evidenceRequirements) && typeConfig.evidenceRequirements.length > 0) {
-      const evidenceCount = await prisma.serviceRequestEvidence.count({
+      // Phase 3: Check that each required evidence type is actually present
+      const requiredTypes = typeConfig.evidenceRequirements as string[];
+      const uploadedEvidence = await prisma.serviceRequestEvidence.findMany({
         where: { serviceRequestId: params.id },
+        select: { mediaType: true },
       });
-      if (evidenceCount === 0) {
-        return jsonError(422, `At least one evidence item is required before completing a ${existing.serviceType} request. Required types: ${(typeConfig.evidenceRequirements as string[]).join(", ")}`);
+      const uploadedTypes = new Set(uploadedEvidence.map((e) => e.mediaType));
+      const missingTypes = requiredTypes.filter((reqType) => !uploadedTypes.has(reqType));
+
+      if (missingTypes.length > 0) {
+        return jsonError(422, `Missing required evidence types for ${existing.serviceType}: ${missingTypes.join(", ")}. All of these must be uploaded before marking as completed.`);
       }
     }
   }

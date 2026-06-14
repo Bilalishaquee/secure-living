@@ -30,6 +30,7 @@ interface Meter {
   meterNumber: string;
   type: "WATER" | "ELECTRICITY";
   billingModel: "FLAT_RATE" | "SUB_METERED_MANUAL" | "SUB_METERED_IOT";
+  pricePerUnitKes?: number | null;
   isActive: boolean;
   readings: Reading[];
 }
@@ -41,6 +42,10 @@ interface Reading {
   currentReading: number;
   consumption: number;
   flatRateAmountKes?: number;
+  pricePerUnitKes?: number | null;
+  costKes?: number | null;
+  notes?: string | null;
+  imageUrl?: string | null;
   isDisputed: boolean;
   disputeStatus?: string;
 }
@@ -65,11 +70,11 @@ export default function UtilitiesPage() {
 
   // Add meter form
   const [showAddMeter, setShowAddMeter] = useState(false);
-  const [newMeter, setNewMeter] = useState({ meterNumber: "", type: "ELECTRICITY", billingModel: "SUB_METERED_MANUAL", unitId: "" });
+  const [newMeter, setNewMeter] = useState({ meterNumber: "", type: "ELECTRICITY", billingModel: "SUB_METERED_MANUAL", unitId: "", pricePerUnitKes: "" });
 
   // Add reading form
   const [showAddReading, setShowAddReading] = useState(false);
-  const [newReading, setNewReading] = useState({ previousReading: "", currentReading: "", readingDate: new Date().toISOString().split("T")[0], flatRateAmountKes: "" });
+  const [newReading, setNewReading] = useState({ previousReading: "", currentReading: "", readingDate: new Date().toISOString().split("T")[0], flatRateAmountKes: "", notes: "", imageUrl: "" });
 
   // Dispute form
   const [disputeReadingId, setDisputeReadingId] = useState<string | null>(null);
@@ -123,12 +128,18 @@ export default function UtilitiesPage() {
     const res = await fetch("/api/v1/utility-meters", {
       method: "POST",
       headers: authHeader(),
-      body: JSON.stringify(newMeter),
+      body: JSON.stringify({
+        meterNumber: newMeter.meterNumber,
+        type: newMeter.type,
+        billingModel: newMeter.billingModel,
+        unitId: newMeter.unitId,
+        ...(newMeter.pricePerUnitKes ? { pricePerUnitKes: parseFloat(newMeter.pricePerUnitKes) } : {}),
+      }),
     });
     if (res.ok) {
       toast("Meter registered.", "success");
       setShowAddMeter(false);
-      setNewMeter({ meterNumber: "", type: "ELECTRICITY", billingModel: "SUB_METERED_MANUAL", unitId: "" });
+      setNewMeter({ meterNumber: "", type: "ELECTRICITY", billingModel: "SUB_METERED_MANUAL", unitId: "", pricePerUnitKes: "" });
       await fetchMeters();
     } else {
       const err = (await res.json()) as { error: string };
@@ -147,12 +158,14 @@ export default function UtilitiesPage() {
         previousReading: parseFloat(newReading.previousReading),
         currentReading: parseFloat(newReading.currentReading),
         ...(newReading.flatRateAmountKes ? { flatRateAmountKes: parseFloat(newReading.flatRateAmountKes) } : {}),
+        ...(newReading.notes ? { notes: newReading.notes } : {}),
+        ...(newReading.imageUrl ? { imageUrl: newReading.imageUrl } : {}),
       }),
     });
     if (res.ok) {
       toast("Reading submitted.", "success");
       setShowAddReading(false);
-      setNewReading({ previousReading: "", currentReading: "", readingDate: new Date().toISOString().split("T")[0], flatRateAmountKes: "" });
+      setNewReading({ previousReading: "", currentReading: "", readingDate: new Date().toISOString().split("T")[0], flatRateAmountKes: "", notes: "", imageUrl: "" });
       await fetchReadings(selectedMeter);
     } else {
       const err = (await res.json()) as { error: string };
@@ -177,7 +190,18 @@ export default function UtilitiesPage() {
     }
   }
 
+  const fmtKes = (n: number) => `KES ${n.toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;
+
   const activeMeter = meters.find((m) => m.id === selectedMeter);
+  // Live cost preview: consumption * price-per-unit (meter tariff).
+  const previewConsumption =
+    newReading.previousReading && newReading.currentReading
+      ? parseFloat(newReading.currentReading) - parseFloat(newReading.previousReading)
+      : null;
+  const previewCost =
+    previewConsumption != null && activeMeter?.pricePerUnitKes
+      ? previewConsumption * activeMeter.pricePerUnitKes
+      : null;
   const chartData = [...readings].reverse().map((r) => ({
     date: new Date(r.readingDate).toLocaleDateString("en-KE", { month: "short", day: "numeric" }),
     consumption: r.consumption,
@@ -262,6 +286,11 @@ export default function UtilitiesPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Price per unit (KES)</label>
+                <input type="number" min="0" step="0.01" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={newMeter.pricePerUnitKes} onChange={(e) => setNewMeter((p) => ({ ...p, pricePerUnitKes: e.target.value }))} placeholder="e.g. 70" />
+                <p className="mt-1 text-xs text-slate-400">Cost is auto-calculated as consumption × price per unit.</p>
+              </div>
             </div>
             <div className="flex gap-2">
               <Button type="button" onClick={addMeter}>Register</Button>
@@ -295,11 +324,27 @@ export default function UtilitiesPage() {
                   <input type="number" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={newReading.flatRateAmountKes} onChange={(e) => setNewReading((p) => ({ ...p, flatRateAmountKes: e.target.value }))} placeholder="0.00" />
                 </div>
               )}
+              <div>
+                <label className="text-sm font-medium text-slate-700">Photo URL (optional)</label>
+                <input type="url" className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={newReading.imageUrl} onChange={(e) => setNewReading((p) => ({ ...p, imageUrl: e.target.value }))} placeholder="https://… meter photo" />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-sm font-medium text-slate-700">Notes (optional)</label>
+                <input className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" value={newReading.notes} onChange={(e) => setNewReading((p) => ({ ...p, notes: e.target.value }))} placeholder="Any notes about this reading" />
+              </div>
             </div>
-            {newReading.previousReading && newReading.currentReading && (
-              <p className="text-sm text-slate-600">
-                Consumption: <strong>{(parseFloat(newReading.currentReading) - parseFloat(newReading.previousReading)).toFixed(2)} units</strong>
-              </p>
+            {previewConsumption != null && (
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Consumption: <strong>{previewConsumption.toFixed(2)} units</strong>
+                {activeMeter.pricePerUnitKes ? (
+                  <>
+                    {" "}× {fmtKes(activeMeter.pricePerUnitKes)} ={" "}
+                    <strong className="text-slate-900">{previewCost != null ? fmtKes(previewCost) : "—"}</strong>
+                  </>
+                ) : (
+                  <span className="ml-2 text-xs text-amber-600">(set a price per unit on this meter to auto-calculate cost)</span>
+                )}
+              </div>
             )}
             <div className="flex gap-2">
               <Button type="button" onClick={submitReading}>Submit Reading</Button>
@@ -342,8 +387,15 @@ export default function UtilitiesPage() {
                       <p className="font-medium text-slate-800">
                         {r.previousReading} → {r.currentReading}
                         <span className="ml-2 text-slate-500">({r.consumption} units)</span>
+                        {r.costKes != null && (
+                          <span className="ml-2 font-semibold text-emerald-700">{fmtKes(r.costKes)}</span>
+                        )}
                       </p>
-                      <p className="text-xs text-slate-400">{new Date(r.readingDate).toLocaleDateString()}</p>
+                      <p className="text-xs text-slate-400">
+                        {new Date(r.readingDate).toLocaleDateString()}
+                        {r.pricePerUnitKes != null && <span className="ml-1">· @ {fmtKes(r.pricePerUnitKes)}/unit</span>}
+                        {r.notes ? <span className="ml-1">· {r.notes}</span> : null}
+                      </p>
                     </div>
                     <div className="flex items-center gap-2">
                       {r.isDisputed && (

@@ -8,7 +8,7 @@ const createSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   fileUrl: z.string().url(),
-  fileFormat: z.enum(["pdf", "docx"]),
+  fileFormat: z.enum(["pdf", "docx", "doc"]),
   fileSizeBytes: z.number().int().optional(),
   propertyId: z.string().optional(),
   unitId: z.string().optional(),

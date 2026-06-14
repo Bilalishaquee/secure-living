@@ -4,16 +4,39 @@ import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler
 
 type Ctx = { params: { id: string } };
 
-const itemSchema = z.object({
-  id: z.string().optional(),
-  section: z.string().min(1),
-  item: z.string().min(1),
-  order: z.number().int().nonnegative(),
-});
+// Accept canonical names plus the builder UI aliases.
+const itemSchema = z
+  .object({
+    id: z.string().optional(),
+    section: z.string().optional(),
+    area: z.string().optional(),
+    item: z.string().optional(),
+    label: z.string().optional(),
+    defaultQty: z.number().int().positive().optional(),
+    qty: z.number().int().positive().optional(),
+    order: z.number().int().nonnegative().optional(),
+    sortOrder: z.number().int().nonnegative().optional(),
+  })
+  .transform((v, ctx) => {
+    const item = v.item ?? v.label;
+    if (!item) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "item (or label) is required" });
+      return z.NEVER;
+    }
+    return {
+      section: v.section ?? v.area ?? "General",
+      item,
+      defaultQty: v.defaultQty ?? v.qty ?? 1,
+      order: v.order ?? v.sortOrder ?? 0,
+    };
+  });
+
+const CATEGORIES = ["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"] as const;
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
+  category: z.enum(CATEGORIES).nullable().optional(),
   items: z.array(itemSchema).optional(),
 });
 
@@ -60,8 +83,9 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
     data: {
       ...(parsed.data.name !== undefined && { name: parsed.data.name }),
       ...(parsed.data.description !== undefined && { description: parsed.data.description }),
+      ...(parsed.data.category !== undefined && { category: parsed.data.category }),
       ...(parsed.data.items !== undefined && {
-        items: { create: parsed.data.items.map(({ id: _id, ...item }) => item) },
+        items: { create: parsed.data.items },
       }),
     },
     include: { items: { orderBy: { order: "asc" } } },

@@ -28,6 +28,7 @@ const createSrSchema = z.object({
   bookingCheckOutAt: z.string().datetime().optional(),
   turnaroundDeadline: z.string().datetime().optional(),
   idempotencyKey: z.string().optional(),
+  customTypeId: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   dueAt: z.string().datetime().optional(),
   // Legacy fields
@@ -115,13 +116,16 @@ export const POST = withErrorHandler(async (req: Request) => {
   const scoped = requireScope(actor, body.organizationId, body.branchId);
   if (scoped) return scoped;
 
-  // CUSTOM type must have a registered CustomTypeDefinition
+  // Phase 3: CUSTOM type must reference a specific registered CustomTypeDefinition
   if (body.serviceType === ServiceRequestType.CUSTOM) {
+    if (!body.customTypeId) {
+      return jsonError(422, "Cannot create a CUSTOM service request: customTypeId is required. Specify which custom type definition to use.");
+    }
     const customDef = await prisma.customTypeDefinition.findFirst({
-      where: { isActive: true },
+      where: { id: body.customTypeId, isActive: true },
     });
     if (!customDef) {
-      return jsonError(422, "Cannot create a CUSTOM service request: no active CustomTypeDefinition exists. Please register a custom type first.");
+      return jsonError(422, "Cannot create a CUSTOM service request: the specified CustomTypeDefinition does not exist or is inactive.");
     }
   }
 
@@ -210,7 +214,9 @@ export const POST = withErrorHandler(async (req: Request) => {
         category: body.category ?? "other",
         priority: body.priority ?? "low",
         idempotencyKey: body.idempotencyKey ?? null,
-        metadata: body.metadata ? (body.metadata as import("@prisma/client").Prisma.InputJsonValue) : undefined,
+        metadata: body.customTypeId
+          ? { ...((body.metadata as Record<string, unknown>) ?? {}), customTypeId: body.customTypeId } as import("@prisma/client").Prisma.InputJsonValue
+          : body.metadata ? (body.metadata as import("@prisma/client").Prisma.InputJsonValue) : undefined,
         dueAt: body.dueAt ? new Date(body.dueAt) : null,
         shortStayBookingId: body.shortStayBookingId ?? null,
         guestId: body.guestId ?? null,

@@ -1,5 +1,18 @@
+import { SrStatus } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
-import { requireActor , withErrorHandler } from "@/lib/server/http";
+import { requireActor, withErrorHandler } from "@/lib/server/http";
+
+// Phase 3: Active service request statuses using the SrStatus enum
+const ACTIVE_SR_STATUSES: SrStatus[] = [
+  SrStatus.SUBMITTED,
+  SrStatus.APPROVED,
+  SrStatus.QUOTING,
+  SrStatus.AWAITING_FUNDING,
+  SrStatus.FUNDED,
+  SrStatus.ASSIGNED,
+  SrStatus.SCHEDULING_PENDING,
+  SrStatus.IN_PROGRESS,
+];
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
@@ -18,6 +31,8 @@ export const GET = withErrorHandler(async (req: Request) => {
     activeLeases,
     pendingKyc,
     openServiceRequests,
+    blockedServiceRequests,
+    slaBreachCount,
     activeDisputes,
     escrowAccounts,
     monthlyRentInvoices,
@@ -28,7 +43,17 @@ export const GET = withErrorHandler(async (req: Request) => {
     prisma.lease.count({ where: { ...orgFilter, status: "active" } }),
     prisma.kycDocument.count({ where: { status: "pending" } }),
     prisma.serviceRequest.count({
-      where: { ...orgFilter, status: { in: ["draft", "approved", "in_progress", "escalated"] } },
+      where: { ...orgFilter, srStatus: { in: ACTIVE_SR_STATUSES } },
+    }),
+    prisma.serviceRequest.count({
+      where: { ...orgFilter, srStatus: SrStatus.BLOCKED },
+    }),
+    prisma.serviceRequest.count({
+      where: {
+        ...orgFilter,
+        srStatus: { in: [SrStatus.IN_PROGRESS, SrStatus.ASSIGNED, SrStatus.SCHEDULING_PENDING] },
+        dueAt: { lt: now },
+      },
     }),
     prisma.escrowAccount.count({ where: { status: "disputed" } }),
     prisma.escrowAccount.findMany({ where: { status: "held" }, select: { amountKes: true } }),
@@ -83,6 +108,12 @@ export const GET = withErrorHandler(async (req: Request) => {
     ...(pendingKyc > 5
       ? [{ type: "kyc" as const, severity: "medium" as const, message: `${pendingKyc} KYC documents pending review`, resourceId: "", resourceType: "kyc_document" }]
       : []),
+    ...(blockedServiceRequests > 0
+      ? [{ type: "blocked_sr" as const, severity: "medium" as const, message: `${blockedServiceRequests} service request(s) blocked — follow up needed`, resourceId: "", resourceType: "service_request" }]
+      : []),
+    ...(slaBreachCount > 0
+      ? [{ type: "sla_breach" as const, severity: "high" as const, message: `${slaBreachCount} service request(s) past their SLA deadline`, resourceId: "", resourceType: "service_request" }]
+      : []),
   ];
 
   return Response.json({
@@ -95,6 +126,8 @@ export const GET = withErrorHandler(async (req: Request) => {
       pendingKyc,
       activeDisputes,
       openServiceRequests,
+      blockedServiceRequests,
+      slaBreachCount,
       recentActivity: recentAuditLogs,
       alerts,
     },

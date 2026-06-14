@@ -18,7 +18,7 @@ type Application = {
   status: string;
   message: string | null;
   submittedAt: string;
-  evidences: { id: string; fileUrl: string; fileType: string | null }[];
+  evidences: { id: string; filePath: string; fileName: string; mimeType: string | null; evidenceType: string | null }[];
   customFieldValues: { id: string; field: { fieldLabel: string }; value: string | null; fileUrl: string | null }[];
 };
 
@@ -150,8 +150,8 @@ export default function ApplicationsPage() {
                 <p className="text-xs font-medium text-[var(--text-secondary)] mb-2">Evidence</p>
                 <div className="flex flex-wrap gap-2">
                   {selectedApp.evidences.map((ev, i) => (
-                    <a key={ev.id ?? i} href={ev.fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-blue underline">
-                      Document {i + 1} {ev.fileType ? `(${ev.fileType})` : ""}
+                    <a key={ev.id ?? i} href={ev.filePath} target="_blank" rel="noopener noreferrer" className="text-sm text-brand-blue underline">
+                      {ev.fileName || `Document ${i + 1}`}{ev.evidenceType ? ` (${ev.evidenceType})` : ""}
                     </a>
                   ))}
                 </div>

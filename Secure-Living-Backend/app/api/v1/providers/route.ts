@@ -79,6 +79,17 @@ export const POST = withErrorHandler(async (req: Request) => {
     },
   });
 
+  // Phase 3: Log provider creation in the provider-specific audit trail
+  await prisma.serviceProviderAuditLog.create({
+    data: {
+      id: randomUUID(),
+      providerId: newId,
+      action: "created",
+      toStatus: "PENDING_APPROVAL",
+      reviewedBy: actor.userId,
+    },
+  });
+
   await appendAudit({
     userId: actor.userId,
     role: actor.role,

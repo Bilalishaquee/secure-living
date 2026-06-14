@@ -5,13 +5,25 @@ import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/serv
 
 type Ctx = { params: { id: string } };
 
-const configSchema = z.object({
-  isShortStayEnabled: z.boolean().default(false),
-  visitorApprovalRequired: z.boolean().default(false),
-  gateAccessRequired: z.boolean().default(false),
+// Accept both the backend model field names and the shorter aliases the
+// frontend sends, then normalise to the canonical model names.
+const rawConfigSchema = z.object({
+  isShortStayEnabled: z.boolean().optional(),
+  shortStayEnabled: z.boolean().optional(),
+  visitorApprovalRequired: z.boolean().optional(),
+  gateAccessRequired: z.boolean().optional(),
   maintenanceSla: z.string().optional(),
   customOnboardingFields: z.record(z.string(), z.unknown()).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
 });
+
+const configSchema = rawConfigSchema.transform((v) => ({
+  isShortStayEnabled: v.isShortStayEnabled ?? v.shortStayEnabled ?? false,
+  visitorApprovalRequired: v.visitorApprovalRequired ?? false,
+  gateAccessRequired: v.gateAccessRequired ?? false,
+  maintenanceSla: v.maintenanceSla,
+  customOnboardingFields: v.customOnboardingFields ?? v.customFields,
+}));
 
 export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
@@ -62,3 +74,6 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   return Response.json({ data: config });
 });
+
+// Alias: the frontend issues PATCH for partial saves; reuse the same upsert handler.
+export const PATCH = PUT;

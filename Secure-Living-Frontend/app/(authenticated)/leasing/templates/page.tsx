@@ -145,6 +145,7 @@ export default function LeaseTemplatesPage() {
               <SelectContent>
                 <SelectItem value="pdf">PDF</SelectItem>
                 <SelectItem value="docx">DOCX</SelectItem>
+                <SelectItem value="doc">DOC</SelectItem>
               </SelectContent>
             </Select>
           </div>

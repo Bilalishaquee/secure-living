@@ -34,19 +34,26 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     return jsonError(409, `Quote is already in status ${quote.status}`);
   }
 
-  const updated = await prisma.serviceRequestQuote.update({
-    where: { id: parsed.data.quoteId },
-    data: {
-      status: QuoteStatus.REJECTED,
-      rejectionReason: parsed.data.reason,
-    },
+  // Phase 3: Emit outbox event for quote rejection
+  await prisma.$transaction(async (tx) => {
+    await tx.serviceRequestQuote.update({
+      where: { id: parsed.data.quoteId },
+      data: { status: QuoteStatus.REJECTED, rejectionReason: parsed.data.reason },
+    });
+    await tx.outboxEvent.create({
+      data: {
+        eventType: 'request.quote_rejected',
+        payload: { serviceRequestId: params.id, actorId: actor.userId, quoteId: parsed.data.quoteId, reason: parsed.data.reason },
+        serviceRequestId: params.id,
+      },
+    });
   });
 
   await appendAudit({
     userId: actor.userId,
     role: actor.role,
-    action: "service_request.quote_rejected",
-    resourceType: "service_request",
+    action: 'service_request.quote_rejected',
+    resourceType: 'service_request',
     resourceId: params.id,
     orgId: existing.organizationId,
     branchId: existing.branchId,

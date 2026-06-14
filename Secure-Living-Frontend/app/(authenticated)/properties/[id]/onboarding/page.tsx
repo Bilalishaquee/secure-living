@@ -11,11 +11,11 @@ import { Switch } from "@/components/ui/Switch";
 type OnboardingConfig = {
   id: string;
   propertyId: string;
-  shortStayEnabled: boolean;
+  isShortStayEnabled: boolean;
   visitorApprovalRequired: boolean;
   gateAccessRequired: boolean;
   maintenanceSla: string;
-  customFields: Record<string, unknown>;
+  customOnboardingFields: Record<string, unknown>;
 };
 
 export default function PropertyOnboardingPage() {
@@ -33,17 +33,26 @@ export default function PropertyOnboardingPage() {
         headers: { Authorization: `Bearer ${user.authToken ?? ""}` },
       });
       if (res.ok) {
-        const json = (await res.json()) as { data: OnboardingConfig };
-        setConfig(json.data);
+        const json = (await res.json()) as { data: Partial<OnboardingConfig> };
+        const d = json.data;
+        setConfig({
+          id: d.id ?? "",
+          propertyId: d.propertyId ?? id,
+          isShortStayEnabled: d.isShortStayEnabled ?? false,
+          visitorApprovalRequired: d.visitorApprovalRequired ?? true,
+          gateAccessRequired: d.gateAccessRequired ?? false,
+          maintenanceSla: d.maintenanceSla ?? "48 hours",
+          customOnboardingFields: d.customOnboardingFields ?? {},
+        });
       } else {
         setConfig({
           id: "",
           propertyId: id,
-          shortStayEnabled: false,
+          isShortStayEnabled: false,
           visitorApprovalRequired: true,
           gateAccessRequired: false,
           maintenanceSla: "48 hours",
-          customFields: {},
+          customOnboardingFields: {},
         });
       }
       setLoading(false);
@@ -63,11 +72,11 @@ export default function PropertyOnboardingPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken ?? ""}` },
         body: JSON.stringify({
-          shortStayEnabled: config.shortStayEnabled,
+          isShortStayEnabled: config.isShortStayEnabled,
           visitorApprovalRequired: config.visitorApprovalRequired,
           gateAccessRequired: config.gateAccessRequired,
           maintenanceSla: config.maintenanceSla,
-          customFields: config.customFields,
+          customOnboardingFields: config.customOnboardingFields,
         }),
       });
       if (res.ok) {
@@ -104,8 +113,8 @@ export default function PropertyOnboardingPage() {
           <Switch
             label="Short Stay Enabled"
             description="Allow Airbnb-style short-term stays"
-            checked={config.shortStayEnabled}
-            onCheckedChange={(v) => updateField("shortStayEnabled", v)}
+            checked={config.isShortStayEnabled}
+            onCheckedChange={(v) => updateField("isShortStayEnabled", v)}
           />
 
           <Switch
@@ -135,11 +144,11 @@ export default function PropertyOnboardingPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Custom Onboarding Fields (JSON)</label>
             <textarea
-              value={JSON.stringify(config.customFields, null, 2)}
+              value={JSON.stringify(config.customOnboardingFields, null, 2)}
               onChange={(e) => {
                 try {
                   const parsed = JSON.parse(e.target.value) as Record<string, unknown>;
-                  updateField("customFields", parsed);
+                  updateField("customOnboardingFields", parsed);
                 } catch {
                   // Allow editing invalid JSON
                 }

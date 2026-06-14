@@ -1,11 +1,19 @@
 import { z } from "zod";
 import { randomUUID } from "crypto";
+import { SrStatus } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { writeOutboxEvent } from "@/lib/server/sr-helpers";
 
 type Ctx = { params: { id: string } };
+
+// Phase 3: Escalation is only allowed on active, non-terminal service requests
+const ESCALATABLE_STATUSES: SrStatus[] = [
+  SrStatus.SUBMITTED, SrStatus.APPROVED, SrStatus.QUOTING,
+  SrStatus.AWAITING_FUNDING, SrStatus.FUNDED, SrStatus.ASSIGNED,
+  SrStatus.SCHEDULING_PENDING, SrStatus.IN_PROGRESS, SrStatus.BLOCKED,
+];
 
 const escalateSchema = z.object({
   escalatedTo: z.string().min(1, "escalatedTo is required"),
@@ -23,6 +31,11 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const scoped = requireScope(actor, existing.organizationId, existing.branchId);
   if (scoped) return scoped;
+
+  // Phase 3: Validate that the SR is in an escalatable state
+  if (!ESCALATABLE_STATUSES.includes(existing.srStatus)) {
+    return jsonError(409, `Cannot escalate a service request in ${existing.srStatus} status. Only active requests can be escalated.`);
+  }
 
   const parsed = await parseBody(req, escalateSchema);
   if (!parsed.ok) return parsed.response;

@@ -1,30 +1,58 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardCheck, CheckCircle2, AlertCircle } from "lucide-react";
+import { ClipboardCheck, CheckCircle2, Calculator } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 
+const CONDITION_OPTIONS = ["New", "Excellent", "Good", "Fair", "Poor", "Damaged", "Missing", "Not Applicable"];
+const RESPONSIBILITY_OPTIONS = ["TENANT", "LANDLORD", "WEAR_TEAR", "CONTRACTOR", "UNKNOWN"];
 
-const CONDITION_OPTIONS = ["Excellent", "Good", "Fair", "Poor", "Damaged", "Missing"];
-
-type ChecklistEntry = {
-  id: string;
-  templateItemId: string;
-  condition: string | null;
-  tenantNotes: string | null;
-  item: { id: string; label: string; description: string | null; sortOrder: number };
+// Condition Difference Engine â€” mirrors the backend ranking for a live preview.
+const RANK: Record<string, number> = {
+  New: 5, Excellent: 4, Good: 3, Fair: 2, Poor: 1, Damaged: 0, Missing: -1, "Not Applicable": 99,
 };
+function flagFor(statusIn: string, statusOut: string): "NO_ACTION" | "REVIEW_REQUIRED" | "POTENTIAL_DEDUCTION" {
+  if (statusOut === "Missing" || statusOut === "Damaged") return "POTENTIAL_DEDUCTION";
+  if (!statusIn || !statusOut) return "NO_ACTION";
+  const a = RANK[statusIn] ?? 3, b = RANK[statusOut] ?? 3;
+  if (a === 99 || b === 99) return "NO_ACTION";
+  if (b < a - 1) return "POTENTIAL_DEDUCTION";
+  if (b < a) return "REVIEW_REQUIRED";
+  return "NO_ACTION";
+}
 
+type TemplateItem = { id: string; section: string; item: string; defaultQty?: number; order: number };
+type Entry = {
+  itemId: string;
+  statusIn: string | null;
+  statusOut: string | null;
+  qty: number | null;
+  chargeKes: number | null;
+  responsibility: string | null;
+  note: string | null;
+};
 type TenantChecklist = {
   id: string;
+  type: string;
   status: string;
   signedAt: string | null;
   createdAt: string;
-  template: { id: string; name: string; type: string };
-  entries: ChecklistEntry[];
+  template: { id: string; name: string; category: string | null; items: TemplateItem[] };
+  entries: Entry[];
+};
+type RowState = { statusIn: string; statusOut: string; qty: number; charge: string; responsibility: string; note: string };
+type Reconciliation = {
+  depositAmount: number; totalCharges: number; totalDeductions: number; refundAmount: number; flaggedCount: number;
+};
+
+const fmtKes = (n: number) => `KES ${n.toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;
+const FLAG_BADGE: Record<string, string> = {
+  POTENTIAL_DEDUCTION: "bg-red-100 text-red-700",
+  REVIEW_REQUIRED: "bg-amber-100 text-amber-700",
+  NO_ACTION: "bg-slate-100 text-slate-500",
 };
 
 export default function TenantChecklistPage() {
@@ -33,16 +61,15 @@ export default function TenantChecklistPage() {
   const [checklists, setChecklists] = useState<TenantChecklist[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<TenantChecklist | null>(null);
-  const [entries, setEntries] = useState<Record<string, { condition: string; notes: string }>>({});
+  const [rows, setRows] = useState<Record<string, RowState>>({});
   const [saving, setSaving] = useState(false);
   const [signing, setSigning] = useState(false);
+  const [recon, setRecon] = useState<Reconciliation | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/tenant-checklists`, {
-        headers: { Authorization: `Bearer ${user?.authToken}` },
-      });
+      const res = await fetch(`/api/v1/tenant-checklists`, { headers: { Authorization: `Bearer ${user?.authToken}` } });
       if (res.ok) {
         const j = await res.json();
         setChecklists(j.data ?? []);
@@ -53,56 +80,84 @@ export default function TenantChecklistPage() {
   }
 
   async function loadChecklist(id: string) {
-    const res = await fetch(`/api/v1/tenant-checklists/${id}`, {
-      headers: { Authorization: `Bearer ${user?.authToken}` },
-    });
+    const res = await fetch(`/api/v1/tenant-checklists/${id}`, { headers: { Authorization: `Bearer ${user?.authToken}` } });
     if (res.ok) {
       const j = await res.json();
       const cl = j.data as TenantChecklist;
       setSelected(cl);
-      // Initialize entry state from existing data
-      const init: Record<string, { condition: string; notes: string }> = {};
-      cl.entries.forEach((e) => {
-        init[e.templateItemId] = {
-          condition: e.condition ?? "",
-          notes: e.tenantNotes ?? "",
+      setRecon(null);
+      const byItem = new Map(cl.entries.map((e) => [e.itemId, e]));
+      const init: Record<string, RowState> = {};
+      cl.template.items.forEach((it) => {
+        const e = byItem.get(it.id);
+        init[it.id] = {
+          statusIn: e?.statusIn ?? "",
+          statusOut: e?.statusOut ?? "",
+          qty: e?.qty ?? it.defaultQty ?? 1,
+          charge: e?.chargeKes != null ? String(e.chargeKes) : "",
+          responsibility: e?.responsibility ?? "",
+          note: e?.note ?? "",
         };
       });
-      setEntries(init);
+      setRows(init);
     }
   }
 
-  useEffect(() => { if (user?.authToken) load(); }, [user?.authToken]);
+  useEffect(() => { if (user?.authToken) load(); /* eslint-disable-next-line */ }, [user?.authToken]);
 
-  function setEntry(itemId: string, field: "condition" | "notes", value: string) {
-    setEntries((prev) => ({
-      ...prev,
-      [itemId]: { ...prev[itemId], condition: prev[itemId]?.condition ?? "", notes: prev[itemId]?.notes ?? "", [field]: value },
-    }));
+  function setRow(itemId: string, field: keyof RowState, value: string | number) {
+    setRows((prev) => ({ ...prev, [itemId]: { ...prev[itemId], [field]: value } }));
   }
 
-  async function handleSave() {
-    if (!selected) return;
+  function buildPayload() {
+    if (!selected) return [];
+    return selected.template.items.map((it) => {
+      const r = rows[it.id] ?? { statusIn: "", statusOut: "", qty: 1, charge: "", responsibility: "", note: "" };
+      return {
+        itemId: it.id,
+        statusIn: r.statusIn || null,
+        statusOut: r.statusOut || null,
+        qty: r.qty || null,
+        chargeKes: r.charge ? parseFloat(r.charge) : null,
+        responsibility: r.responsibility || null,
+        note: r.note || null,
+      };
+    });
+  }
+
+  async function handleSave(silent = false): Promise<boolean> {
+    if (!selected) return false;
     setSaving(true);
     try {
-      const payload = selected.entries.map((e) => ({
-        templateItemId: e.templateItemId,
-        condition: entries[e.templateItemId]?.condition || null,
-        tenantNotes: entries[e.templateItemId]?.notes || null,
-      }));
       const res = await fetch(`/api/v1/tenant-checklists/${selected.id}/entries`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
-        body: JSON.stringify({ entries: payload }),
+        body: JSON.stringify({ entries: buildPayload() }),
       });
       if (res.ok) {
-        toast({ title: "Checklist saved", variant: "success" });
-      } else {
-        const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        if (!silent) toast("Checklist saved", "success");
+        return true;
       }
+      const j = await res.json().catch(() => ({}));
+      toast(j.error ?? "Failed", "error");
+      return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function loadReconciliation() {
+    if (!selected) return;
+    const ok = await handleSave(true);
+    if (!ok) return;
+    const res = await fetch(`/api/v1/tenant-checklists/${selected.id}/reconciliation`, {
+      headers: { Authorization: `Bearer ${user?.authToken}` },
+    });
+    if (res.ok) {
+      const j = await res.json();
+      setRecon(j.data);
+    } else {
+      toast("Failed to compute reconciliation", "error");
     }
   }
 
@@ -110,108 +165,167 @@ export default function TenantChecklistPage() {
     if (!selected) return;
     setSigning(true);
     try {
-      // Save first
-      await handleSave();
+      const ok = await handleSave(true);
+      if (!ok) return;
       const res = await fetch(`/api/v1/tenant-checklists/${selected.id}/sign`, {
         method: "POST",
         headers: { Authorization: `Bearer ${user?.authToken}` },
       });
       if (res.ok) {
-        toast({ title: "Checklist signed!", variant: "success" });
+        toast("Checklist signed!", "success");
         setSelected(null);
         load();
       } else {
-        const j = await res.json();
-        toast({ title: j.error ?? "Failed to sign — fill all required items first", variant: "error" });
+        const j = await res.json().catch(() => ({}));
+        toast(j.error ?? "Failed to sign â€” complete all items first", "error");
       }
     } finally {
       setSigning(false);
     }
   }
 
-  const allFilled = selected ? selected.entries.every((e) => !!entries[e.templateItemId]?.condition) : false;
+  const isMoveIn = selected?.type === "MOVE_IN";
+  // For move-in only Status In is required; otherwise Status Out drives sign-off.
+  const allFilled = selected
+    ? selected.template.items.every((it) => {
+        const r = rows[it.id];
+        return isMoveIn ? !!r?.statusIn : !!r?.statusOut;
+      })
+    : false;
+
+  const liveTotalCharges = selected
+    ? selected.template.items.reduce((s, it) => s + (parseFloat(rows[it.id]?.charge || "0") || 0), 0)
+    : 0;
+  const liveFlagged = selected
+    ? selected.template.items.filter((it) => {
+        const r = rows[it.id];
+        return r && flagFor(r.statusIn, r.statusOut) !== "NO_ACTION";
+      }).length
+    : 0;
+
+  const isSigned = selected?.status === "SIGNED";
 
   if (selected) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">{selected.template.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {selected.template.type === "MOVE_IN" ? "Move-In" : "Move-Out"} checklist · {selected.status}
+              {selected.type.replace("_", "-")} inspection Â· {selected.status}
             </p>
           </div>
           <Button variant="ghost" onClick={() => setSelected(null)}>Back</Button>
         </div>
 
-        {selected.status === "SIGNED" ? (
+        {isSigned && (
           <Card>
-            <CardContent className="flex flex-col items-center py-12 text-center">
-              <CheckCircle2 className="mb-3 h-12 w-12 text-green-500" />
+            <CardContent className="flex flex-col items-center py-8 text-center">
+              <CheckCircle2 className="mb-3 h-10 w-10 text-green-500" />
               <p className="text-lg font-semibold text-slate-900">Checklist signed</p>
-              <p className="mt-1 text-sm text-slate-500">
-                Signed on {selected.signedAt ? new Date(selected.signedAt).toLocaleDateString() : "—"}
-              </p>
+              <p className="mt-1 text-sm text-slate-500">Signed on {selected.signedAt ? new Date(selected.signedAt).toLocaleDateString() : "â€”"}</p>
             </CardContent>
           </Card>
-        ) : null}
+        )}
+
+        {/* Live engine summary */}
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Flagged items</p><p className="text-2xl font-bold text-slate-900">{liveFlagged}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-slate-500">Total charges</p><p className="text-2xl font-bold text-slate-900">{fmtKes(liveTotalCharges)}</p></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center justify-between"><div><p className="text-xs text-slate-500">Deposit reconciliation</p><p className="text-sm text-slate-700">{recon ? `${fmtKes(recon.refundAmount)} refund` : "Not computed"}</p></div><Button size="sm" variant="outline" onClick={loadReconciliation} className="gap-1"><Calculator className="h-3.5 w-3.5" /> Run</Button></CardContent></Card>
+        </div>
+
+        {recon && (
+          <Card>
+            <CardHeader><CardTitle className="text-base">Deposit Reconciliation Report</CardTitle></CardHeader>
+            <CardContent>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">Deposit Held</span><span className="font-medium">{fmtKes(recon.depositAmount)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Total Charges</span><span>{fmtKes(recon.totalCharges)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Tenant-Attributable Deductions</span><span className="font-medium text-red-600">âˆ’ {fmtKes(recon.totalDeductions)}</span></div>
+                <div className="mt-2 flex justify-between border-t border-slate-100 pt-2 text-base font-semibold"><span>Refund Due</span><span className="text-emerald-700">{fmtKes(recon.refundAmount)}</span></div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
-          <CardContent className="divide-y divide-slate-100">
-            {selected.entries
-              .sort((a, b) => a.item.sortOrder - b.item.sortOrder)
-              .map((e) => {
-                const val = entries[e.templateItemId] ?? { condition: "", notes: "" };
-                const isFilled = !!val.condition;
-                return (
-                  <div key={e.id} className="py-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-slate-900">{e.item.label}</p>
-                        {e.item.description && <p className="text-xs text-slate-500 mt-0.5">{e.item.description}</p>}
-                      </div>
-                      {isFilled ? (
-                        <CheckCircle2 className="ml-2 h-4 w-4 shrink-0 text-green-500" />
-                      ) : (
-                        <AlertCircle className="ml-2 h-4 w-4 shrink-0 text-slate-300" />
-                      )}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      <select
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        value={val.condition}
-                        onChange={(e) => setEntry(e.templateItemId ?? "", "condition", e.target.value)}
-                        disabled={selected.status === "SIGNED"}
-                      >
-                        <option value="">Select condition…</option>
-                        {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <input
-                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                        placeholder="Notes (optional)"
-                        value={val.notes}
-                        onChange={(ev) => setEntry(e.templateItemId, "notes", ev.target.value)}
-                        disabled={selected.status === "SIGNED"}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-2 text-left">Area / Item</th>
+                  <th className="px-3 py-2 text-left w-16">Qty</th>
+                  <th className="px-3 py-2 text-left w-36">Status In</th>
+                  <th className="px-3 py-2 text-left w-36">Status Out</th>
+                  <th className="px-3 py-2 text-left w-28">Charge (KES)</th>
+                  <th className="px-3 py-2 text-left w-36">Responsibility</th>
+                  <th className="px-3 py-2 text-left">Notes</th>
+                  <th className="px-3 py-2 text-left w-28">Flag</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {selected.template.items.slice().sort((a, b) => a.order - b.order).map((it) => {
+                  const r = rows[it.id] ?? { statusIn: "", statusOut: "", qty: 1, charge: "", responsibility: "", note: "" };
+                  const flag = flagFor(r.statusIn, r.statusOut);
+                  return (
+                    <tr key={it.id}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-slate-900">{it.item}</p>
+                        <p className="text-xs text-slate-400">{it.section}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" min={1} disabled={isSigned} className="w-14 rounded border border-slate-200 px-2 py-1" value={r.qty}
+                          onChange={(e) => setRow(it.id, "qty", parseInt(e.target.value, 10) || 1)} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select disabled={isSigned} className="w-full rounded border border-slate-200 px-2 py-1" value={r.statusIn}
+                          onChange={(e) => setRow(it.id, "statusIn", e.target.value)}>
+                          <option value="">â€”</option>
+                          {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <select disabled={isSigned || isMoveIn} className="w-full rounded border border-slate-200 px-2 py-1 disabled:bg-slate-50" value={r.statusOut}
+                          onChange={(e) => setRow(it.id, "statusOut", e.target.value)}>
+                          <option value="">â€”</option>
+                          {CONDITION_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" min={0} disabled={isSigned} className="w-24 rounded border border-slate-200 px-2 py-1" placeholder="0" value={r.charge}
+                          onChange={(e) => setRow(it.id, "charge", e.target.value)} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <select disabled={isSigned} className="w-full rounded border border-slate-200 px-2 py-1" value={r.responsibility}
+                          onChange={(e) => setRow(it.id, "responsibility", e.target.value)}>
+                          <option value="">â€”</option>
+                          {RESPONSIBILITY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input disabled={isSigned} className="w-full rounded border border-slate-200 px-2 py-1" placeholder="Damage notesâ€¦" value={r.note}
+                          onChange={(e) => setRow(it.id, "note", e.target.value)} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${FLAG_BADGE[flag]}`}>{flag.replace(/_/g, " ")}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </CardContent>
         </Card>
 
-        {selected.status !== "SIGNED" && (
+        {!isSigned && (
           <div className="flex gap-3">
-            <Button variant="ghost" onClick={handleSave} disabled={saving} className="flex-1">
-              {saving ? "Saving…" : "Save Progress"}
+            <Button variant="ghost" onClick={() => handleSave()} disabled={saving} className="flex-1">
+              {saving ? "Savingâ€¦" : "Save Progress"}
             </Button>
-            <Button
-              onClick={handleSign}
-              disabled={!allFilled || signing}
-              className="flex-1"
-              title={!allFilled ? "Fill all conditions before signing" : ""}
-            >
-              {signing ? "Signing…" : "Sign Checklist"}
+            <Button onClick={handleSign} disabled={!allFilled || signing} className="flex-1"
+              title={!allFilled ? "Complete a status for every item before signing" : ""}>
+              {signing ? "Signingâ€¦" : "Sign Checklist"}
             </Button>
           </div>
         )}
@@ -222,14 +336,12 @@ export default function TenantChecklistPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">My Checklists</h1>
-        <p className="mt-1 text-sm text-slate-500">Move-in and move-out condition checklists for your unit</p>
+        <h1 className="text-2xl font-bold text-slate-900">My Inspection Checklists</h1>
+        <p className="mt-1 text-sm text-slate-500">Move-in, move-out and inspection condition checklists for your unit</p>
       </div>
 
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}
-        </div>
+        <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-slate-100" />)}</div>
       ) : checklists.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center py-16 text-center">
@@ -241,19 +353,13 @@ export default function TenantChecklistPage() {
       ) : (
         <div className="space-y-3">
           {checklists.map((cl) => (
-            <Card
-              key={cl.id}
-              className="cursor-pointer transition-shadow hover:shadow-md"
-              onClick={() => loadChecklist(cl.id)}
-            >
+            <Card key={cl.id} className="cursor-pointer transition-shadow hover:shadow-md" onClick={() => loadChecklist(cl.id)}>
               <CardContent className="flex items-center justify-between p-5">
                 <div>
                   <p className="font-semibold text-slate-900">{cl.template.name}</p>
                   <p className="text-sm text-slate-500">
-                    {cl.template.type === "MOVE_IN" ? "Move-In" : "Move-Out"} ·
-                    {cl.status === "SIGNED"
-                      ? ` Signed ${cl.signedAt ? new Date(cl.signedAt).toLocaleDateString() : ""}`
-                      : ` ${cl.status}`}
+                    {cl.type.replace("_", "-")} Â·
+                    {cl.status === "SIGNED" ? ` Signed ${cl.signedAt ? new Date(cl.signedAt).toLocaleDateString() : ""}` : ` ${cl.status}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

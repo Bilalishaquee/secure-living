@@ -4,9 +4,19 @@ import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler
 
 type Ctx = { params: { id: string } };
 
+const DEDUCTION_CATEGORIES = [
+  "DAMAGE",
+  "MISSING_ITEM",
+  "CLEANING",
+  "UTILITY_BALANCE",
+  "LEASE_VIOLATION",
+] as const;
+
 const deductionSchema = z.object({
   description: z.string().min(1),
   amount: z.number().positive(),
+  category: z.enum(DEDUCTION_CATEGORIES).optional(),
+  responsibility: z.string().optional(),
   photoUrl: z.string().optional(),
 });
 
@@ -44,6 +54,8 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
         create: parsed.data.deductions.map((d) => ({
           description: d.description,
           amount: d.amount,
+          category: d.category,
+          responsibility: d.responsibility,
           photoUrl: d.photoUrl,
         })),
       },

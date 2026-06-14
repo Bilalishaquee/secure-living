@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
+import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
 const createSlaPolicySchema = z.object({
@@ -30,5 +31,15 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
 
   const row = await prisma.slaPolicy.create({ data: parsed.data });
+
+  await appendAudit({
+    userId: actor.userId,
+    role: actor.role,
+    action: "sla_policy.created",
+    resourceType: "sla_policy",
+    resourceId: row.id,
+    afterJson: row,
+  });
+
   return Response.json({ data: row }, { status: 201 });
 });

@@ -7,6 +7,7 @@ const createSchema = z.object({
   meterNumber: z.string().min(1),
   type: z.enum(["WATER", "ELECTRICITY"]),
   billingModel: z.enum(["FLAT_RATE", "SUB_METERED_MANUAL", "SUB_METERED_IOT"]).default("FLAT_RATE"),
+  pricePerUnitKes: z.number().positive().optional(),
 });
 
 export const GET = withErrorHandler(async (req: Request) => {
@@ -41,7 +42,7 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   const parsed = await parseBody(req, createSchema);
   if (!parsed.ok) return parsed.response;
-  const { unitId, meterNumber, type, billingModel } = parsed.data;
+  const { unitId, meterNumber, type, billingModel, pricePerUnitKes } = parsed.data;
 
   // IoT billing model is deferred — show message if selected
   if (billingModel === "SUB_METERED_IOT") {
@@ -49,7 +50,7 @@ export const POST = withErrorHandler(async (req: Request) => {
   }
 
   const meter = await prisma.utilityMeter.create({
-    data: { unitId, meterNumber, type, billingModel },
+    data: { unitId, meterNumber, type, billingModel, pricePerUnitKes: pricePerUnitKes ?? null },
   });
 
   return Response.json({ data: meter }, { status: 201 });

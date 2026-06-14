@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -19,7 +19,23 @@ const STEPS = [
   { key: "COMPLETED",            label: "Completed" },
 ];
 
-type Deduction = { description: string; amount: string };
+type Deduction = { description: string; amount: string; category: string; responsibility: string };
+
+const DEDUCTION_CATEGORIES = [
+  { value: "DAMAGE", label: "Property Damage" },
+  { value: "MISSING_ITEM", label: "Missing Item" },
+  { value: "CLEANING", label: "Cleaning" },
+  { value: "UTILITY_BALANCE", label: "Utility Balance" },
+  { value: "LEASE_VIOLATION", label: "Lease Violation" },
+];
+const RESPONSIBILITY_OPTIONS = ["TENANT", "LANDLORD", "WEAR_TEAR", "CONTRACTOR", "UNKNOWN"];
+const CATEGORY_BADGE: Record<string, string> = {
+  DAMAGE: "bg-red-100 text-red-700",
+  MISSING_ITEM: "bg-orange-100 text-orange-700",
+  CLEANING: "bg-blue-100 text-blue-700",
+  UTILITY_BALANCE: "bg-purple-100 text-purple-700",
+  LEASE_VIOLATION: "bg-amber-100 text-amber-700",
+};
 
 type Notice = {
   id: string;
@@ -35,7 +51,7 @@ type Notice = {
     scheduledDate: string;
     status: string;
     notes: string | null;
-    deductions: Array<{ id: string; description: string; amount: number; photoUrl: string | null }>;
+    deductions: Array<{ id: string; description: string; amount: number; category: string | null; responsibility: string | null; photoUrl: string | null }>;
   } | null;
   depositRefund: {
     depositAmount: number;
@@ -57,7 +73,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
   const [payOpen, setPayOpen] = useState(false);
   const [schedDate, setSchedDate] = useState("");
   const [inspNotes, setInspNotes] = useState("");
-  const [deductions, setDeductions] = useState<Deduction[]>([{ description: "", amount: "" }]);
+  const [deductions, setDeductions] = useState<Deduction[]>([{ description: "", amount: "", category: "DAMAGE", responsibility: "TENANT" }]);
   const [depositAmt, setDepositAmt] = useState("");
   const [voucherNum, setVoucherNum] = useState("");
   const [saving, setSaving] = useState(false);
@@ -89,12 +105,12 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         body: JSON.stringify({ scheduledDate: schedDate }),
       });
       if (res.ok) {
-        toast({ title: "Inspection scheduled", variant: "success" });
+        toast("Inspection scheduled", "success");
         setScheduleOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast(j.error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
@@ -110,16 +126,21 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
         body: JSON.stringify({
           notes: inspNotes || null,
-          deductions: validDeductions.map((d) => ({ description: d.description, amount: parseFloat(d.amount) })),
+          deductions: validDeductions.map((d) => ({
+            description: d.description,
+            amount: parseFloat(d.amount),
+            category: d.category || undefined,
+            responsibility: d.responsibility || undefined,
+          })),
         }),
       });
       if (res.ok) {
-        toast({ title: "Inspection completed", variant: "success" });
+        toast("Inspection completed", "success");
         setInspectOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast(j.error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
@@ -135,11 +156,11 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         body: JSON.stringify({ depositAmount: depositAmt ? parseFloat(depositAmt) : undefined }),
       });
       if (res.ok) {
-        toast({ title: "Refund processed", variant: "success" });
+        toast("Refund processed", "success");
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast(j.error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
@@ -156,12 +177,12 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         body: JSON.stringify({ voucherNumber: voucherNum }),
       });
       if (res.ok) {
-        toast({ title: "Refund marked as paid", variant: "success" });
+        toast("Refund marked as paid", "success");
         setPayOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast(j.error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
@@ -187,7 +208,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Unit {notice.unit?.unitNumber}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Notice: {new Date(notice.noticeDate).toLocaleDateString()} ·
+            Notice: {new Date(notice.noticeDate).toLocaleDateString()} Â·
             Enforced move-out: {new Date(notice.enforcedMoveOut).toLocaleDateString()}
           </p>
         </div>
@@ -253,7 +274,15 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
                   <tbody className="divide-y divide-slate-100">
                     {notice.inspection.deductions.map((d) => (
                       <tr key={d.id}>
-                        <td className="py-2 text-slate-700">{d.description}</td>
+                        <td className="py-2 text-slate-700">
+                          {d.description}
+                          {d.category && (
+                            <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_BADGE[d.category] ?? "bg-slate-100 text-slate-600"}`}>
+                              {d.category.replace(/_/g, " ")}
+                            </span>
+                          )}
+                          {d.responsibility && <span className="ml-1 text-[10px] text-slate-400">Â· {d.responsibility.replace("_", " ")}</span>}
+                        </td>
                         <td className="py-2 text-right font-medium text-red-600">KES {d.amount.toLocaleString()}</td>
                       </tr>
                     ))}
@@ -271,7 +300,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
           <CardHeader><CardTitle>Deposit Refund</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-slate-600">Deposit Held</span><span className="font-medium">KES {notice.depositRefund.depositAmount.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-slate-600">Total Deductions</span><span className="font-medium text-red-600">− KES {notice.depositRefund.totalDeductions.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-slate-600">Total Deductions</span><span className="font-medium text-red-600">âˆ’ KES {notice.depositRefund.totalDeductions.toLocaleString()}</span></div>
             <div className="flex justify-between border-t border-slate-100 pt-2"><span className="font-semibold text-slate-900">Net Refund</span><span className="font-bold text-green-700">KES {notice.depositRefund.refundAmount.toLocaleString()}</span></div>
             <div className="flex items-center justify-between pt-1">
               <span className="text-slate-600">Status</span>
@@ -305,7 +334,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
           <div className="flex gap-3">
             <Button variant="ghost" onClick={() => setScheduleOpen(false)} className="flex-1">Cancel</Button>
             <Button onClick={handleSchedule} disabled={!schedDate || saving} className="flex-1">
-              {saving ? "Scheduling…" : "Schedule"}
+              {saving ? "Schedulingâ€¦" : "Schedule"}
             </Button>
           </div>
         </div>
@@ -321,7 +350,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
               rows={3}
               value={inspNotes}
               onChange={(e) => setInspNotes(e.target.value)}
-              placeholder="Describe the condition of the unit…"
+              placeholder="Describe the condition of the unitâ€¦"
             />
           </div>
 
@@ -331,37 +360,55 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setDeductions((d) => [...d, { description: "", amount: "" }])}
+                onClick={() => setDeductions((d) => [...d, { description: "", amount: "", category: "DAMAGE", responsibility: "TENANT" }])}
                 className="gap-1"
               >
                 <Plus className="h-3 w-3" /> Add
               </Button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {deductions.map((d, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    placeholder="Description"
-                    value={d.description}
-                    onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
-                  />
-                  <input
-                    type="number"
-                    className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-                    placeholder="Amount"
-                    value={d.amount}
-                    onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
-                  />
-                  {deductions.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setDeductions((prev) => prev.filter((_, j) => j !== i))}
-                      className="text-slate-400 hover:text-red-500"
+                <div key={i} className="rounded-lg border border-slate-100 p-2">
+                  <div className="flex gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      placeholder="Description"
+                      value={d.description}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, description: e.target.value } : x))}
+                    />
+                    <input
+                      type="number"
+                      className="w-28 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      placeholder="Amount"
+                      value={d.amount}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                    />
+                    {deductions.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setDeductions((prev) => prev.filter((_, j) => j !== i))}
+                        className="text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <select
+                      className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      value={d.category}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, category: e.target.value } : x))}
                     >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                      {DEDUCTION_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                    <select
+                      className="flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      value={d.responsibility}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, responsibility: e.target.value } : x))}
+                    >
+                      {RESPONSIBILITY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
+                    </select>
+                  </div>
                 </div>
               ))}
             </div>
@@ -375,7 +422,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
           <div className="flex gap-3">
             <Button variant="ghost" onClick={() => setInspectOpen(false)} className="flex-1">Cancel</Button>
             <Button onClick={handleCompleteInspection} disabled={saving} className="flex-1">
-              {saving ? "Saving…" : "Complete Inspection"}
+              {saving ? "Savingâ€¦" : "Complete Inspection"}
             </Button>
           </div>
         </div>
@@ -401,7 +448,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
           <div className="flex gap-3">
             <Button variant="ghost" onClick={() => setPayOpen(false)} className="flex-1">Cancel</Button>
             <Button onClick={handlePayRefund} disabled={!voucherNum || saving} className="flex-1">
-              {saving ? "Saving…" : "Confirm Payment"}
+              {saving ? "Savingâ€¦" : "Confirm Payment"}
             </Button>
           </div>
         </div>
