@@ -1,7 +1,8 @@
 ﻿node_modules
 .next
+**/.env
+**/.env.local
 **/prisma/dev.db
 **/*.pack.gz
 **/*.pack.gz_
 config.bat
-node_modules
