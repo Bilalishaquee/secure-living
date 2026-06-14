@@ -28,9 +28,9 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const provider = await prisma.serviceProvider.findUnique({ where: { id: params.id } });
   if (!provider) return jsonError(404, "Provider not found");
 
-  // Fetch all assignments for this provider
+  // Fetch all assignments for this provider via their userId
   const assignments = await prisma.serviceRequestAssignment.findMany({
-    where: { providerId: params.id },
+    where: { assignedTo: provider.userId },
     include: { serviceRequest: true },
   });
 

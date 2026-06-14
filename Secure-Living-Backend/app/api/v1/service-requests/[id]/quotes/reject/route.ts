@@ -35,8 +35,9 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   }
 
   // Phase 3: Emit outbox event for quote rejection
+  let updatedQuote: typeof quote;
   await prisma.$transaction(async (tx) => {
-    await tx.serviceRequestQuote.update({
+    updatedQuote = await tx.serviceRequestQuote.update({
       where: { id: parsed.data.quoteId },
       data: { status: QuoteStatus.REJECTED, rejectionReason: parsed.data.reason },
     });
@@ -60,5 +61,5 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     afterJson: { quoteId: parsed.data.quoteId, reason: parsed.data.reason },
   });
 
-  return Response.json({ data: updated });
+  return Response.json({ data: updatedQuote! });
 });

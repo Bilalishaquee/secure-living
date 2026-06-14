@@ -20,6 +20,10 @@ export const POST = withErrorHandler(async (req: Request) => {
   let escalated = 0;
   let alreadyEscalated = 0;
 
+  // Pre-fetch all SLA policies so we can look them up without a join
+  const allPolicies = await prisma.slaPolicy.findMany();
+  const policyById = new Map(allPolicies.map((p) => [p.id, p]));
+
   // Phase 3: Completion deadline breaches \u2014 subtract blocked duration from SLA calculations
   const breached = await prisma.serviceRequest.findMany({
     where: {
@@ -29,7 +33,6 @@ export const POST = withErrorHandler(async (req: Request) => {
     },
     include: {
       escalations: { where: { resolvedAt: null } },
-      slaPolicy: true,
     },
   });
 
@@ -43,7 +46,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     const effectiveElapsedMs = elapsedMs - blockedMs;
 
     // Check if escalation threshold has been reached after accounting for blocked time
-    const policy = sr.slaPolicy;
+    const policy = sr.slaPolicyId ? policyById.get(sr.slaPolicyId) : null;
     if (policy && policy.escalationAfterMinutes) {
       const escalationThresholdMs = policy.escalationAfterMinutes * 60 * 1000;
       if (effectiveElapsedMs < escalationThresholdMs) {

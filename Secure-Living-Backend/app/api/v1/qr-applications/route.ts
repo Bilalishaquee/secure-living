@@ -47,6 +47,11 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  if (body.listingId) {
+    const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
+    if (!listing) return Response.json({ error: "Listing not found" }, { status: 400 });
+  }
+
   const row = await prisma.qrApplication.create({
     data: {
       id: randomUUID(),
