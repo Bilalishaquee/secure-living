@@ -94,12 +94,12 @@ export default function ServicesPage() {
         }),
       });
       if (res.ok) {
-        toast({ title: "Enquiry submitted! We'll be in touch soon.", variant: "success" });
+        toast("Enquiry submitted! We'll be in touch soon.", "success");
         setEnquireOpen(false);
         setForm((f) => ({ ...f, phone: "", message: "" }));
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);

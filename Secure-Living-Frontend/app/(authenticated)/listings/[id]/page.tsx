@@ -58,8 +58,8 @@ export default function ListingDetailPage({ params }: Props) {
       method: "POST",
       headers: { Authorization: `Bearer ${user?.authToken}` },
     });
-    if (res.ok) { toast({ title: "Listing published", variant: "success" }); load(); }
-    else { const j = await res.json(); toast({ title: j.error ?? "Failed", variant: "error" }); }
+    if (res.ok) { toast("Listing published", "success"); load(); }
+    else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
   }
 
   async function handleWithdraw() {
@@ -67,8 +67,8 @@ export default function ListingDetailPage({ params }: Props) {
       method: "POST",
       headers: { Authorization: `Bearer ${user?.authToken}` },
     });
-    if (res.ok) { toast({ title: "Listing withdrawn", variant: "success" }); load(); }
-    else { const j = await res.json(); toast({ title: j.error ?? "Failed", variant: "error" }); }
+    if (res.ok) { toast("Listing withdrawn", "success"); load(); }
+    else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
   }
 
   async function updateAppStatus(appId: string, status: string) {
@@ -77,8 +77,8 @@ export default function ListingDetailPage({ params }: Props) {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
       body: JSON.stringify({ status }),
     });
-    if (res.ok) { toast({ title: "Updated", variant: "success" }); load(); }
-    else { const j = await res.json(); toast({ title: j.error ?? "Failed", variant: "error" }); }
+    if (res.ok) { toast("Updated", "success"); load(); }
+    else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
   }
 
   if (loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />;
@@ -127,11 +127,11 @@ export default function ListingDetailPage({ params }: Props) {
       {activeTab === "details" && (
         <Card>
           <CardContent className="space-y-4 p-6">
-            {listing.description && <p className="text-slate-700">{listing.description as string}</p>}
+            {(listing.description as string | null) ? <p className="text-slate-700">{listing.description as string}</p> : null}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div><p className="text-xs text-slate-500">Rent</p><p className="font-semibold">{formatKes(listing.rentAmount as number)}/mo</p></div>
               <div><p className="text-xs text-slate-500">Available From</p><p className="font-semibold">{new Date(listing.availableFrom as string).toLocaleDateString()}</p></div>
-              {listing.leaseDuration && <div><p className="text-xs text-slate-500">Lease Duration</p><p className="font-semibold">{listing.leaseDuration as string}</p></div>}
+              {(listing.leaseDuration as string | null) ? <div><p className="text-xs text-slate-500">Lease Duration</p><p className="font-semibold">{listing.leaseDuration as string}</p></div> : null}
               <div><p className="text-xs text-slate-500">Furnished</p><p className="font-semibold">{listing.furnished ? "Yes" : "No"}</p></div>
               <div><p className="text-xs text-slate-500">Pet Friendly</p><p className="font-semibold">{listing.petFriendly ? "Yes" : "No"}</p></div>
             </div>

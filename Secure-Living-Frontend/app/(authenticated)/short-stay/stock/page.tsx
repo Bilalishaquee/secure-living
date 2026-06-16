@@ -75,7 +75,7 @@ export default function ShortStayStockPage() {
         }),
       });
       if (res.ok) {
-        toast({ title: "Stock item added", variant: "success" });
+        toast("Stock item added", "success");
         setAddOpen(false);
         setForm({ name: "", description: "", quantity: "", unit: "pcs", minQuantity: "2", costPerUnit: "" });
         // Reload stock
@@ -83,7 +83,7 @@ export default function ShortStayStockPage() {
         if (sr.ok) setStock(((await sr.json()).data ?? []));
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);

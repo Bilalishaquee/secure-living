@@ -153,8 +153,8 @@ export default function RbacPage() {
         next[selected] = {
           ...next[selected],
           [mod]: {
-            view: false, create: false, edit: false, delete: false, approve: false,
-            release: false, manage: false, upload: false, assign: false, escalate: false,
+            ...{ view: false, create: false, edit: false, delete: false, approve: false,
+                 release: false, manage: false, upload: false, assign: false, escalate: false },
             ...(next[selected][mod] ?? {}),
             [act]: val,
           },

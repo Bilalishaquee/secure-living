@@ -86,12 +86,12 @@ export default function ServiceCategoriesAdminPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        toast({ title: editing ? "Updated" : "Created", variant: "success" });
+        toast(editing ? "Updated" : "Created", "success");
         setModalOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
@@ -105,11 +105,11 @@ export default function ServiceCategoriesAdminPage() {
       body: JSON.stringify({ isActive: !cat.isActive }),
     });
     if (res.ok) {
-      toast({ title: cat.isActive ? "Deactivated" : "Activated", variant: "success" });
+      toast(cat.isActive ? "Deactivated" : "Activated", "success");
       load();
     } else {
       const j = await res.json();
-      toast({ title: j.error ?? "Failed", variant: "error" });
+      toast((j as { error?: string }).error ?? "Failed", "error");
     }
   }
 

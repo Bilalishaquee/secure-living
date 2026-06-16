@@ -66,7 +66,7 @@ export default function TenantsPage() {
         property: `${l.propertyId.slice(0, 8)}… / ${l.unitId.slice(0, 8)}…`,
         propertyId: l.propertyId,
         rent: l.rentAmount,
-        status: l.status === "active" ? "Current" : l.status === "terminated" ? "Notice" : "Arrears",
+        status: (l.status === "active" ? "Current" : l.status === "terminated" ? "Notice" : "Arrears") as Row["status"],
         email: l.tenantEmail ?? null,
         leaseEnd: new Date(l.endDate).toISOString().slice(0, 10),
       }));

@@ -78,8 +78,8 @@ export default function ShortStayBookingsPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${user?.authToken}` },
       });
-      if (res.ok) { toast({ title: "Checked in", variant: "success" }); load(); }
-      else { const j = await res.json(); toast({ title: j.error ?? "Failed", variant: "error" }); }
+      if (res.ok) { toast("Checked in", "success"); load(); }
+      else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
     } finally {
       setSaving(null);
     }
@@ -93,8 +93,8 @@ export default function ShortStayBookingsPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
         body: JSON.stringify({ stockUsage: [] }),
       });
-      if (res.ok) { toast({ title: "Checked out", variant: "success" }); load(); }
-      else { const j = await res.json(); toast({ title: j.error ?? "Failed", variant: "error" }); }
+      if (res.ok) { toast("Checked out", "success"); load(); }
+      else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
     } finally {
       setSaving(null);
     }

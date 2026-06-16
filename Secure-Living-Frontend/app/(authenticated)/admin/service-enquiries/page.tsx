@@ -81,12 +81,12 @@ export default function ServiceEnquiriesAdminPage() {
         }),
       });
       if (res.ok) {
-        toast({ title: "Enquiry updated", variant: "success" });
+        toast("Enquiry updated", "success");
         setSelected(null);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);

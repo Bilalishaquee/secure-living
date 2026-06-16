@@ -77,7 +77,7 @@ export default function ContainersPage() {
         body: JSON.stringify({ ...form, type: selectedType }),
       });
       if (res.ok) {
-        toast({ title: "Container created", variant: "success" });
+        toast("Container created", "success");
         setModalOpen(false);
         setStep(1);
         setSelectedType("");
@@ -85,7 +85,7 @@ export default function ContainersPage() {
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed to create", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed to create", "error");
       }
     } finally {
       setSaving(false);

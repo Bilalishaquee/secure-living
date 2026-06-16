@@ -77,12 +77,12 @@ export default function ContainerDetailPage({ params }: Props) {
         body: JSON.stringify(editForm),
       });
       if (res.ok) {
-        toast({ title: "Container updated", variant: "success" });
+        toast("Container updated", "success");
         setEditOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed to update", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed to update", "error");
       }
     } finally {
       setSaving(false);

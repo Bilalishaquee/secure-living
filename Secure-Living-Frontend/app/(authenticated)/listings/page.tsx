@@ -91,12 +91,12 @@ export default function ListingsPage() {
       });
       if (res.ok) {
         const j = await res.json();
-        toast({ title: "Listing created", variant: "success" });
+        toast("Listing created", "success");
         setCreateOpen(false);
         router.push(`/listings/${j.data.id}`);
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed to create", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed to create", "error");
       }
     } finally {
       setSaving(false);

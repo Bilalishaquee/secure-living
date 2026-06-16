@@ -61,11 +61,11 @@ export default function VacatingPage() {
       headers: { Authorization: `Bearer ${user?.authToken}` },
     });
     if (res.ok) {
-      toast({ title: "Updated successfully", variant: "success" });
+      toast("Updated successfully", "success");
       load();
     } else {
       const j = await res.json();
-      toast({ title: j.error ?? "Failed", variant: "error" });
+      toast((j as { error?: string }).error ?? "Failed", "error");
     }
   }
 

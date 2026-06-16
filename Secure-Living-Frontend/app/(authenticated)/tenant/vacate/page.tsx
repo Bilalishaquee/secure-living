@@ -73,10 +73,10 @@ export default function TenantVacatePage() {
     try {
       // First get the active lease
       const lr = await fetch(`/api/v1/leases?status=active`, { headers: { Authorization: `Bearer ${user?.authToken}` } });
-      if (!lr.ok) { toast({ title: "Could not find active lease", variant: "error" }); return; }
+      if (!lr.ok) { toast("Could not find active lease", "error"); return; }
       const leases = (await lr.json()).data ?? [];
       const activeLease = leases.find((l: Record<string, unknown>) => l.tenantUserId === user?.id);
-      if (!activeLease) { toast({ title: "No active lease found", variant: "error" }); return; }
+      if (!activeLease) { toast("No active lease found", "error"); return; }
 
       const res = await fetch(`/api/v1/vacating-notices`, {
         method: "POST",
@@ -84,12 +84,12 @@ export default function TenantVacatePage() {
         body: JSON.stringify({ leaseId: activeLease.id, intendedMoveOut: intendedDate, tenantNote }),
       });
       if (res.ok) {
-        toast({ title: "Vacating notice submitted", variant: "success" });
+        toast("Vacating notice submitted", "success");
         setSubmitOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed", "error");
       }
     } finally {
       setSaving(false);
