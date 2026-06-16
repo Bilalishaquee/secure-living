@@ -79,10 +79,15 @@ export default function KycPage() {
   const [state, setState] = useState<VerificationState | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Document upload state
+  // Document upload state (Level 1)
   const [docType, setDocType] = useState("national_id");
   const [idFile, setIdFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  // Legal Document Hub state
+  const [legalDocType, setLegalDocType] = useState("title_deed");
+  const [legalFile, setLegalFile] = useState<File | null>(null);
+  const [uploadingLegal, setUploadingLegal] = useState(false);
 
   // Trusted Personnel application
   const [gcFile, setGcFile] = useState<File | null>(null);
@@ -174,6 +179,30 @@ export default function KycPage() {
       }
     } finally {
       setCheckingIprs(false);
+    }
+  }
+
+  async function uploadLegalDocument() {
+    if (!user || !legalFile) return;
+    setUploadingLegal(true);
+    try {
+      const form = new FormData();
+      form.append("documentType", legalDocType);
+      form.append("file", legalFile);
+      const res = await fetch("/api/v1/kyc/documents", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken ?? ""}` },
+        body: form,
+      });
+      if (res.ok) {
+        toast("Legal document submitted for review.", "success");
+        setLegalFile(null);
+        await fetchState();
+      } else {
+        toast("Upload failed. Please try again.", "error");
+      }
+    } finally {
+      setUploadingLegal(false);
     }
   }
 
@@ -471,7 +500,7 @@ export default function KycPage() {
             </p>
             <div>
               <label className="text-sm font-medium text-slate-800">Document type</label>
-              <Select defaultValue="title_deed">
+              <Select value={legalDocType} onValueChange={setLegalDocType}>
                 <SelectTrigger className="mt-2 w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -488,9 +517,17 @@ export default function KycPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Dropzone label="Legal document" onFileSelect={() => {}} />
-            <Button type="button" className="w-full" variant="outline">
-              Upload Legal Document
+            <Dropzone label="Legal document (PDF, JPG, PNG)" onFileSelect={setLegalFile} />
+            {legalFile && (
+              <p className="text-xs text-green-600">Selected: {legalFile.name}</p>
+            )}
+            <Button
+              type="button"
+              className="w-full"
+              onClick={uploadLegalDocument}
+              disabled={!legalFile || uploadingLegal}
+            >
+              {uploadingLegal ? "Uploading…" : "Upload Legal Document"}
             </Button>
             <p className="text-xs text-slate-400">
               Documents are reviewed within 48 hours. Expired documents will trigger an account soft freeze after a 7-day grace period.

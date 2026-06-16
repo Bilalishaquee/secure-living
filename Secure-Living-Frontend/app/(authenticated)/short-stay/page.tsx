@@ -88,12 +88,12 @@ export default function ShortStayPage() {
         }),
       });
       if (res.ok) {
-        toast({ title: "Short-stay property added", variant: "success" });
+        toast("Short-stay property added", "success");
         setAddOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed to add property", "error");
       }
     } finally {
       setSaving(false);
@@ -109,12 +109,12 @@ export default function ShortStayPage() {
         body: JSON.stringify({ ...bookForm, numberOfGuests: parseInt(bookForm.numberOfGuests) }),
       });
       if (res.ok) {
-        toast({ title: "Booking created", variant: "success" });
+        toast("Booking created successfully", "success");
         setBookingOpen(false);
         load();
       } else {
         const j = await res.json();
-        toast({ title: j.error ?? "Failed", variant: "error" });
+        toast((j as { error?: string }).error ?? "Failed to create booking", "error");
       }
     } finally {
       setSaving(false);

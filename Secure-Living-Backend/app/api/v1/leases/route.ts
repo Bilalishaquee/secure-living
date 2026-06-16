@@ -18,7 +18,24 @@ export const GET = withErrorHandler(async (req: Request) => {
       };
 
   const rows = await prisma.lease.findMany({ where, orderBy: { createdAt: "desc" } });
-  return Response.json({ data: rows });
+
+  // Enrich each lease with tenant name + email from AppUser
+  const tenantIds = [...new Set(rows.map((r) => r.tenantUserId))];
+  const users = tenantIds.length
+    ? await prisma.appUser.findMany({
+        where: { id: { in: tenantIds } },
+        select: { id: true, fullName: true, email: true },
+      })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  const enriched = rows.map((r) => ({
+    ...r,
+    tenantName: userMap.get(r.tenantUserId)?.fullName ?? null,
+    tenantEmail: userMap.get(r.tenantUserId)?.email ?? null,
+  }));
+
+  return Response.json({ data: enriched });
 })
 
 export const POST = withErrorHandler(async (req: Request) => {

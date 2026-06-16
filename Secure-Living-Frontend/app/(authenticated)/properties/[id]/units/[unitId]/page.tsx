@@ -67,6 +67,7 @@ type TenantUser = {
   id: string;
   fullName: string;
   email: string;
+  phone: string | null;
 };
 
 type ServiceRequest = {
@@ -672,14 +673,22 @@ export default function UnitDetailPage({ params }: Props) {
       {/* Contact Actions */}
       {tenant && (
         <div className="flex flex-wrap gap-3">
-          <Button type="button" variant="outline" size="sm"
-            onClick={() => toast(`Email drafted to ${tenant.email}`, "info")}>
-            <Mail className="mr-1.5 h-4 w-4" /> Email Tenant
+          <Button type="button" variant="outline" size="sm" asChild>
+            <a href={`mailto:${tenant.email}`}>
+              <Mail className="mr-1.5 h-4 w-4" /> Email Tenant
+            </a>
           </Button>
-          <Button type="button" variant="outline" size="sm"
-            onClick={() => toast("WhatsApp link opened", "info")}>
-            <Phone className="mr-1.5 h-4 w-4" /> WhatsApp
-          </Button>
+          {tenant.phone && (
+            <Button type="button" variant="outline" size="sm" asChild>
+              <a
+                href={`https://wa.me/${tenant.phone.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Phone className="mr-1.5 h-4 w-4" /> WhatsApp
+              </a>
+            </Button>
+          )}
         </div>
       )}
 

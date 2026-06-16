@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Mail, MessageSquare, Phone, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/lib/toast-context";
@@ -17,6 +16,8 @@ type LeaseRow = {
   propertyId: string;
   unitId: string;
   tenantUserId: string;
+  tenantName: string | null;
+  tenantEmail: string | null;
   rentAmount: number;
   status: string;
   endDate: string;
@@ -30,7 +31,7 @@ type Row = {
   propertyId: string;
   rent: number;
   status: "Current" | "Arrears" | "Notice";
-  email: string;
+  email: string | null;
   leaseEnd: string;
 };
 
@@ -61,12 +62,12 @@ export default function TenantsPage() {
       const mapped = json.data.map((l) => ({
         id: l.id,
         tenantUserId: l.tenantUserId,
-        name: l.tenantUserId,
-        property: `${l.propertyId} / ${l.unitId}`,
+        name: l.tenantName ?? `Tenant …${l.tenantUserId.slice(-6)}`,
+        property: `${l.propertyId.slice(0, 8)}… / ${l.unitId.slice(0, 8)}…`,
         propertyId: l.propertyId,
         rent: l.rentAmount,
         status: l.status === "active" ? "Current" : l.status === "terminated" ? "Notice" : "Arrears",
-        email: `${l.tenantUserId}@secureliving.local`,
+        email: l.tenantEmail ?? null,
         leaseEnd: new Date(l.endDate).toISOString().slice(0, 10),
       }));
       setRows(mapped);
@@ -120,7 +121,8 @@ export default function TenantsPage() {
             variant="ghost"
             size="sm"
             className="h-8"
-            onClick={() => toast(`Email queued to ${r.email}`, "success")}
+            disabled={!r.email}
+            onClick={() => r.email && toast(`Email queued to ${r.email}`, "success")}
           >
             <Mail className="h-3.5 w-3.5" aria-hidden />
             Email
@@ -170,14 +172,8 @@ export default function TenantsPage() {
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-white/80 shadow-[0_16px_48px_rgb(var(--rgb-ink)_/_0.1)]">
-        <Image
-          src="/images/property/tenants-banner.jpg"
-          alt="Residential building for tenant management"
-          width={1600}
-          height={560}
-          className="h-40 w-full object-cover sm:h-48"
-        />
+      <div className="relative overflow-hidden rounded-2xl border border-white/80 shadow-[0_16px_48px_rgb(0_0_0_/_0.1)]">
+        <div className="h-40 w-full bg-gradient-to-br from-[#0f1f38] via-[#1a3a6b] to-[#2d6cdf] sm:h-48" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#0f1f38]/75 via-[#0f1f38]/45 to-transparent" />
         <p className="absolute bottom-4 left-4 max-w-xl text-sm font-medium text-white/90 sm:bottom-5 sm:left-5 sm:text-base">
           Keep tenant records, lease timelines, and communication in one organized view.

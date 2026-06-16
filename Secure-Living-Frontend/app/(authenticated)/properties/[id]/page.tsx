@@ -569,9 +569,8 @@ export default function PropertyDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm"
-              onClick={() => toast("Support chat connected", "success")}>
-              Live chat
+            <Button type="button" size="sm" asChild>
+              <Link href="/service-requests">Open a ticket</Link>
             </Button>
             <Button type="button" variant="outline" size="sm" asChild>
               <Link href="/services">Services</Link>
