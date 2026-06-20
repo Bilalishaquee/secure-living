@@ -1,95 +1,92 @@
+﻿import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 
 type Ctx = { params: { id: string } };
 
-// Accept canonical names plus the builder UI aliases.
-const itemSchema = z
-  .object({
-    id: z.string().optional(),
-    section: z.string().optional(),
-    area: z.string().optional(),
-    item: z.string().optional(),
-    label: z.string().optional(),
-    defaultQty: z.number().int().positive().optional(),
-    qty: z.number().int().positive().optional(),
-    order: z.number().int().nonnegative().optional(),
-    sortOrder: z.number().int().nonnegative().optional(),
-  })
-  .transform((v, ctx) => {
-    const item = v.item ?? v.label;
-    if (!item) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "item (or label) is required" });
-      return z.NEVER;
-    }
-    return {
-      section: v.section ?? v.area ?? "General",
-      item,
-      defaultQty: v.defaultQty ?? v.qty ?? 1,
-      order: v.order ?? v.sortOrder ?? 0,
-    };
-  });
-
-const CATEGORIES = ["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"] as const;
-
-const updateTemplateSchema = z.object({
-  name: z.string().min(1).optional(),
-  description: z.string().nullable().optional(),
-  category: z.enum(CATEGORIES).nullable().optional(),
-  items: z.array(itemSchema).optional(),
+const updateSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  category: z.enum(["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"]).optional(),
+  description: z.string().max(500).optional(),
+  items: z.array(z.object({
+    section: z.string().default("General"),
+    item: z.string().min(1),
+    defaultQty: z.number().int().positive().default(1),
+    order: z.number().int().default(0),
+  })).optional(),
 });
 
 export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:view");
+  const denied = requirePermission(actor, "inspection:view");
   if (denied) return denied;
 
-  const template = await prisma.checklistTemplate.findUnique({
+  const row = await prisma.checklistTemplate.findUnique({
     where: { id: params.id },
     include: { items: { orderBy: { order: "asc" } } },
   });
-  if (!template) return jsonError(404, "Template not found");
-
-  const orgId = actor.orgIds?.[0];
-  if (template.organizationId !== orgId) return jsonError(403, "Forbidden");
-
-  return Response.json({ data: template });
+  if (!row) return jsonError(404, "Checklist template not found");
+  return Response.json({ data: row });
 });
 
 export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:manage");
+  const denied = requirePermission(actor, "inspection:manage");
   if (denied) return denied;
 
-  const template = await prisma.checklistTemplate.findUnique({ where: { id: params.id } });
-  if (!template) return jsonError(404, "Template not found");
+  const existing = await prisma.checklistTemplate.findUnique({ where: { id: params.id } });
+  if (!existing) return jsonError(404, "Checklist template not found");
 
-  const orgId = actor.orgIds?.[0];
-  if (template.organizationId !== orgId) return jsonError(403, "Forbidden");
-
-  const parsed = await parseBody(req, updateTemplateSchema);
+  const parsed = await parseBody(req, updateSchema);
   if (!parsed.ok) return parsed.response;
-
-  // If items provided, replace them all
-  if (parsed.data.items !== undefined) {
-    await prisma.checklistTemplateItem.deleteMany({ where: { templateId: params.id } });
-  }
+  const b = parsed.data;
 
   const updated = await prisma.checklistTemplate.update({
     where: { id: params.id },
     data: {
-      ...(parsed.data.name !== undefined && { name: parsed.data.name }),
-      ...(parsed.data.description !== undefined && { description: parsed.data.description }),
-      ...(parsed.data.category !== undefined && { category: parsed.data.category }),
-      ...(parsed.data.items !== undefined && {
-        items: { create: parsed.data.items },
-      }),
+      ...(b.name !== undefined && { name: b.name }),
+      ...(b.category !== undefined && { category: b.category }),
+      ...(b.description !== undefined && { description: b.description }),
     },
-    include: { items: { orderBy: { order: "asc" } } },
   });
 
-  return Response.json({ data: updated });
+  if (b.items !== undefined) {
+    await prisma.checklistTemplateItem.deleteMany({ where: { templateId: params.id } });
+    if (b.items.length > 0) {
+      await prisma.checklistTemplateItem.createMany({
+        data: b.items.map((it) => ({
+          id: randomUUID(),
+          templateId: params.id,
+          section: it.section,
+          item: it.item,
+          defaultQty: it.defaultQty,
+          order: it.order,
+        })),
+      });
+    }
+  }
+
+  const full = await prisma.checklistTemplate.findUnique({
+    where: { id: updated.id },
+    include: { items: { orderBy: { order: "asc" } } },
+  });
+  return Response.json({ data: full });
+});
+
+export const PATCH = PUT;
+
+export const DELETE = withErrorHandler(async (req: Request, { params }: Ctx) => {
+  const actor = requireActor(req);
+  if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "inspection:manage");
+  if (denied) return denied;
+
+  const existing = await prisma.checklistTemplate.findUnique({ where: { id: params.id } });
+  if (!existing) return jsonError(404, "Checklist template not found");
+
+  await prisma.checklistTemplate.delete({ where: { id: params.id } });
+  return Response.json({ data: { deleted: true } });
 });

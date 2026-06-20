@@ -11,6 +11,16 @@ const updateUnitSchema = z.object({
   currentLeaseId: z.string().nullable().optional(),
 });
 
+export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
+  const actor = requireActor(req);
+  if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "unit:view");
+  if (denied) return denied;
+  const unit = await prisma.unit.findUnique({ where: { id: params.id } });
+  if (!unit) return jsonError(404, "Unit not found");
+  return Response.json({ data: unit });
+});
+
 export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;

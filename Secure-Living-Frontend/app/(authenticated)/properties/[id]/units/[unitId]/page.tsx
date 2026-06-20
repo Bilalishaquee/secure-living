@@ -169,6 +169,10 @@ export default function UnitDetailPage({ params }: Props) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [rentHistory, setRentHistory] = useState<RentHistory | null>(null);
   const [rentLoading, setRentLoading] = useState(false);
+  const [showCreateLease, setShowCreateLease] = useState(false);
+  const [leaseForm, setLeaseForm] = useState({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "monthly" });
+  const [showNewSR, setShowNewSR] = useState(false);
+  const [srForm, setSrForm] = useState({ title: "", description: "", priority: "medium", category: "other" });
 
   useEffect(() => {
     if (!user?.authToken) return;
@@ -302,6 +306,78 @@ export default function UnitDetailPage({ params }: Props) {
       setUnit(json.data);
       toast("Unit updated", "success");
       setShowEdit(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateLease(e: React.FormEvent) {
+    e.preventDefault();
+    if (!unit || !user?.authToken) return;
+    if (!leaseForm.tenantUserId.trim()) { toast("Tenant User ID is required", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/leases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          organizationId: unit.organizationId,
+          branchId: unit.branchId,
+          propertyId: unit.propertyId,
+          unitId: unit.id,
+          tenantUserId: leaseForm.tenantUserId.trim(),
+          leaseType: leaseForm.leaseType,
+          rentAmount: parseFloat(leaseForm.rentAmount) || (unit.rentAmountKes ?? 0),
+          depositAmount: leaseForm.depositAmount ? parseFloat(leaseForm.depositAmount) : undefined,
+          startDate: new Date(leaseForm.startDate).toISOString(),
+          endDate: new Date(leaseForm.endDate).toISOString(),
+          paymentFrequency: leaseForm.paymentFrequency,
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to create lease", "error");
+        return;
+      }
+      toast("Lease created successfully", "success");
+      setShowCreateLease(false);
+      setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "monthly" });
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNewSR(e: React.FormEvent) {
+    e.preventDefault();
+    if (!unit || !user?.authToken) return;
+    if (!srForm.title.trim()) { toast("Title is required", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/service-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          organizationId: unit.organizationId,
+          branchId: unit.branchId,
+          propertyId: unit.propertyId,
+          unitId: unit.id,
+          title: srForm.title,
+          description: srForm.description || srForm.title,
+          type: "maintenance",
+          category: srForm.category,
+          priority: srForm.priority,
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to create request", "error");
+        return;
+      }
+      toast("Service request created", "success");
+      setShowNewSR(false);
+      setSrForm({ title: "", description: "", priority: "medium", category: "other" });
+      await load();
     } finally {
       setSaving(false);
     }
@@ -539,7 +615,7 @@ export default function UnitDetailPage({ params }: Props) {
                 type="button"
                 className="mt-4"
                 size="sm"
-                onClick={() => toast("Lease creation wizard coming soon", "info")}
+                onClick={() => { setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: unit.rentAmountKes?.toString() ?? "", depositAmount: unit.depositAmountKes?.toString() ?? "", paymentFrequency: "monthly" }); setShowCreateLease(true); }}
               >
                 Create Lease
               </Button>
@@ -663,7 +739,7 @@ export default function UnitDetailPage({ params }: Props) {
             size="sm"
             variant="outline"
             className="mt-3 w-full"
-            onClick={() => toast("Service request form coming soon", "info")}
+            onClick={() => { setSrForm({ title: "", description: "", priority: "medium", category: "other" }); setShowNewSR(true); }}
           >
             <Layers className="mr-1.5 h-4 w-4" /> New Request
           </Button>
@@ -693,6 +769,156 @@ export default function UnitDetailPage({ params }: Props) {
       )}
 
       </>}
+
+      {/* Create Lease Modal */}
+      <Modal
+        open={showCreateLease}
+        onOpenChange={(open) => { if (!open) setShowCreateLease(false); }}
+        title={`Create Lease — Unit ${unit.unitNumber}`}
+      >
+        <form onSubmit={(e) => { void handleCreateLease(e); }} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tenant User ID <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={leaseForm.tenantUserId}
+              onChange={(e) => setLeaseForm((f) => ({ ...f, tenantUserId: e.target.value }))}
+              placeholder="Paste tenant's user ID"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40 font-mono"
+            />
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">Find the ID from Tenants → View profile</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Lease Type</label>
+              <select
+                value={leaseForm.leaseType}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, leaseType: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              >
+                <option value="fixed_term">Fixed Term</option>
+                <option value="month_to_month">Month to Month</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Payment Frequency</label>
+              <select
+                value={leaseForm.paymentFrequency}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, paymentFrequency: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              >
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Start Date <span className="text-red-500">*</span></label>
+              <input
+                required type="date"
+                value={leaseForm.startDate}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, startDate: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">End Date <span className="text-red-500">*</span></label>
+              <input
+                required type="date"
+                value={leaseForm.endDate}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, endDate: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Rent (KES/mo)</label>
+              <input
+                type="number" min="0"
+                value={leaseForm.rentAmount}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, rentAmount: e.target.value }))}
+                placeholder="45000"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Deposit (KES)</label>
+              <input
+                type="number" min="0"
+                value={leaseForm.depositAmount}
+                onChange={(e) => setLeaseForm((f) => ({ ...f, depositAmount: e.target.value }))}
+                placeholder="45000"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowCreateLease(false)}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Lease"}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* New Service Request Modal */}
+      <Modal
+        open={showNewSR}
+        onOpenChange={(open) => { if (!open) setShowNewSR(false); }}
+        title={`New Maintenance Request — Unit ${unit.unitNumber}`}
+      >
+        <form onSubmit={(e) => { void handleNewSR(e); }} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Title <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={srForm.title}
+              onChange={(e) => setSrForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Leaking tap in kitchen"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Category</label>
+              <select
+                value={srForm.category}
+                onChange={(e) => setSrForm((f) => ({ ...f, category: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              >
+                <option value="plumbing">Plumbing</option>
+                <option value="electrical">Electrical</option>
+                <option value="security">Security</option>
+                <option value="cleaning">Cleaning</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Priority</label>
+              <select
+                value={srForm.priority}
+                onChange={(e) => setSrForm((f) => ({ ...f, priority: e.target.value }))}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Description</label>
+            <textarea
+              value={srForm.description}
+              onChange={(e) => setSrForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Describe the issue in detail…"
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40 resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowNewSR(false)}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit Request"}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Edit Unit Modal */}
       <Modal

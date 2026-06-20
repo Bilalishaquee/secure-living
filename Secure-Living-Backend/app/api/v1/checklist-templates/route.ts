@@ -1,82 +1,73 @@
+﻿import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
-// Accept both the canonical field names and the shorter aliases the builder UI
-// uses (area -> section, label -> item, sortOrder -> order, qty -> defaultQty).
-const itemSchema = z
-  .object({
-    section: z.string().optional(),
-    area: z.string().optional(),
-    item: z.string().optional(),
-    label: z.string().optional(),
-    defaultQty: z.number().int().positive().optional(),
-    qty: z.number().int().positive().optional(),
-    order: z.number().int().nonnegative().optional(),
-    sortOrder: z.number().int().nonnegative().optional(),
-  })
-  .transform((v, ctx) => {
-    const section = v.section ?? v.area ?? "General";
-    const item = v.item ?? v.label;
-    if (!item) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "item (or label) is required" });
-      return z.NEVER;
-    }
-    return {
-      section,
-      item,
-      defaultQty: v.defaultQty ?? v.qty ?? 1,
-      order: v.order ?? v.sortOrder ?? 0,
-    };
-  });
-
-const CATEGORIES = ["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"] as const;
-
-const createTemplateSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  category: z.enum(CATEGORIES).optional(),
-  items: z.array(itemSchema).default([]),
+const createSchema = z.object({
+  name: z.string().min(2).max(100),
+  category: z.enum(["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"]).optional(),
+  description: z.string().max(500).optional(),
+  items: z.array(z.object({
+    section: z.string().default("General"),
+    item: z.string().min(1),
+    defaultQty: z.number().int().positive().default(1),
+    order: z.number().int().default(0),
+  })).optional(),
 });
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:view");
+  const denied = requirePermission(actor, "inspection:view");
   if (denied) return denied;
 
-  const orgId = actor.orgIds?.[0];
+  const orgId = actor.orgIds[0] ?? actor.userId;
   const rows = await prisma.checklistTemplate.findMany({
-    where: { organizationId: orgId ?? undefined },
+    where: { organizationId: orgId },
     include: { _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
-
   return Response.json({ data: rows });
 });
 
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:create");
+  const denied = requirePermission(actor, "inspection:manage");
   if (denied) return denied;
 
-  const orgId = actor.orgIds?.[0];
-  if (!orgId) return Response.json({ error: "No organization" }, { status: 400 });
-
-  const parsed = await parseBody(req, createTemplateSchema);
+  const parsed = await parseBody(req, createSchema);
   if (!parsed.ok) return parsed.response;
+  const b = parsed.data;
 
-  const template = await prisma.checklistTemplate.create({
+  const orgId = actor.orgIds[0] ?? actor.userId;
+  const row = await prisma.checklistTemplate.create({
     data: {
+      id: randomUUID(),
       organizationId: orgId,
-      name: parsed.data.name,
-      description: parsed.data.description,
-      category: parsed.data.category,
-      items: { create: parsed.data.items },
+      name: b.name,
+      category: b.category ?? "CUSTOM",
+      description: b.description ?? null,
     },
+  });
+
+  if (b.items && b.items.length > 0) {
+    await prisma.checklistTemplateItem.createMany({
+      data: b.items.map((it) => ({
+        id: randomUUID(),
+        templateId: row.id,
+        section: it.section,
+        item: it.item,
+        defaultQty: it.defaultQty,
+        order: it.order,
+      })),
+    });
+  }
+
+  const full = await prisma.checklistTemplate.findUnique({
+    where: { id: row.id },
     include: { items: { orderBy: { order: "asc" } } },
   });
 
-  return Response.json({ data: template }, { status: 201 });
+  return Response.json({ data: full }, { status: 201 });
 });

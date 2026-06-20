@@ -181,6 +181,11 @@ export default function PropertyDetailPage({ params }: Props) {
   const [bulk, setBulk] = useState<BulkForm>(EMPTY_BULK);
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [showEditProp, setShowEditProp] = useState(false);
+  const [editPropForm, setEditPropForm] = useState({ name: "", addressLine1: "", marketRentEstimateKes: "" });
+  const [showSRModal, setShowSRModal] = useState<"inspection" | "repair" | null>(null);
+  const [srTitle, setSrTitle] = useState("");
+  const [srDesc, setSrDesc] = useState("");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -331,6 +336,67 @@ export default function PropertyDetailPage({ params }: Props) {
     }
   }
 
+  async function handleEditProp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user?.authToken || !property) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/properties/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          name: editPropForm.name || undefined,
+          addressLine1: editPropForm.addressLine1 || undefined,
+          marketRentEstimateKes: editPropForm.marketRentEstimateKes ? parseFloat(editPropForm.marketRentEstimateKes) : undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to update property", "error");
+        return;
+      }
+      const json = (await res.json()) as { data: PropertyDetail };
+      setProperty(json.data);
+      toast("Property updated", "success");
+      setShowEditProp(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateSR(type: "inspection" | "repair") {
+    if (!user?.authToken || !property) return;
+    if (!srTitle.trim()) { toast("Title is required", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/service-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken}` },
+        body: JSON.stringify({
+          organizationId: property.organizationId,
+          branchId: property.branchId,
+          propertyId: params.id,
+          title: srTitle,
+          description: srDesc || srTitle,
+          type: type === "inspection" ? "inspection" : "maintenance",
+          category: type === "inspection" ? "inspection" : "other",
+          priority: "medium",
+        }),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to create request", "error");
+        return;
+      }
+      toast(type === "inspection" ? "Inspection request created" : "Repair request created", "success");
+      setShowSRModal(null);
+      setSrTitle("");
+      setSrDesc("");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (error) return <div className="p-6 text-sm text-red-600">{error}</div>;
   if (!property) return <div className="p-6 text-sm text-[var(--text-secondary)]">Loading property…</div>;
 
@@ -389,7 +455,7 @@ export default function PropertyDetailPage({ params }: Props) {
 
           <div className="grid gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" className="justify-start"
-              onClick={() => toast("Property editor opened", "info")}>
+              onClick={() => { setEditPropForm({ name: property.name ?? "", addressLine1: property.addressLine1 ?? "", marketRentEstimateKes: property.marketRentEstimateKes?.toString() ?? "" }); setShowEditProp(true); }}>
               Edit details
             </Button>
             <Button type="button" variant="outline" className="justify-start" asChild>
@@ -398,11 +464,11 @@ export default function PropertyDetailPage({ params }: Props) {
               </Link>
             </Button>
             <Button type="button" variant="secondary" className="justify-start"
-              onClick={() => toast("Inspection scheduled — coordinator will confirm", "success")}>
+              onClick={() => { setSrTitle(""); setSrDesc(""); setShowSRModal("inspection"); }}>
               <Calendar className="h-4 w-4" aria-hidden /> Schedule inspection
             </Button>
             <Button type="button" variant="outline" className="justify-start"
-              onClick={() => toast("Work order draft created", "success")}>
+              onClick={() => { setSrTitle(""); setSrDesc(""); setShowSRModal("repair"); }}>
               <Hammer className="h-4 w-4" aria-hidden /> Request repair
             </Button>
             <Button
@@ -954,6 +1020,82 @@ export default function PropertyDetailPage({ params }: Props) {
             Cancel
           </Button>
         </div>
+      </Modal>
+
+      {/* Edit Property Modal */}
+      <Modal
+        open={showEditProp}
+        onOpenChange={(open) => { if (!open) setShowEditProp(false); }}
+        title="Edit Property Details"
+      >
+        <form onSubmit={(e) => { void handleEditProp(e); }} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Property Name</label>
+            <input
+              value={editPropForm.name}
+              onChange={(e) => setEditPropForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Riverside Apartments"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Address</label>
+            <input
+              value={editPropForm.addressLine1}
+              onChange={(e) => setEditPropForm((f) => ({ ...f, addressLine1: e.target.value }))}
+              placeholder="e.g. 14 Westlands Road, Nairobi"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Market Rent Estimate (KES/mo)</label>
+            <input
+              type="number" min="0"
+              value={editPropForm.marketRentEstimateKes}
+              onChange={(e) => setEditPropForm((f) => ({ ...f, marketRentEstimateKes: e.target.value }))}
+              placeholder="45000"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => setShowEditProp(false)}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Service Request Modal (Inspection / Repair) */}
+      <Modal
+        open={showSRModal !== null}
+        onOpenChange={(open) => { if (!open) { setShowSRModal(null); setSrTitle(""); setSrDesc(""); } }}
+        title={showSRModal === "inspection" ? "Schedule Inspection" : "Request Repair"}
+      >
+        <form onSubmit={(e) => { e.preventDefault(); void handleCreateSR(showSRModal!); }} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Title <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={srTitle}
+              onChange={(e) => setSrTitle(e.target.value)}
+              placeholder={showSRModal === "inspection" ? "e.g. Annual safety inspection" : "e.g. Leaking roof — Unit 3B"}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Description</label>
+            <textarea
+              value={srDesc}
+              onChange={(e) => setSrDesc(e.target.value)}
+              placeholder="Additional details…"
+              rows={3}
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40 resize-none"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button type="button" variant="outline" onClick={() => { setShowSRModal(null); setSrTitle(""); setSrDesc(""); }}>Cancel</Button>
+            <Button type="submit" disabled={saving}>{saving ? "Submitting…" : "Submit Request"}</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

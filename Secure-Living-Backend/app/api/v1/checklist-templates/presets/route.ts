@@ -1,183 +1,120 @@
+﻿import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
-import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
-type PresetItem = { section: string; item: string; defaultQty?: number; isUtilityMeter?: boolean };
-
-type Preset = {
-  key: string;
-  name: string;
-  category: "RESIDENTIAL" | "FURNISHED" | "COMMERCIAL" | "SHORT_STAY";
-  description: string;
-  items: PresetItem[];
+const PRESETS: Record<string, { name: string; category: string; description: string; items: { section: string; item: string; defaultQty: number }[] }> = {
+  residential_move_in: {
+    name: "Residential Move-In Checklist",
+    category: "RESIDENTIAL",
+    description: "Standard checklist for residential unit move-in inspection",
+    items: [
+      { section: "Living Room", item: "Walls - condition and cleanliness", defaultQty: 1 },
+      { section: "Living Room", item: "Floor - condition and cleanliness", defaultQty: 1 },
+      { section: "Living Room", item: "Ceiling - cracks or water damage", defaultQty: 1 },
+      { section: "Kitchen", item: "Cooker/hob functionality", defaultQty: 1 },
+      { section: "Kitchen", item: "Sink and taps - working", defaultQty: 1 },
+      { section: "Kitchen", item: "Cupboard doors and hinges", defaultQty: 1 },
+      { section: "Bathroom", item: "Shower/bath - working", defaultQty: 1 },
+      { section: "Bathroom", item: "Toilet - flush and seat", defaultQty: 1 },
+      { section: "Bedroom", item: "Window locks working", defaultQty: 1 },
+      { section: "General", item: "Electricity - all sockets tested", defaultQty: 1 },
+      { section: "General", item: "Water pressure adequate", defaultQty: 1 },
+      { section: "General", item: "Smoke detector present and tested", defaultQty: 1 },
+    ],
+  },
+  furnished_inventory: {
+    name: "Furnished Unit Inventory",
+    category: "FURNISHED",
+    description: "Inventory checklist for furnished properties",
+    items: [
+      { section: "Living Room", item: "Sofa - condition", defaultQty: 1 },
+      { section: "Living Room", item: "Coffee table", defaultQty: 1 },
+      { section: "Living Room", item: "TV unit / stand", defaultQty: 1 },
+      { section: "Bedroom", item: "Bed frame - condition", defaultQty: 1 },
+      { section: "Bedroom", item: "Mattress - condition", defaultQty: 1 },
+      { section: "Bedroom", item: "Wardrobe - doors and rails", defaultQty: 1 },
+      { section: "Kitchen", item: "Refrigerator - working", defaultQty: 1 },
+      { section: "Kitchen", item: "Microwave - working", defaultQty: 1 },
+      { section: "Kitchen", item: "Cutlery set", defaultQty: 1 },
+      { section: "Kitchen", item: "Plates and bowls", defaultQty: 4 },
+      { section: "Bathroom", item: "Bath towels", defaultQty: 2 },
+    ],
+  },
+  short_stay_turnover: {
+    name: "Short-Stay Turnover Checklist",
+    category: "SHORT_STAY",
+    description: "Quick checklist for short-stay unit turnovers",
+    items: [
+      { section: "General", item: "Unit thoroughly cleaned", defaultQty: 1 },
+      { section: "General", item: "Fresh linen on all beds", defaultQty: 1 },
+      { section: "General", item: "Towels replaced", defaultQty: 1 },
+      { section: "Kitchen", item: "Dishes cleaned and stored", defaultQty: 1 },
+      { section: "Kitchen", item: "Fridge cleared of previous guest items", defaultQty: 1 },
+      { section: "Bathroom", item: "Toiletries restocked", defaultQty: 1 },
+      { section: "Bathroom", item: "Bathroom cleaned and sanitised", defaultQty: 1 },
+      { section: "General", item: "Welcome materials in place", defaultQty: 1 },
+      { section: "General", item: "AC/heater tested", defaultQty: 1 },
+      { section: "General", item: "TV remote batteries working", defaultQty: 1 },
+    ],
+  },
 };
 
-// Built-in inspection templates (Secure Living Digital Inspection Checklist spec
-// + the real MIDDY Suites house checklist).
-const PRESETS: Preset[] = [
-  {
-    key: "STANDARD_RESIDENTIAL",
-    name: "Standard Residential",
-    category: "RESIDENTIAL",
-    description: "General residential move-in/move-out inspection.",
-    items: [
-      { section: "Living Room", item: "Wall Paint" },
-      { section: "Living Room", item: "Ceiling" },
-      { section: "Living Room", item: "Floor / Tiles" },
-      { section: "Living Room", item: "Windows & Panes" },
-      { section: "Living Room", item: "Curtain Rods & Supports" },
-      { section: "Kitchen", item: "Kitchen Sink" },
-      { section: "Kitchen", item: "Kitchen Cabinets & Handles" },
-      { section: "Kitchen", item: "Granite Tops" },
-      { section: "Kitchen", item: "Taps" },
-      { section: "Bathroom", item: "Shower / Instant Shower" },
-      { section: "Bathroom", item: "Toilet Basin / Cistern" },
-      { section: "Bathroom", item: "Hand Wash Sink" },
-      { section: "Bathroom", item: "Mirror" },
-      { section: "Bedroom", item: "Wardrobe & Handles" },
-      { section: "Bedroom", item: "Interior Doors & Locks" },
-      { section: "Doors & Keys", item: "Main Door Keys", defaultQty: 2 },
-      { section: "Doors & Keys", item: "Bedroom Door Keys", defaultQty: 2 },
-      { section: "Doors & Keys", item: "Toilet Door Keys", defaultQty: 2 },
-      { section: "Electrical", item: "Wiring, Bulb Holders & Sockets" },
-      { section: "Electrical", item: "Wall Sockets & Switches" },
-      { section: "Plumbing", item: "General Plumbing, Pipes & Fittings" },
-      { section: "Safety", item: "Fire Extinguisher" },
-      { section: "Utility", item: "Prepay Electricity Meter (Reading)", isUtilityMeter: true },
-      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
-    ],
-  },
-  {
-    key: "FURNISHED_UNIT",
-    name: "Furnished Unit",
-    category: "FURNISHED",
-    description: "Furnished apartment with furniture, appliances and electronics.",
-    items: [
-      { section: "Furniture", item: "Sofa Set" },
-      { section: "Furniture", item: "Dining Table" },
-      { section: "Furniture", item: "Dining Chairs", defaultQty: 6 },
-      { section: "Furniture", item: "Beds" },
-      { section: "Furniture", item: "Wardrobe" },
-      { section: "Appliances", item: "Refrigerator" },
-      { section: "Appliances", item: "Cooker / Oven" },
-      { section: "Appliances", item: "Microwave" },
-      { section: "Appliances", item: "Washing Machine" },
-      { section: "Electronics", item: "Television" },
-      { section: "Electronics", item: "Water Heater" },
-      { section: "Kitchenware", item: "Cutlery & Utensils" },
-      { section: "Linen", item: "Curtains", defaultQty: 4 },
-      { section: "Linen", item: "Bedding" },
-      { section: "Doors & Keys", item: "Door Keys", defaultQty: 3 },
-      { section: "Utility", item: "Electricity Meter (Reading)", isUtilityMeter: true },
-      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
-    ],
-  },
-  {
-    key: "COMMERCIAL",
-    name: "Commercial",
-    category: "COMMERCIAL",
-    description: "Commercial unit with HVAC, fire and security systems.",
-    items: [
-      { section: "Structure", item: "Walls & Partitions" },
-      { section: "Structure", item: "Flooring" },
-      { section: "Structure", item: "Ceiling" },
-      { section: "HVAC", item: "Air Conditioning Units" },
-      { section: "HVAC", item: "Ventilation" },
-      { section: "Fire Equipment", item: "Fire Extinguishers", defaultQty: 2 },
-      { section: "Fire Equipment", item: "Smoke Detectors" },
-      { section: "Fire Equipment", item: "Emergency Exit Signage" },
-      { section: "Security Systems", item: "CCTV Cameras" },
-      { section: "Security Systems", item: "Access Control / Locks" },
-      { section: "Security Systems", item: "Alarm System" },
-      { section: "Electrical", item: "Distribution Board" },
-      { section: "Electrical", item: "Sockets & Switches" },
-      { section: "Plumbing", item: "Washrooms & Fittings" },
-      { section: "Utility", item: "Electricity Meter (Reading)", isUtilityMeter: true },
-      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
-    ],
-  },
-  {
-    key: "SHORT_STAY",
-    name: "Short Stay",
-    category: "SHORT_STAY",
-    description: "Short stay / Airbnb turnover checklist.",
-    items: [
-      { section: "Linen", item: "Towels", defaultQty: 4 },
-      { section: "Linen", item: "Bed Linen", defaultQty: 2 },
-      { section: "Linen", item: "Pillows", defaultQty: 4 },
-      { section: "Kitchenware", item: "Plates & Bowls", defaultQty: 6 },
-      { section: "Kitchenware", item: "Glasses & Mugs", defaultQty: 6 },
-      { section: "Kitchenware", item: "Cutlery Set" },
-      { section: "Kitchenware", item: "Cooking Pots & Pans" },
-      { section: "Appliances", item: "Kettle" },
-      { section: "Appliances", item: "Microwave" },
-      { section: "Appliances", item: "Refrigerator" },
-      { section: "Appliances", item: "TV & Remote" },
-      { section: "Bathroom", item: "Toiletries & Amenities" },
-      { section: "Bathroom", item: "Shower & Fittings" },
-      { section: "General", item: "Cleanliness" },
-      { section: "Doors & Keys", item: "Access Keys / Cards", defaultQty: 2 },
-    ],
-  },
-];
+const applySchema = z.object({ preset: z.string() });
 
-// GET — list the available preset catalog (no DB writes).
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:view");
+  const denied = requirePermission(actor, "inspection:view");
   if (denied) return denied;
 
-  return Response.json({
-    data: PRESETS.map((p) => ({
-      key: p.key,
-      name: p.name,
-      category: p.category,
-      description: p.description,
-      itemCount: p.items.length,
-    })),
-  });
+  const data = Object.entries(PRESETS).map(([key, p]) => ({
+    key,
+    name: p.name,
+    category: p.category,
+    description: p.description,
+    itemCount: p.items.length,
+  }));
+  return Response.json({ data });
 });
 
-const applySchema = z.object({
-  preset: z.string().min(1),
-  name: z.string().optional(),
-});
-
-// POST — instantiate a preset as a real org-scoped template the landlord can edit.
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "checklist:create");
+  const denied = requirePermission(actor, "inspection:manage");
   if (denied) return denied;
-
-  const orgId = actor.orgIds?.[0];
-  if (!orgId) return jsonError(400, "No organization");
 
   const parsed = await parseBody(req, applySchema);
   if (!parsed.ok) return parsed.response;
 
-  const preset = PRESETS.find((p) => p.key === parsed.data.preset);
-  if (!preset) return jsonError(404, "Preset not found");
+  const preset = PRESETS[parsed.data.preset];
+  if (!preset) return Response.json({ error: "Unknown preset" }, { status: 400 });
 
-  const template = await prisma.checklistTemplate.create({
+  const orgId = actor.orgIds[0] ?? actor.userId;
+  const row = await prisma.checklistTemplate.create({
     data: {
+      id: randomUUID(),
       organizationId: orgId,
-      name: parsed.data.name ?? preset.name,
-      description: preset.description,
+      name: preset.name,
       category: preset.category,
-      items: {
-        create: preset.items.map((it, idx) => ({
-          section: it.section,
-          item: it.item,
-          defaultQty: it.defaultQty ?? 1,
-          order: idx,
-          isUtilityMeter: it.isUtilityMeter ?? false,
-        })),
-      },
+      description: preset.description,
     },
-    include: { items: { orderBy: { order: "asc" } } },
   });
 
-  return Response.json({ data: template }, { status: 201 });
+  await prisma.checklistTemplateItem.createMany({
+    data: preset.items.map((it, idx) => ({
+      id: randomUUID(),
+      templateId: row.id,
+      section: it.section,
+      item: it.item,
+      defaultQty: it.defaultQty,
+      order: idx,
+    })),
+  });
+
+  const full = await prisma.checklistTemplate.findUnique({
+    where: { id: row.id },
+    include: { items: { orderBy: { order: "asc" } } },
+  });
+  return Response.json({ data: full }, { status: 201 });
 });

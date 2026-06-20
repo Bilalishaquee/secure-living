@@ -1,70 +1,62 @@
-import { randomUUID } from "crypto";
+﻿import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
-import { parseBody, requireActor, withErrorHandler } from "@/lib/server/http";
+import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
 const createSchema = z.object({
   listingId: z.string().optional(),
   unitId: z.string().optional(),
-  applicantName: z.string().min(1),
-  applicantPhone: z.string().min(1),
+  applicantName: z.string().min(2),
+  applicantPhone: z.string().min(7),
   applicantEmail: z.string().email().optional(),
-  metadataJson: z.record(z.string(), z.unknown()).optional(),
+  metadataJson: z.record(z.unknown()).optional(),
 });
-
-function generateQrToken(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "QR-";
-  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-  return result;
-}
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "kyc:manage");
+  if (denied) return denied;
 
   const url = new URL(req.url);
-  const listingId = url.searchParams.get("listingId");
   const status = url.searchParams.get("status");
+  const listingId = url.searchParams.get("listingId");
 
   const where: Record<string, unknown> = {};
-  if (listingId) where.listingId = listingId;
   if (status) where.status = status;
+  if (listingId) where.listingId = listingId;
 
   const rows = await prisma.qrApplication.findMany({
     where,
     orderBy: { createdAt: "desc" },
+    take: 100,
   });
-
   return Response.json({ data: rows });
 });
 
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "kyc:manage");
+  if (denied) return denied;
 
   const parsed = await parseBody(req, createSchema);
   if (!parsed.ok) return parsed.response;
-  const body = parsed.data;
+  const b = parsed.data;
 
-  if (body.listingId) {
-    const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
-    if (!listing) return Response.json({ error: "Listing not found" }, { status: 400 });
-  }
-
+  const qrToken = randomUUID().replace(/-/g, "");
   const row = await prisma.qrApplication.create({
     data: {
       id: randomUUID(),
-      listingId: body.listingId ?? null,
-      unitId: body.unitId ?? null,
-      applicantName: body.applicantName,
-      applicantPhone: body.applicantPhone,
-      applicantEmail: body.applicantEmail ?? null,
-      qrToken: generateQrToken(),
+      qrToken,
+      listingId: b.listingId ?? null,
+      unitId: b.unitId ?? null,
+      applicantName: b.applicantName,
+      applicantPhone: b.applicantPhone,
+      applicantEmail: b.applicantEmail ?? null,
       status: "PENDING",
-      metadataJson: body.metadataJson as import("@prisma/client").Prisma.InputJsonValue,
+      metadataJson: b.metadataJson ? (b.metadataJson as import('@prisma/client').Prisma.InputJsonValue) : undefined,
     },
   });
-
   return Response.json({ data: row }, { status: 201 });
 });
