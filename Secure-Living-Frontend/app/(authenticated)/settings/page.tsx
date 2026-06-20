@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -107,10 +107,6 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [form, setForm] = useState<ProfileForm>(emptyForm);
   const roleManualHref = useMemo(() => helpPathForRole(user?.role), [user?.role]);
-  const [emailRent, setEmailRent] = useState(true);
-  const [emailEscrow, setEmailEscrow] = useState(true);
-  const [smsAlerts, setSmsAlerts] = useState(false);
-  const [digest, setDigest] = useState(true);
   const avatarPresets = [
     "/images/property/dashboard-house.jpg",
     "/images/property/properties-banner.jpg",
@@ -128,32 +124,81 @@ export default function SettingsPage() {
       setForm((f) => ({ ...f, [key]: e.target.value }));
     };
 
-  const saveProfile = () => {
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [pwdForm, setPwdForm] = useState({ current: "", next: "", confirm: "" });
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState({ emailRent: true, emailEscrow: true, smsAlerts: false, digest: true });
+
+  // Load persisted notification prefs
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("sl_notif_prefs");
+      if (raw) setNotifPrefs(JSON.parse(raw) as typeof notifPrefs);
+    } catch { /* ignore */ }
+  }, []);
+
+  const saveProfile = async () => {
     if (!user) return;
-    if (!form.name.trim()) {
-      toast("Display name is required", "error");
-      return;
-    }
-    updateProfile({
-      name: form.name.trim(),
-      avatarUrl: form.avatarUrl.trim() || undefined,
-      phone: form.phone.trim() || undefined,
-      whatsappNumber: form.whatsappNumber.trim() || undefined,
-      city: form.city.trim() || undefined,
-      country: form.country.trim() || undefined,
-      timezone: form.timezone.trim() || undefined,
-      preferredCurrency: form.preferredCurrency.trim() || undefined,
-      preferredLanguage: form.preferredLanguage.trim() || undefined,
-      companyOrPortfolioName: form.companyOrPortfolioName.trim() || undefined,
-      taxPin: form.taxPin.trim() || undefined,
-      mailingAddress: form.mailingAddress.trim() || undefined,
-      emergencyContactName: form.emergencyContactName.trim() || undefined,
-      emergencyContactPhone: form.emergencyContactPhone.trim() || undefined,
-      bio: form.bio.trim() || undefined,
-      dateOfBirth: form.dateOfBirth.trim() || undefined,
-      nationalIdLast4: form.nationalIdLast4.replace(/\D/g, "").slice(0, 4) || undefined,
-    });
-    toast("Profile saved", "success");
+    if (!form.name.trim()) { toast("Display name is required", "error"); return; }
+    setSavingProfile(true);
+    try {
+      updateProfile({
+        name: form.name.trim(),
+        avatarUrl: form.avatarUrl.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        whatsappNumber: form.whatsappNumber.trim() || undefined,
+        city: form.city.trim() || undefined,
+        country: form.country.trim() || undefined,
+        timezone: form.timezone.trim() || undefined,
+        preferredCurrency: form.preferredCurrency.trim() || undefined,
+        preferredLanguage: form.preferredLanguage.trim() || undefined,
+        companyOrPortfolioName: form.companyOrPortfolioName.trim() || undefined,
+        taxPin: form.taxPin.trim() || undefined,
+        mailingAddress: form.mailingAddress.trim() || undefined,
+        emergencyContactName: form.emergencyContactName.trim() || undefined,
+        emergencyContactPhone: form.emergencyContactPhone.trim() || undefined,
+        bio: form.bio.trim() || undefined,
+        dateOfBirth: form.dateOfBirth.trim() || undefined,
+        nationalIdLast4: form.nationalIdLast4.replace(/\D/g, "").slice(0, 4) || undefined,
+      });
+      // Sync name + phone to DB
+      await fetch("/api/v1/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken ?? ""}` },
+        body: JSON.stringify({ fullName: form.name.trim(), phone: form.phone.trim() || null }),
+      });
+      toast("Profile saved", "success");
+    } catch { toast("Profile saved locally", "success"); }
+    finally { setSavingProfile(false); }
+  };
+
+  const saveNotifPrefs = () => {
+    localStorage.setItem("sl_notif_prefs", JSON.stringify(notifPrefs));
+    toast("Notification preferences saved", "success");
+  };
+
+  const changePassword = async () => {
+    if (!user) return;
+    if (!pwdForm.current || !pwdForm.next) { toast("Fill in all password fields", "error"); return; }
+    if (pwdForm.next.length < 8) { toast("New password must be at least 8 characters", "error"); return; }
+    if (pwdForm.next !== pwdForm.confirm) { toast("Passwords do not match", "error"); return; }
+    setChangingPwd(true);
+    try {
+      const res = await fetch("/api/v1/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken ?? ""}` },
+        body: JSON.stringify({ currentPassword: pwdForm.current, newPassword: pwdForm.next }),
+      });
+      if (res.ok) {
+        toast("Password changed — please log in again", "success");
+        setShowChangePwd(false);
+        setPwdForm({ current: "", next: "", confirm: "" });
+      } else {
+        const j = await res.json() as { error?: string };
+        toast(j.error ?? "Failed to change password", "error");
+      }
+    } finally { setChangingPwd(false); }
   };
 
   return (
@@ -418,8 +463,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={saveProfile}>
-              Save profile
+            <Button type="button" onClick={() => { void saveProfile(); }} disabled={savingProfile}>
+              {savingProfile ? "Saving…" : "Save profile"}
             </Button>
             <Button type="button" variant="outline" size="sm" asChild>
               <Link href="/kyc">KYC documents</Link>
@@ -445,43 +490,31 @@ export default function SettingsPage() {
           <Switch
             label="Rent & collection emails"
             description="Payment confirmations and failed debit alerts"
-            checked={emailRent}
-            onCheckedChange={(v) => {
-              setEmailRent(v);
-              toast(v ? "Rent emails on" : "Rent emails off", "success");
-            }}
+            checked={notifPrefs.emailRent}
+            onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, emailRent: v }))}
           />
           <Switch
             label="Escrow release alerts"
             description="When funds move in or out of your wallet"
-            checked={emailEscrow}
-            onCheckedChange={(v) => {
-              setEmailEscrow(v);
-              toast(v ? "Escrow alerts on" : "Escrow alerts off", "success");
-            }}
+            checked={notifPrefs.emailEscrow}
+            onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, emailEscrow: v }))}
           />
           <Switch
             label="SMS for urgent items"
             description="Arrears and verification deadlines"
-            checked={smsAlerts}
-            onCheckedChange={(v) => {
-              setSmsAlerts(v);
-              toast(v ? "SMS alerts enabled" : "SMS alerts disabled", "info");
-            }}
+            checked={notifPrefs.smsAlerts}
+            onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, smsAlerts: v }))}
           />
           <Switch
             label="Weekly digest"
             description="Friday summary of portfolio health"
-            checked={digest}
-            onCheckedChange={(v) => {
-              setDigest(v);
-              toast(v ? "Digest subscribed" : "Digest unsubscribed", "info");
-            }}
+            checked={notifPrefs.digest}
+            onCheckedChange={(v) => setNotifPrefs((p) => ({ ...p, digest: v }))}
           />
           <Button
             type="button"
             className="mt-2 w-full"
-            onClick={() => toast("Notification preferences saved", "success")}
+            onClick={saveNotifPrefs}
           >
             Save preferences
           </Button>
@@ -496,25 +529,62 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm text-[var(--text-secondary)]">
-            Password changes and 2FA enrollment would live here in production.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => toast("Password reset email sent", "success")}
-            >
-              Change password
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => toast("Authenticator setup — scan QR in production", "info")}
-            >
-              Enable 2FA
-            </Button>
-          </div>
+          {showChangePwd ? (
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-medium text-slate-700">Change password</p>
+              <div className="space-y-2">
+                <input
+                  type="password"
+                  className={inputClass}
+                  placeholder="Current password"
+                  value={pwdForm.current}
+                  onChange={(e) => setPwdForm((f) => ({ ...f, current: e.target.value }))}
+                  autoComplete="current-password"
+                />
+                <input
+                  type="password"
+                  className={inputClass}
+                  placeholder="New password (min 8 chars)"
+                  value={pwdForm.next}
+                  onChange={(e) => setPwdForm((f) => ({ ...f, next: e.target.value }))}
+                  autoComplete="new-password"
+                />
+                <input
+                  type="password"
+                  className={inputClass}
+                  placeholder="Confirm new password"
+                  value={pwdForm.confirm}
+                  onChange={(e) => setPwdForm((f) => ({ ...f, confirm: e.target.value }))}
+                  autoComplete="new-password"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" disabled={changingPwd} onClick={() => { void changePassword(); }}>
+                  {changingPwd ? "Saving…" : "Update password"}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => { setShowChangePwd(false); setPwdForm({ current: "", next: "", confirm: "" }); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowChangePwd(true)}
+              >
+                Change password
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => toast("2FA enrollment coming in the next release — TOTP support via authenticator app", "info")}
+              >
+                Enable 2FA
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

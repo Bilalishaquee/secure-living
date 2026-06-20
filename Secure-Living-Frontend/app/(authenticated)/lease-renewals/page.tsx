@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -63,6 +63,17 @@ export default function LeaseRenewalsPage() {
     return "text-green-700";
   }
 
+  async function sendNotice(id: string) {
+    if (!user?.id) return;
+    await fetch(`/api/v1/lease-renewal-alerts/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken ?? ""}` },
+      body: JSON.stringify({ status: "sent", alertSentAt: new Date().toISOString() }),
+    });
+    toast("Renewal notice sent", "success");
+    await load();
+  }
+
   const renderCards = (items: Renewal[]) => (
     <div className="grid gap-3 md:grid-cols-2">
       {items.map((row) => {
@@ -78,7 +89,7 @@ export default function LeaseRenewalsPage() {
               <p>Lease end: {new Date(row.expiryDate).toLocaleDateString()}</p>
               <p className={color(remaining)}>Days remaining: {remaining}</p>
               <div className="pt-2 flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => toast("Renewal notice sent", "success")}>Send Renewal Notice</Button>
+                <Button size="sm" variant="outline" onClick={() => { void sendNotice(row.id); }}>Send Renewal Notice</Button>
                 {row.status !== "renewed" ? <Button size="sm" onClick={() => { void markRenewed(row.id); }}>Mark as Renewed</Button> : null}
               </div>
             </CardContent>

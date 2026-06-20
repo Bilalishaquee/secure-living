@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
@@ -38,6 +38,9 @@ export default function AuditLogsPage() {
   const [module, setModule] = useState<string>("All");
   const [status, setStatus] = useState<string>("All");
   const [detail, setDetail] = useState<AuditLogEntry | null>(null);
+  const [dateFrom, setDateFrom] = useState("2026-03-01");
+  const [dateTo, setDateTo] = useState("2026-12-31");
+  const [dateFilter, setDateFilter] = useState<{ from: string; to: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -77,9 +80,14 @@ export default function AuditLogsPage() {
       if (userQ && !l.user.toLowerCase().includes(userQ.toLowerCase())) return false;
       if (module !== "All" && l.module !== module) return false;
       if (status !== "All" && l.status !== status) return false;
+      if (dateFilter) {
+        const ts = new Date(l.timestamp).getTime();
+        if (ts < new Date(dateFilter.from).getTime()) return false;
+        if (ts > new Date(dateFilter.to + "T23:59:59").getTime()) return false;
+      }
       return true;
     });
-  }, [logs, userQ, module, status]);
+  }, [logs, userQ, module, status, dateFilter]);
 
   const exportCsv = () => {
     const header = ["Timestamp", "User", "Action", "Module", "Status", "IP"];
@@ -103,7 +111,8 @@ export default function AuditLogsPage() {
   };
 
   const applyDateFilter = () => {
-    toast("Date range applied to current view", "info");
+    setDateFilter({ from: dateFrom, to: dateTo });
+    toast(`Filtering ${dateFrom} → ${dateTo}`, "success");
   };
 
   return (
@@ -124,7 +133,8 @@ export default function AuditLogsPage() {
             id="from"
             type="date"
             className="mt-1 block rounded-lg border border-surface-border px-3 py-2 text-sm font-mono-data focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
-            defaultValue="2026-03-01"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
           />
         </div>
         <div>
@@ -135,7 +145,8 @@ export default function AuditLogsPage() {
             id="to"
             type="date"
             className="mt-1 block rounded-lg border border-surface-border px-3 py-2 text-sm font-mono-data focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
-            defaultValue="2026-04-01"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
           />
         </div>
         <div className="min-w-0 w-full flex-1 xs:min-w-[140px]">

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { Mail, MessageSquare, Phone, Users } from "lucide-react";
@@ -75,6 +75,19 @@ export default function TenantsPage() {
     })();
   }, [user]);
 
+  async function bulkRemind() {
+    if (!user?.authToken) return;
+    try {
+      const res = await fetch("/api/v1/leases/bulk-remind", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      const j = await res.json() as { data?: { count: number; message: string }; error?: string };
+      if (res.ok && j.data) toast(j.data.message, "success");
+      else toast(j.error ?? "Failed to send reminders", "error");
+    } catch { toast("Failed to send reminders", "error"); }
+  }
+
   const columns: Column<Row>[] = [
     { key: "name", header: "Tenant", sortable: true },
     {
@@ -122,7 +135,7 @@ export default function TenantsPage() {
             size="sm"
             className="h-8"
             disabled={!r.email}
-            onClick={() => r.email && toast(`Email queued to ${r.email}`, "success")}
+            onClick={() => { if (r.email) window.open(`mailto:${r.email}?subject=Rent%20Reminder&body=Dear%20${encodeURIComponent(r.name)}%2C%0A%0AThis%20is%20a%20reminder%20about%20your%20rental%20account.`); }}
           >
             <Mail className="h-3.5 w-3.5" aria-hidden />
             Email
@@ -132,7 +145,7 @@ export default function TenantsPage() {
             variant="ghost"
             size="sm"
             className="h-8"
-            onClick={() => toast(`SMS reminder sent — ${r.name}`, "info")}
+            onClick={() => { window.open(`sms:${r.email ? "" : ""}?&body=Hi%20${encodeURIComponent(r.name)}%2C%20this%20is%20a%20reminder%20about%20your%20Secure%20Living%20rental%20account.`); toast(`SMS composer opened for ${r.name}`, "info"); }}
           >
             <MessageSquare className="h-3.5 w-3.5" aria-hidden />
             SMS
@@ -165,7 +178,7 @@ export default function TenantsPage() {
           <Button
             type="button"
             size="sm"
-            onClick={() => toast("Bulk reminder scheduled for all in arrears", "success")}
+            onClick={() => { void bulkRemind(); }}
           >
             Remind arrears
           </Button>
