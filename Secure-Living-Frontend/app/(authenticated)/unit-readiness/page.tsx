@@ -180,11 +180,11 @@ export default function UnitReadinessPage() {
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Fetch short-stay properties
+  // Fetch all properties in scope for the current user
   useEffect(() => {
     if (!user?.authToken) return;
     setLoadingProps(true);
-    void fetch("/api/v1/short-stay", {
+    void fetch("/api/v1/properties", {
       headers: { Authorization: `Bearer ${user.authToken}` },
     })
       .then((r) => r.json())
@@ -193,18 +193,7 @@ export default function UnitReadinessPage() {
         setProperties(props);
         if (props.length > 0) setSelectedPropId(props[0].id);
       })
-      .catch(() => {
-        // Fallback: load all properties
-        void fetch("/api/v1/properties", {
-          headers: { Authorization: `Bearer ${user.authToken ?? ""}` },
-        })
-          .then((r) => r.json())
-          .then((j: { data: Property[] }) => {
-            const props = j.data ?? [];
-            setProperties(props);
-            if (props.length > 0) setSelectedPropId(props[0].id);
-          });
-      })
+      .catch(() => { /* leave empty */ })
       .finally(() => setLoadingProps(false));
   }, [user?.authToken]);
 

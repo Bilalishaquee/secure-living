@@ -9,9 +9,15 @@ export const GET = withErrorHandler(async (req: Request) => {
   if (actor instanceof Response) return actor;
   const denied = requirePermission(actor, "unit:view");
   if (denied) return denied;
+  const url = new URL(req.url);
+  const propertyId = url.searchParams.get("propertyId") ?? undefined;
   const where = actor.permissions.includes("*")
-    ? {}
-    : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } };
+    ? (propertyId ? { propertyId } : {})
+    : {
+        organizationId: { in: actor.orgIds },
+        branchId: { in: actor.branchIds },
+        ...(propertyId ? { propertyId } : {}),
+      };
   const rows = await prisma.unit.findMany({ where, orderBy: { updatedAt: "desc" } });
   return Response.json({ data: rows });
 })

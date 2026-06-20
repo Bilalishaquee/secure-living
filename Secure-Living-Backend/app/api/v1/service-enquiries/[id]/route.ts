@@ -35,3 +35,5 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   return Response.json({ data: updated });
 });
+
+export const PATCH = PUT;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { Ticket, RefreshCw, CheckCircle2, MessageSquare } from "lucide-react";
@@ -77,8 +77,12 @@ export default function SupportPage() {
         toast("Status updated", "success");
         void load();
       } else {
-        const j = await res.json() as { error?: string };
-        toast(j.error ?? "Failed to update", "error");
+        try {
+          const j = await res.json() as { error?: string };
+          toast(j.error ?? "Failed to update", "error");
+        } catch {
+          toast(`Failed to update (${res.status})`, "error");
+        }
       }
     } finally {
       setUpdatingId(null);
