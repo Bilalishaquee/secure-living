@@ -16,6 +16,9 @@ const entrySchema = z
     statusOut: z.string().optional(),
     qty: z.number().int().nonnegative().optional(),
     chargeKes: z.number().nonnegative().optional(),
+    replacementCostKes: z.number().nonnegative().optional(),
+    followUpDate: z.string().datetime().optional().nullable(),
+    evidenceScore: z.enum(["STRONG", "MEDIUM", "WEAK"]).optional().nullable(),
     responsibility: z.string().optional(),
     actionRequired: z.string().optional(),
     note: z.string().optional(),
@@ -31,7 +34,6 @@ const entrySchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "itemId is required" });
       return z.NEVER;
     }
-    // condition mirrors statusOut (move-out) when present, else statusIn, else provided condition.
     const condition = v.statusOut ?? v.condition ?? v.statusIn ?? "Not Applicable";
     return {
       itemId,
@@ -40,6 +42,9 @@ const entrySchema = z
       statusOut: v.statusOut ?? null,
       qty: v.qty ?? null,
       chargeKes: v.chargeKes ?? null,
+      replacementCostKes: v.replacementCostKes ?? null,
+      followUpDate: v.followUpDate ? new Date(v.followUpDate) : null,
+      evidenceScore: v.evidenceScore ?? null,
       responsibility: v.responsibility ?? null,
       actionRequired: v.actionRequired ?? null,
       note: v.note ?? v.tenantNotes ?? null,
@@ -77,6 +82,9 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
       statusOut: e.statusOut,
       qty: e.qty,
       chargeKes: e.chargeKes,
+      replacementCostKes: e.replacementCostKes,
+      followUpDate: e.followUpDate,
+      evidenceScore: e.evidenceScore,
       responsibility: e.responsibility,
       actionRequired: e.actionRequired,
       note: e.note,

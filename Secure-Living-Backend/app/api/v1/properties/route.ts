@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { hasPermission } from "@/lib/server/authz";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
-import { parseBody, requireActor, requirePermission, requireScope , withErrorHandler } from "@/lib/server/http";
+import { jsonError, parseBody, requireActor, requirePermission, requireScope , withErrorHandler } from "@/lib/server/http";
 import { createPropertySchema } from "@/lib/server/validation";
 
 export const GET = withErrorHandler(async (req: Request) => {
@@ -19,7 +19,9 @@ export const GET = withErrorHandler(async (req: Request) => {
   const isGlobal = actor.role === "super_admin" || actor.permissions.includes("*");
   const where = isGlobal
     ? {}
-    : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } };
+    : actor.orgIds.length > 0
+      ? { organizationId: { in: actor.orgIds } }
+      : { id: { in: [] as string[] } };
   const rows = await prisma.property.findMany({ where, orderBy: { createdAt: "desc" } });
   return Response.json({ data: rows });
 })
@@ -27,8 +29,9 @@ export const GET = withErrorHandler(async (req: Request) => {
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "property:create");
-  if (denied) return denied;
+  if (!hasPermission(actor, "property:create") && !hasPermission(actor, "property:edit")) {
+    return jsonError(403, "Forbidden");
+  }
 
   const parsed = await parseBody(req, createPropertySchema);
   if (!parsed.ok) return parsed.response;
@@ -86,6 +89,8 @@ export const POST = withErrorHandler(async (req: Request) => {
       mortgageMonthlyPaymentKes: body.mortgageMonthlyPaymentKes,
       mortgageStartDate: body.mortgageStartDate ? new Date(body.mortgageStartDate) : undefined,
       mortgageMaturityDate: body.mortgageMaturityDate ? new Date(body.mortgageMaturityDate) : undefined,
+      caretaker: body.caretaker,
+      utilityProvider: body.utilityProvider,
       listingUrl: body.listingUrl,
       shortTermRentalPlatform: body.shortTermRentalPlatform,
       tagsCsv: body.tags?.join(","),

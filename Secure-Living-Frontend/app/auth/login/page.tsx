@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, type Variants } from "framer-motion";
 import { ArrowRight, Building2, House, Lock, Mail, ShieldCheck } from "lucide-react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
@@ -30,10 +30,13 @@ export default function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
 
-  if (hydrated && user) {
-    router.replace("/dashboard");
-    return null;
-  }
+  useEffect(() => {
+    if (hydrated && user) {
+      router.replace("/dashboard");
+    }
+  }, [hydrated, user, router]);
+
+  if (hydrated && user) return null;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

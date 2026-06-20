@@ -250,6 +250,8 @@ export const createPropertySchema = z.object({
   mortgageMonthlyPaymentKes: z.number().nonnegative().optional(),
   mortgageStartDate: z.string().datetime().optional(),
   mortgageMaturityDate: z.string().datetime().optional(),
+  caretaker: z.string().optional(),
+  utilityProvider: z.string().optional(),
   listingUrl: z.string().url().optional(),
   shortTermRentalPlatform: z.string().optional(),
   tags: z.array(z.string()).optional(),

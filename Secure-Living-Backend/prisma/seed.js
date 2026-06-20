@@ -127,7 +127,7 @@ async function main() {
     {
       slug: "staff", displayName: "Staff",
       perms: [
-        "properties:view", "property:view", "property:edit",
+        "properties:view", "property:view", "property:create", "property:edit",
         "unit:view",
         "maintenance:view", "maintenance:update", "maintenance:assign",
         "kyc:upload",

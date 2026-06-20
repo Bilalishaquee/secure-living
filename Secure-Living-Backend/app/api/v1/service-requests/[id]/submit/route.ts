@@ -1,16 +1,11 @@
-import { z } from "zod";
 import { SrStatus } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
-import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { canSrTransition, SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
 
 type Ctx = { params: { id: string } };
-
-const submitSchema = z.object({
-  idempotencyKey: z.string().optional(),
-});
 
 export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const actor = requireActor(req);
@@ -32,9 +27,6 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   if (!canSrTransition(existing.srStatus, SrStatus.SUBMITTED)) {
     return jsonError(409, `Cannot transition from ${existing.srStatus} to SUBMITTED`);
   }
-
-  const parsed = await parseBody(req, submitSchema);
-  if (!parsed.ok) return parsed.response;
 
   const updated = await prisma.$transaction(async (tx) => {
     const sr = await tx.serviceRequest.update({

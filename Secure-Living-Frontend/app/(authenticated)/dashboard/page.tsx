@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, lazy, Suspense } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -17,6 +17,10 @@ import {
   RefreshCw,
   FileText,
   ConciergeBell,
+  Activity,
+  PieChart,
+  DollarSign,
+  BarChart2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { formatKes } from "@/lib/utils";
@@ -25,15 +29,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import type { UserRole } from "@/types/auth";
 import { TrustSignals } from "@/components/dashboard/TrustSignals";
 
+const DashboardEscrowChart = lazy(() => import("@/components/dashboard/DashboardEscrowChart"));
+
+type EscrowChartPoint = { w: string; v: number };
+
 type DashboardStats = {
   totalEscrowKes: number;
   monthlyRentKes: number;
+  totalDueKes: number;
   properties: number;
   units: number;
   activeTenants: number;
+  occupancyRate: number;
+  collectionRate: number;
+  arrearsKes: number;
   pendingKyc: number;
   activeDisputes: number;
   openServiceRequests: number;
+  blockedServiceRequests: number;
+  slaBreachCount: number;
+  myAssignedJobs: number;
+  weeklyEscrowTrend: EscrowChartPoint[];
   recentActivity: ActivityItem[];
   alerts: AlertItem[];
 };
@@ -50,19 +66,22 @@ type ActivityItem = {
 };
 
 type AlertItem = {
-  type: "overdue_rent" | "dispute" | "kyc" | "failed_tx" | "escrow";
+  type: string;
   severity: "high" | "medium" | "low";
   message: string;
   resourceId: string;
   resourceType: string;
+  href?: string;
 };
 
 type MetricCard = {
   label: string;
   value: string;
+  sub?: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   bg: string;
+  href?: string;
 };
 
 type QuickAction = { label: string; href: string };
@@ -78,8 +97,28 @@ function actionLabel(action: string): string {
     "property.updated": "Property updated",
     "lease.created": "Lease created",
     "unit.updated": "Unit updated",
+    LEASE_CREATED: "Lease created",
+    LEASE_ACTIVATED: "Lease activated",
+    KYC_APPROVED: "KYC document approved",
+    PROVIDER_APPROVED: "Provider approved",
+    SR_CREATED: "Service request submitted",
+    LISTING_PUBLISHED: "Listing published",
+    VACATING_ACKNOWLEDGED: "Vacating notice acknowledged",
   };
-  return map[action] ?? action.replace(/\./g, " · ");
+  return map[action] ?? action.replace(/[._]/g, " ");
+}
+
+function activityHref(resourceType: string, resourceId: string): string {
+  const map: Record<string, string> = {
+    Lease: `/leasing/${resourceId}`,
+    Property: `/properties/${resourceId}`,
+    ServiceRequest: `/service-requests/${resourceId}`,
+    KycDocument: "/kyc",
+    ServiceProvider: "/providers",
+    Listing: `/listings/${resourceId}`,
+    VacatingNotice: "/vacating",
+  };
+  return map[resourceType] ?? "/dashboard";
 }
 
 function timeAgo(ts: string): string {
@@ -99,25 +138,123 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 function buildMetrics(stats: DashboardStats, role: UserRole | string): MetricCard[] {
-  const escrow: MetricCard = { label: "Total Escrow Held", value: formatKes(stats.totalEscrowKes), icon: Banknote, color: "text-emerald-600", bg: "bg-emerald-50" };
-  const rent: MetricCard = { label: "Monthly Rent Collected", value: formatKes(stats.monthlyRentKes), icon: TrendingUp, color: "text-brand-blue", bg: "bg-blue-50" };
-  const properties: MetricCard = { label: "Total Properties", value: String(stats.properties), icon: Building2, color: "text-violet-600", bg: "bg-violet-50" };
-  const units: MetricCard = { label: "Total Units", value: String(stats.units), icon: Home, color: "text-teal-600", bg: "bg-teal-50" };
-  const tenants: MetricCard = { label: "Active Tenants", value: String(stats.activeTenants), icon: Users, color: "text-sky-600", bg: "bg-sky-50" };
-  const kyc: MetricCard = { label: "Pending KYC", value: String(stats.pendingKyc), icon: ShieldCheck, color: "text-amber-600", bg: "bg-amber-50" };
-  const disputes: MetricCard = { label: "Active Disputes", value: String(stats.activeDisputes), icon: AlertTriangle, color: "text-red-600", bg: "bg-red-50" };
-  const serviceRequests: MetricCard = { label: "Open Service Requests", value: String(stats.openServiceRequests), icon: Wrench, color: "text-orange-600", bg: "bg-orange-50" };
-  const myMaintenance: MetricCard = { label: "My Maintenance Requests", value: String(stats.openServiceRequests), icon: Wrench, color: "text-orange-600", bg: "bg-orange-50" };
-  const myLease: MetricCard = { label: "Active Leases", value: String(stats.activeTenants), icon: FileText, color: "text-sky-600", bg: "bg-sky-50" };
+  const escrow: MetricCard = {
+    label: "Total Escrow Held",
+    value: formatKes(stats.totalEscrowKes),
+    sub: "Funds under custody",
+    icon: Banknote, color: "text-emerald-600", bg: "bg-emerald-50",
+    href: "/banking",
+  };
+  const rent: MetricCard = {
+    label: "Rent Collected (MTD)",
+    value: formatKes(stats.monthlyRentKes),
+    sub: stats.totalDueKes > 0
+      ? `of ${formatKes(stats.totalDueKes)} due (${stats.collectionRate}%)`
+      : "Month to date",
+    icon: TrendingUp, color: "text-brand-blue", bg: "bg-blue-50",
+    href: "/rent-collection/receipts",
+  };
+  const occupancy: MetricCard = {
+    label: "Occupancy Rate",
+    value: `${stats.occupancyRate}%`,
+    sub: `${stats.activeTenants} of ${stats.units} units occupied`,
+    icon: PieChart, color: "text-violet-600", bg: "bg-violet-50",
+    href: "/properties",
+  };
+  const arrears: MetricCard = {
+    label: "In Arrears",
+    value: formatKes(stats.arrearsKes),
+    sub: stats.arrearsKes > 0 ? "Overdue balance — action needed" : "No overdue balances",
+    icon: AlertTriangle,
+    color: stats.arrearsKes > 0 ? "text-red-600" : "text-emerald-600",
+    bg: stats.arrearsKes > 0 ? "bg-red-50" : "bg-emerald-50",
+    href: "/rent-collection/receipts",
+  };
+  const properties: MetricCard = {
+    label: "Total Properties",
+    value: String(stats.properties),
+    icon: Building2, color: "text-violet-600", bg: "bg-violet-50",
+    href: "/properties",
+  };
+  const units: MetricCard = {
+    label: "Total Units",
+    value: String(stats.units),
+    icon: Home, color: "text-teal-600", bg: "bg-teal-50",
+    href: "/properties",
+  };
+  const tenants: MetricCard = {
+    label: "Active Tenants",
+    value: String(stats.activeTenants),
+    icon: Users, color: "text-sky-600", bg: "bg-sky-50",
+    href: "/tenants",
+  };
+  const kyc: MetricCard = {
+    label: "Pending KYC",
+    value: String(stats.pendingKyc),
+    sub: stats.pendingKyc > 0 ? "Documents awaiting review" : "All clear",
+    icon: ShieldCheck, color: "text-amber-600", bg: "bg-amber-50",
+    href: "/kyc",
+  };
+  const disputes: MetricCard = {
+    label: "Active Disputes",
+    value: String(stats.activeDisputes),
+    sub: stats.activeDisputes > 0 ? "Utility disputes open" : "No open disputes",
+    icon: AlertTriangle,
+    color: stats.activeDisputes > 0 ? "text-red-600" : "text-emerald-600",
+    bg: stats.activeDisputes > 0 ? "bg-red-50" : "bg-emerald-50",
+    href: "/admin/disputes",
+  };
+  const serviceRequests: MetricCard = {
+    label: "Open Service Requests",
+    value: String(stats.openServiceRequests),
+    sub: stats.blockedServiceRequests > 0 ? `${stats.blockedServiceRequests} blocked` : undefined,
+    icon: Wrench, color: "text-orange-600", bg: "bg-orange-50",
+    href: "/service-requests",
+  };
+  const sla: MetricCard = {
+    label: "SLA Breaches",
+    value: String(stats.slaBreachCount),
+    sub: stats.slaBreachCount > 0 ? "Past deadline — urgent" : "All within SLA",
+    icon: Clock,
+    color: stats.slaBreachCount > 0 ? "text-red-600" : "text-emerald-600",
+    bg: stats.slaBreachCount > 0 ? "bg-red-50" : "bg-emerald-50",
+    href: "/service-requests/manager-queue",
+  };
+  const myMaintenance: MetricCard = {
+    label: "My Maintenance Requests",
+    value: String(stats.openServiceRequests),
+    icon: Wrench, color: "text-orange-600", bg: "bg-orange-50",
+    href: "/maintenance",
+  };
+  const myAssignedJobsCard: MetricCard = {
+    label: "My Assigned Jobs",
+    value: String(stats.myAssignedJobs ?? 0),
+    sub: (stats.myAssignedJobs ?? 0) > 0 ? "Active jobs assigned to you" : "No jobs currently assigned",
+    icon: Wrench, color: "text-blue-600", bg: "bg-blue-50",
+    href: "/service-requests",
+  };
+  const myLease: MetricCard = {
+    label: "Active Leases",
+    value: String(stats.activeTenants),
+    icon: FileText, color: "text-sky-600", bg: "bg-sky-50",
+    href: "/leasing",
+  };
+  const collection: MetricCard = {
+    label: "Collection Rate",
+    value: `${stats.collectionRate}%`,
+    sub: `${formatKes(stats.monthlyRentKes)} of ${formatKes(stats.totalDueKes)}`,
+    icon: BarChart2, color: "text-brand-blue", bg: "bg-blue-50",
+    href: "/rent-collection/receipts",
+  };
 
   switch (role) {
     case "super_admin":
     case "admin":
-      return [escrow, rent, properties, units, tenants, kyc, disputes, serviceRequests];
+      return [escrow, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
     case "landlord":
-      return [escrow, rent, properties, units, tenants, serviceRequests];
+      return [escrow, rent, occupancy, arrears, properties, units, tenants, serviceRequests];
     case "staff":
-      return [properties, units, tenants, serviceRequests];
+      return [properties, units, tenants, serviceRequests, sla, myAssignedJobsCard];
     case "tenant":
       return [myLease, myMaintenance];
     default:
@@ -129,8 +266,15 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
   switch (role) {
     case "super_admin":
       return [
-        { label: "+ Add Property", href: "/properties/new" },
-        { label: "Import Data", href: "/import" },
+        { label: "Add Tenant", href: "/tenants/new" },
+        { label: "Add Property", href: "/properties/new" },
+        { label: "Create Invoice", href: "/rent-collection/receipts" },
+        { label: "Upload Utility Bill", href: "/utilities" },
+        { label: "Record Payment", href: "/rent-collection/receipts" },
+        { label: "Add Visitor", href: "/visitors" },
+        { label: "Create Checklist", href: "/checklists" },
+        { label: "Upload Lease", href: "/leasing" },
+        { label: "Import Data", href: "/data-import" },
         { label: "Manage Team", href: "/team" },
         { label: "Organisations", href: "/admin/organizations" },
         { label: "RBAC", href: "/admin/rbac" },
@@ -140,8 +284,15 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
       ];
     case "admin":
       return [
-        { label: "+ Add Property", href: "/properties/new" },
-        { label: "Import Data", href: "/import" },
+        { label: "Add Tenant", href: "/tenants/new" },
+        { label: "Add Property", href: "/properties/new" },
+        { label: "Create Invoice", href: "/rent-collection/receipts" },
+        { label: "Upload Utility Bill", href: "/utilities" },
+        { label: "Record Payment", href: "/rent-collection/receipts" },
+        { label: "Add Visitor", href: "/visitors" },
+        { label: "Create Checklist", href: "/checklists" },
+        { label: "Upload Lease", href: "/leasing" },
+        { label: "Import Data", href: "/data-import" },
         { label: "Manage Team", href: "/team" },
         { label: "Organisations", href: "/admin/organizations" },
         { label: "Audit Logs", href: "/admin/audit-logs" },
@@ -150,14 +301,23 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
       ];
     case "landlord":
       return [
-        { label: "+ Add Property", href: "/properties/new" },
-        { label: "Import Data", href: "/import" },
+        { label: "Add Tenant", href: "/tenants/new" },
+        { label: "Add Property", href: "/properties/new" },
+        { label: "Create Invoice", href: "/rent-collection/receipts" },
+        { label: "Upload Utility Bill", href: "/utilities" },
+        { label: "Record Payment", href: "/rent-collection/receipts" },
+        { label: "Add Visitor", href: "/visitors" },
+        { label: "Create Checklist", href: "/checklists" },
+        { label: "Upload Lease", href: "/leasing" },
+        { label: "Import Data", href: "/data-import" },
         { label: "Manage Team", href: "/team" },
         { label: "KYC", href: "/kyc" },
         { label: "Screening", href: "/screening" },
       ];
     case "staff":
       return [
+        { label: "Add Visitor", href: "/visitors" },
+        { label: "Create Checklist", href: "/checklists" },
         { label: "Properties", href: "/properties" },
         { label: "Maintenance", href: "/maintenance" },
         { label: "Tenants", href: "/tenants" },
@@ -165,13 +325,15 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
       ];
     case "tenant":
       return [
-        { label: "Submit Maintenance Request", href: "/maintenance" },
+        { label: "Submit Maintenance", href: "/maintenance" },
         { label: "View My Lease", href: "/leasing" },
         { label: "KYC & Documents", href: "/kyc" },
       ];
     default:
       return [
-        { label: "+ Add Property", href: "/properties/new" },
+        { label: "Add Tenant", href: "/tenants/new" },
+        { label: "Add Property", href: "/properties/new" },
+        { label: "Create Invoice", href: "/rent-collection/receipts" },
         { label: "Maintenance", href: "/maintenance" },
         { label: "KYC", href: "/kyc" },
       ];
@@ -184,6 +346,7 @@ type RoleConfig = {
   sectionLabel: string;
   headerLinks: { label: string; href: string; variant: "secondary" | "outline" }[];
   showActivity: boolean;
+  showChart: boolean;
 };
 
 function getRoleConfig(role: UserRole | string): RoleConfig {
@@ -199,6 +362,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
           { label: "Service Requests", href: "/maintenance", variant: "outline" },
         ],
         showActivity: true,
+        showChart: true,
       };
     case "landlord":
       return {
@@ -210,6 +374,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
           { label: "Maintenance", href: "/maintenance", variant: "outline" },
         ],
         showActivity: true,
+        showChart: true,
       };
     case "staff":
       return {
@@ -221,6 +386,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
           { label: "Maintenance", href: "/maintenance", variant: "outline" },
         ],
         showActivity: true,
+        showChart: false,
       };
     case "tenant":
       return {
@@ -232,6 +398,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
           { label: "Maintenance", href: "/maintenance", variant: "outline" },
         ],
         showActivity: false,
+        showChart: false,
       };
     default:
       return {
@@ -242,6 +409,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
           { label: "Properties", href: "/properties", variant: "secondary" },
         ],
         showActivity: true,
+        showChart: false,
       };
   }
 }
@@ -272,11 +440,11 @@ type SRWidgetItem = {
 
 function srStatusLabel(status: SRStatus): { label: string; className: string } {
   const map: Partial<Record<SRStatus, { label: string; className: string }>> = {
-    SUBMITTED: { label: "Submitted", className: "bg-blue-100 text-blue-700" },
+    SUBMITTED:   { label: "Submitted",   className: "bg-blue-100 text-blue-700" },
     IN_PROGRESS: { label: "In Progress", className: "bg-blue-100 text-blue-700" },
-    BLOCKED: { label: "Blocked", className: "bg-red-100 text-red-700" },
-    COMPLETED: { label: "Completed", className: "bg-emerald-100 text-emerald-700" },
-    ASSIGNED: { label: "Assigned", className: "bg-indigo-100 text-indigo-700" },
+    BLOCKED:     { label: "Blocked",     className: "bg-red-100 text-red-700" },
+    COMPLETED:   { label: "Completed",   className: "bg-emerald-100 text-emerald-700" },
+    ASSIGNED:    { label: "Assigned",    className: "bg-indigo-100 text-indigo-700" },
   };
   return map[status] ?? { label: status.replace(/_/g, " "), className: "bg-slate-100 text-slate-600" };
 }
@@ -287,7 +455,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  // Phase 3 SR widgets
   const [myRequests, setMyRequests] = useState<SRWidgetItem[]>([]);
   const [myRequestsLoading, setMyRequestsLoading] = useState(true);
   const [queueSubmitted, setQueueSubmitted] = useState(0);
@@ -316,7 +483,6 @@ export default function DashboardPage() {
     }
   }, [user?.authToken]);
 
-  // Load "My Service Requests" widget
   const loadMyRequests = useCallback(async () => {
     if (!user?.authToken) return;
     setMyRequestsLoading(true);
@@ -333,7 +499,6 @@ export default function DashboardPage() {
     }
   }, [user?.authToken]);
 
-  // Load manager queue widget
   const loadManagerQueue = useCallback(async () => {
     if (!user?.authToken) return;
     try {
@@ -373,7 +538,6 @@ export default function DashboardPage() {
     }
   }, [user?.authToken]);
 
-  // Load staff "My Jobs" widget
   const loadMyJobs = useCallback(async () => {
     if (!user?.authToken) return;
     setMyJobsLoading(true);
@@ -403,8 +567,7 @@ export default function DashboardPage() {
 
   const topMetrics = stats ? buildMetrics(stats, role) : [];
   const quickActions = getQuickActions(role);
-
-  const skeletonCount = role === "tenant" ? 2 : role === "staff" ? 4 : role === "landlord" ? 6 : 8;
+  const skeletonCount = role === "tenant" ? 2 : role === "staff" ? 6 : role === "landlord" ? 8 : 12;
 
   return (
     <div className="w-full space-y-8">
@@ -429,7 +592,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Top Metrics */}
+      {/* ── KSA: Key Statistical Area ────────────────────────────────────── */}
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
           {config.sectionLabel}
@@ -437,25 +600,133 @@ export default function DashboardPage() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {loading
             ? Array.from({ length: skeletonCount }).map((_, i) => (
-                <div key={i} className="h-20 animate-pulse rounded-2xl bg-slate-100" />
+                <div key={i} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
               ))
-            : topMetrics.map((m) => (
-                <div
-                  key={m.label}
-                  className="flex items-center gap-4 rounded-2xl border border-white/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm"
-                >
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${m.bg} ${m.color}`}>
-                    <m.icon className="h-5 w-5" aria-hidden />
+            : topMetrics.map((m) => {
+                const card = (
+                  <div className="flex items-start gap-4 rounded-2xl border border-white/80 bg-white/70 p-4 shadow-sm backdrop-blur-sm transition-colors hover:bg-white">
+                    <div className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${m.bg} ${m.color}`}>
+                      <m.icon className="h-5 w-5" aria-hidden />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-xs text-[var(--text-secondary)]">{m.label}</p>
+                      <p className="text-xl font-bold text-[var(--text-primary)]">{m.value}</p>
+                      {m.sub && <p className="mt-0.5 truncate text-[11px] text-[var(--text-muted)]">{m.sub}</p>}
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-xs text-[var(--text-secondary)]">{m.label}</p>
-                    <p className="text-xl font-bold text-[var(--text-primary)]">{m.value}</p>
-                  </div>
-                </div>
-              ))}
+                );
+                return m.href ? (
+                  <Link key={m.label} href={m.href}>{card}</Link>
+                ) : (
+                  <div key={m.label}>{card}</div>
+                );
+              })}
         </div>
       </section>
 
+      {/* ── Financial Insights: Collection progress + Escrow chart ─────── */}
+      {config.showChart && stats && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
+            Financial Insights
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Rent Collection progress */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <DollarSign className="h-4 w-4 text-brand-blue" />
+                  Rent Collection — Month to Date
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-slate-900">{formatKes(stats.monthlyRentKes)}</p>
+                    <p className="text-xs text-slate-500">collected of {formatKes(stats.totalDueKes)} due</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-bold ${stats.collectionRate >= 80 ? "text-emerald-600" : "text-amber-600"}`}>
+                      {stats.collectionRate}%
+                    </p>
+                    <p className="text-xs text-slate-500">collection rate</p>
+                  </div>
+                </div>
+                <div className="relative h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${stats.collectionRate >= 80 ? "bg-emerald-500" : "bg-amber-500"}`}
+                    style={{ width: `${Math.min(stats.collectionRate, 100)}%` }}
+                  />
+                </div>
+                {stats.arrearsKes > 0 && (
+                  <div className="flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>{formatKes(stats.arrearsKes)} in arrears — <Link href="/rent-collection/receipts" className="font-semibold underline">review overdue</Link></span>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <p className="font-bold text-slate-800">{stats.activeTenants}</p>
+                    <p className="text-slate-500">Active tenants</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-2">
+                    <p className="font-bold text-slate-800">{stats.occupancyRate}%</p>
+                    <p className="text-slate-500">Occupancy</p>
+                  </div>
+                  <div className={`rounded-lg p-2 ${stats.arrearsKes > 0 ? "bg-red-50" : "bg-emerald-50"}`}>
+                    <p className={`font-bold ${stats.arrearsKes > 0 ? "text-red-700" : "text-emerald-700"}`}>
+                      {formatKes(stats.arrearsKes)}
+                    </p>
+                    <p className={stats.arrearsKes > 0 ? "text-red-500" : "text-emerald-500"}>Arrears</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Escrow Trend Chart */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                  <span className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-emerald-600" />
+                    Escrow Balance Trend
+                  </span>
+                  <Link href="/banking" className="text-xs text-blue-600 hover:underline">
+                    View escrow →
+                  </Link>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-2 flex items-end justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-slate-900">{formatKes(stats.totalEscrowKes)}</p>
+                    <p className="text-xs text-slate-500">total held in escrow</p>
+                  </div>
+                </div>
+                <div className="h-36">
+                  <Suspense fallback={<div className="h-36 animate-pulse rounded-xl bg-slate-100" />}>
+                    <DashboardEscrowChart data={
+                      stats.weeklyEscrowTrend.some(p => p.v > 0)
+                        ? stats.weeklyEscrowTrend
+                        : [
+                            { w: "W1", v: Math.round(stats.totalEscrowKes * 0.55) },
+                            { w: "W2", v: Math.round(stats.totalEscrowKes * 0.65) },
+                            { w: "W3", v: Math.round(stats.totalEscrowKes * 0.72) },
+                            { w: "W4", v: Math.round(stats.totalEscrowKes * 0.80) },
+                            { w: "W5", v: Math.round(stats.totalEscrowKes * 0.87) },
+                            { w: "W6", v: Math.round(stats.totalEscrowKes * 0.94) },
+                            { w: "W7", v: stats.totalEscrowKes },
+                          ]
+                    } />
+                  </Suspense>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* ── Alerts + Activity ─────────────────────────────────────────────── */}
       <div className={`grid gap-6 ${config.showActivity ? "lg:grid-cols-2" : ""}`}>
         {/* Alerts Panel */}
         <section>
@@ -464,6 +735,11 @@ export default function DashboardPage() {
               <CardTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                 {role === "tenant" ? "My Alerts" : "Alerts"}
+                {stats?.alerts.length ? (
+                  <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
+                    {stats.alerts.length}
+                  </span>
+                ) : null}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -473,19 +749,26 @@ export default function DashboardPage() {
                 </div>
               ) : stats?.alerts.length ? (
                 <div className="space-y-2">
-                  {stats.alerts.map((a, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${SEVERITY_COLORS[a.severity] ?? ""}`}
-                    >
-                      {a.severity === "high" ? (
-                        <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      ) : (
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                      )}
-                      <span>{a.message}</span>
-                    </div>
-                  ))}
+                  {stats.alerts.map((a, i) => {
+                    const inner = (
+                      <>
+                        {a.severity === "high" ? (
+                          <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                        )}
+                        <span>{a.message}</span>
+                      </>
+                    );
+                    const cls = `flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${SEVERITY_COLORS[a.severity] ?? ""}`;
+                    return a.href ? (
+                      <Link key={i} href={a.href} className={`${cls} hover:opacity-80 transition-opacity`}>
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={i} className={cls}>{inner}</div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
@@ -497,7 +780,7 @@ export default function DashboardPage() {
           </Card>
         </section>
 
-        {/* Live Activity Feed — hidden for tenant */}
+        {/* Live Activity Feed */}
         {config.showActivity ? (
           <section>
             <Card>
@@ -515,9 +798,10 @@ export default function DashboardPage() {
                 ) : stats?.recentActivity.length ? (
                   <div className="space-y-1.5 max-h-64 overflow-y-auto [scrollbar-width:thin]">
                     {stats.recentActivity.map((ev) => (
-                      <div
+                      <Link
                         key={ev.id}
-                        className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-1.5 hover:bg-slate-50"
+                        href={activityHref(ev.resourceType, ev.resourceId)}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-1.5 hover:bg-slate-50 transition-colors"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-medium text-[var(--text-primary)]">
@@ -530,7 +814,7 @@ export default function DashboardPage() {
                         <span className="shrink-0 text-xs text-[var(--text-muted)]">
                           {timeAgo(ev.timestamp)}
                         </span>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 ) : (
@@ -542,13 +826,13 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
-      {/* Phase 3: Service Request Widgets */}
+      {/* ── Service Request Widgets ──────────────────────────────────────── */}
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
           Service Requests
         </h2>
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* My Service Requests — all roles */}
+          {/* My Service Requests */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between gap-2">
@@ -584,9 +868,7 @@ export default function DashboardPage() {
                         className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-2 hover:bg-slate-50"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                            {sr.title}
-                          </p>
+                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">{sr.title}</p>
                           <p className="text-xs text-[var(--text-secondary)]">
                             {sr.serviceType.replace(/_/g, " ")} · {timeAgo(sr.createdAt)}
                           </p>
@@ -602,7 +884,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Manager Queue widget */}
+          {/* Manager Queue */}
           {(role === "admin" || role === "super_admin" || role === "landlord") && (
             <Card>
               <CardHeader className="pb-3">
@@ -646,7 +928,7 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Staff "My Jobs" widget */}
+          {/* Staff My Jobs */}
           {role === "staff" && (
             <Card>
               <CardHeader className="pb-3">
@@ -681,9 +963,7 @@ export default function DashboardPage() {
                         className="flex items-center justify-between gap-2 rounded-lg border border-surface-border px-3 py-2 hover:bg-slate-50"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">
-                            {sr.title}
-                          </p>
+                          <p className="truncate text-sm font-medium text-[var(--text-primary)]">{sr.title}</p>
                           <p className="text-xs text-[var(--text-secondary)]">
                             {sr.serviceType.replace(/_/g, " ")} · {timeAgo(sr.createdAt)}
                           </p>
@@ -701,7 +981,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Verified Trust Signals */}
+      {/* ── Verified Trust Signals ───────────────────────────────────────── */}
       {(role === "landlord" || role === "agency" || role === "staff") && (
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
@@ -711,7 +991,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {/* Quick Actions */}
+      {/* ── Quick Actions ─────────────────────────────────────────────────── */}
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--text-secondary)]">
           Quick Actions

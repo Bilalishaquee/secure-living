@@ -20,7 +20,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   const rows = await prisma.lease.findMany({ where, orderBy: { createdAt: "desc" } });
 
   // Enrich each lease with tenant name + email from AppUser
-  const tenantIds = [...new Set(rows.map((r) => r.tenantUserId))];
+  const tenantIds = Array.from(new Set(rows.map((r) => r.tenantUserId)));
   const users = tenantIds.length
     ? await prisma.appUser.findMany({
         where: { id: { in: tenantIds } },

@@ -406,12 +406,13 @@ model ChecklistTemplate {
 }
 
 model ChecklistTemplateItem {
-  id         String @id @default(cuid())
-  templateId String
-  section    String // also used as "Area"
-  item       String
-  defaultQty Int    @default(1)
-  order      Int
+  id             String  @id @default(cuid())
+  templateId     String
+  section        String // also used as "Area"
+  item           String
+  defaultQty     Int     @default(1)
+  order          Int
+  isUtilityMeter Boolean @default(false) // numeric meter readings instead of condition selects
 
   template ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -442,21 +443,24 @@ model TenantChecklist {
 }
 
 model TenantChecklistEntry {
-  id             String  @id @default(cuid())
-  checklistId    String
-  itemId         String
-  condition      String // legacy/general condition (mirrors statusOut when present)
-  qty            Int?
-  statusIn       String? // condition at move-in
-  statusOut      String? // condition at move-out
-  chargeKes      Float? // deposit-deduction charge for this row
-  responsibility String? // TENANT, LANDLORD, WEAR_TEAR, CONTRACTOR, UNKNOWN
-  actionRequired String? // REPAIR, REPLACE, MONITOR, NO_ACTION
-  note           String?
-  photoUrl       String?
-  photoInUrl     String?
-  photoOutUrl    String?
-  customFields   Json?
+  id                 String    @id @default(cuid())
+  checklistId        String
+  itemId             String
+  condition          String // legacy/general condition (mirrors statusOut when present)
+  qty                Int?
+  statusIn           String? // condition at move-in
+  statusOut          String? // condition at move-out
+  chargeKes          Float? // deposit-deduction charge for this row
+  replacementCostKes Float? // estimated replacement cost for furnished unit items
+  followUpDate       DateTime? // scheduled follow-up date for maintenance items
+  evidenceScore      String? // STRONG, MEDIUM, WEAK — based on uploaded evidence quality
+  responsibility     String? // TENANT, LANDLORD, WEAR_TEAR, CONTRACTOR, UNKNOWN
+  actionRequired     String? // REPAIR, REPLACE, MONITOR, NO_ACTION
+  note               String?
+  photoUrl           String?
+  photoInUrl         String?
+  photoOutUrl        String?
+  customFields       Json?
 
   checklist TenantChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
 
@@ -1124,6 +1128,8 @@ model Property {
   mortgageMonthlyPaymentKes Float?
   mortgageStartDate         DateTime?
   mortgageMaturityDate      DateTime?
+  caretaker                 String? // name/contact of the on-site caretaker
+  utilityProvider           String? // primary utility provider name for this property
   listingUrl                String?
   shortTermRentalPlatform   String?
   tagsCsv                   String?
@@ -1156,15 +1162,18 @@ model Property {
 }
 
 model Organization {
-  id        String   @id
-  name      String
-  type      String
-  country   String
-  email     String
-  phone     String?
-  status    String   @default("active")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String   @id
+  name                  String
+  type                  String
+  country               String
+  email                 String
+  phone                 String?
+  kraPin                String? // KRA Personal Identification Number for tax compliance
+  bankPayoutAccount     String? // bank account details for owner payouts
+  preferredReportingDate Int?   // preferred day of month (1–31) for financial reports
+  status                String   @default("active")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   branches        Branch[]
   roleAssignments UserRoleAssignment[]

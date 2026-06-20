@@ -6,6 +6,15 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  productionBrowserSourceMaps: false,
+
+  webpack(config, { dev }) {
+    if (dev) {
+      // Use inline source maps in dev to avoid 404s for missing .map files
+      config.devtool = "eval-source-map";
+    }
+    return config;
+  },
 
   // Proxy all /api/* calls to the backend so the browser never makes
   // cross-origin requests — no CORS issues in either environment.

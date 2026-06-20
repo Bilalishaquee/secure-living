@@ -2,7 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 
-type PresetItem = { section: string; item: string; defaultQty?: number };
+type PresetItem = { section: string; item: string; defaultQty?: number; isUtilityMeter?: boolean };
 
 type Preset = {
   key: string;
@@ -43,8 +43,8 @@ const PRESETS: Preset[] = [
       { section: "Electrical", item: "Wall Sockets & Switches" },
       { section: "Plumbing", item: "General Plumbing, Pipes & Fittings" },
       { section: "Safety", item: "Fire Extinguisher" },
-      { section: "Utility", item: "Prepay Electricity Meter (Reading)" },
-      { section: "Utility", item: "Water Meter (Reading)" },
+      { section: "Utility", item: "Prepay Electricity Meter (Reading)", isUtilityMeter: true },
+      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
     ],
   },
   {
@@ -68,8 +68,8 @@ const PRESETS: Preset[] = [
       { section: "Linen", item: "Curtains", defaultQty: 4 },
       { section: "Linen", item: "Bedding" },
       { section: "Doors & Keys", item: "Door Keys", defaultQty: 3 },
-      { section: "Utility", item: "Electricity Meter (Reading)" },
-      { section: "Utility", item: "Water Meter (Reading)" },
+      { section: "Utility", item: "Electricity Meter (Reading)", isUtilityMeter: true },
+      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
     ],
   },
   {
@@ -92,8 +92,8 @@ const PRESETS: Preset[] = [
       { section: "Electrical", item: "Distribution Board" },
       { section: "Electrical", item: "Sockets & Switches" },
       { section: "Plumbing", item: "Washrooms & Fittings" },
-      { section: "Utility", item: "Electricity Meter (Reading)" },
-      { section: "Utility", item: "Water Meter (Reading)" },
+      { section: "Utility", item: "Electricity Meter (Reading)", isUtilityMeter: true },
+      { section: "Utility", item: "Water Meter (Reading)", isUtilityMeter: true },
     ],
   },
   {
@@ -172,6 +172,7 @@ export const POST = withErrorHandler(async (req: Request) => {
           item: it.item,
           defaultQty: it.defaultQty ?? 1,
           order: idx,
+          isUtilityMeter: it.isUtilityMeter ?? false,
         })),
       },
     },

@@ -404,7 +404,11 @@ function CreateRequestModal({
 
       await fetch(`/api/v1/service-requests/${srId}/submit`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${user.authToken}` },
+        headers: {
+          Authorization: `Bearer ${user.authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
       });
 
       toast("Service request created and submitted", "success");

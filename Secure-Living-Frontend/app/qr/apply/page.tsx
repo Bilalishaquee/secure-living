@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CheckCircle, XCircle, Clock, Home, Phone, Mail } from "lucide-react";
 
@@ -23,7 +23,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; colo
   EXPIRED:   { label: "Expired",         icon: <XCircle className="h-6 w-6" />,     color: "text-red-600",    bg: "bg-red-50 border-red-200" },
 };
 
-export default function QrApplyPage() {
+function QrApplyContent() {
   const params = useSearchParams();
   const token = params.get("token");
 
@@ -78,7 +78,6 @@ export default function QrApplyPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
       <div className="w-full max-w-md space-y-6">
-        {/* Header */}
         <div className="text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 shadow-lg">
             <Home className="h-8 w-8 text-white" />
@@ -87,7 +86,6 @@ export default function QrApplyPage() {
           <p className="mt-1 text-sm text-slate-500">Rental Application Portal</p>
         </div>
 
-        {/* Status card */}
         <div className={`rounded-2xl border p-5 ${statusCfg.bg}`}>
           <div className={`flex items-center gap-3 ${statusCfg.color}`}>
             {statusCfg.icon}
@@ -100,7 +98,6 @@ export default function QrApplyPage() {
           )}
         </div>
 
-        {/* Applicant details */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-base font-semibold text-slate-700">Application Details</h2>
           <div className="space-y-3">
@@ -160,5 +157,20 @@ export default function QrApplyPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function QrApplyPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="text-center">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+          <p className="mt-4 text-sm text-slate-500">Loading…</p>
+        </div>
+      </div>
+    }>
+      <QrApplyContent />
+    </Suspense>
   );
 }

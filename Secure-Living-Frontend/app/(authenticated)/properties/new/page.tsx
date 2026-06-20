@@ -61,6 +61,8 @@ export default function NewPropertyPage() {
     insurancePolicyNumber: "",
     insuranceExpiryDate: "",
     hoaFeeMonthlyKes: "",
+    caretaker: "",
+    utilityProvider: "",
   });
 
   const progress = useMemo(() => Math.round((step / 4) * 100), [step]);
@@ -134,6 +136,8 @@ export default function NewPropertyPage() {
         insurancePolicyNumber: f.insurancePolicyNumber || undefined,
         insuranceExpiryDate: f.insuranceExpiryDate ? new Date(f.insuranceExpiryDate).toISOString() : undefined,
         hoaFeeMonthlyKes: f.hoaFeeMonthlyKes ? Number(f.hoaFeeMonthlyKes) : undefined,
+        caretaker: f.caretaker || undefined,
+        utilityProvider: f.utilityProvider || undefined,
         status: f.status as "active",
       }),
     });
@@ -144,6 +148,7 @@ export default function NewPropertyPage() {
     }
     toast("Property created", "success");
     const j = (await res.json()) as { data: { id: string } };
+    router.refresh();
     router.push(`/properties/${j.data.id}`);
   }
 
@@ -220,6 +225,8 @@ export default function NewPropertyPage() {
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={f.managementMode === "self_managed"} onChange={()=>setF((v)=>({ ...v, managementMode: "self_managed" }))} />Self-Managed</label>
               <label className="flex items-center gap-2 text-sm"><input type="radio" checked={f.managementMode === "full_service"} onChange={()=>setF((v)=>({ ...v, managementMode: "full_service" }))} />Full Service</label>
             </div>
+            <input className="rounded-xl border border-surface-border px-3 py-2 text-sm" placeholder="Caretaker name / contact" value={f.caretaker} onChange={(e)=>setF((v)=>({ ...v, caretaker: e.target.value }))} />
+            <input className="rounded-xl border border-surface-border px-3 py-2 text-sm" placeholder="Utility provider (e.g. Kenya Power)" value={f.utilityProvider} onChange={(e)=>setF((v)=>({ ...v, utilityProvider: e.target.value }))} />
           </div>
         ) : null}
 

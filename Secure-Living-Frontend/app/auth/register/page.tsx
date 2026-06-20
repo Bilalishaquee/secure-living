@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Building2, Check, House, KeyRound, ShieldCheck, Users } from "lucide-react";
 import { AuthLayout } from "@/components/layout/AuthLayout";
@@ -70,10 +70,18 @@ export default function RegisterPage() {
   const [orgName, setOrgName] = useState("");
   const [dir, setDir] = useState(1);
 
-  if (hydrated && user) {
-    router.replace("/dashboard");
-    return null;
-  }
+  useEffect(() => {
+    if (hydrated && user) {
+      router.replace("/dashboard");
+    }
+  }, [hydrated, user, router]);
+
+  // Staff never create their own org — they join an existing one
+  useEffect(() => {
+    if (role === "staff") setOrgMode("join");
+  }, [role]);
+
+  if (hydrated && user) return null;
 
   const nextFrom1 = () => {
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !phone.trim()) {
@@ -347,36 +355,43 @@ export default function RegisterPage() {
                   <p className="text-sm text-[var(--text-secondary)]">
                     Set up your organization access to continue.
                   </p>
-                  <div className="flex gap-2 rounded-xl bg-surface-gray p-1">
-                    <button
-                      type="button"
-                      onClick={() => setOrgMode("join")}
-                      className={cn(
-                        "flex-1 rounded-lg py-2 text-sm font-medium transition",
-                        orgMode === "join" ? "bg-white shadow-sm" : "text-[var(--text-secondary)]"
-                      )}
-                    >
-                      Join existing org
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrgMode("create")}
-                      className={cn(
-                        "flex-1 rounded-lg py-2 text-sm font-medium transition",
-                        orgMode === "create" ? "bg-white shadow-sm" : "text-[var(--text-secondary)]"
-                      )}
-                    >
-                      Create organization
-                    </button>
-                  </div>
+                  {role !== "staff" ? (
+                    <div className="flex gap-2 rounded-xl bg-surface-gray p-1">
+                      <button
+                        type="button"
+                        onClick={() => setOrgMode("join")}
+                        className={cn(
+                          "flex-1 rounded-lg py-2 text-sm font-medium transition",
+                          orgMode === "join" ? "bg-white shadow-sm" : "text-[var(--text-secondary)]"
+                        )}
+                      >
+                        Join existing org
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrgMode("create")}
+                        className={cn(
+                          "flex-1 rounded-lg py-2 text-sm font-medium transition",
+                          orgMode === "create" ? "bg-white shadow-sm" : "text-[var(--text-secondary)]"
+                        )}
+                      >
+                        Create organization
+                      </button>
+                    </div>
+                  ) : null}
                   {orgMode === "join" ? (
                     <div>
-                      <label className="mb-1.5 block text-sm font-medium">Organization code</label>
+                      <label className="mb-1.5 block text-sm font-medium">
+                        Organization ID
+                        {role === "staff" ? (
+                          <span className="ml-1 font-normal text-[var(--text-muted)]">(optional — leave blank to join the main workspace)</span>
+                        ) : null}
+                      </label>
                       <input
                         className="w-full rounded-xl border border-surface-border px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
                         value={orgCode}
                         onChange={(e) => setOrgCode(e.target.value)}
-                        placeholder="e.g. MWA-NAI-2026"
+                        placeholder={role === "staff" ? "Leave blank or enter org ID from your admin" : "e.g. org1"}
                       />
                     </div>
                   ) : (

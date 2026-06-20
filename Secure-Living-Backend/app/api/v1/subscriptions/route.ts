@@ -8,6 +8,28 @@ import { createUserSubscriptionSchema } from "@/lib/server/validation";
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+
+  const url = new URL(req.url);
+  const current = url.searchParams.get("current") === "true";
+
+  if (current) {
+    // Self-service: return the caller's own active package subscription (no elevated perm needed)
+    const orgId = actor.orgIds?.[0] ?? null;
+    const sub = await prisma.userPackageSubscription.findFirst({
+      where: {
+        OR: [
+          { userId: actor.userId },
+          ...(orgId ? [{ organizationId: orgId }] : []),
+        ],
+        status: { in: ["active", "trialing"] },
+      },
+      include: { package: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return Response.json({ data: sub ?? null });
+  }
+
+  // Admin list — requires elevated permission
   const denied = requirePermission(actor, "org:manage");
   if (denied) return denied;
   const rows = await prisma.userSubscription.findMany({ orderBy: { createdAt: "desc" } });
