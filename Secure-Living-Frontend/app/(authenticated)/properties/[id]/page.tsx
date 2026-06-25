@@ -471,19 +471,17 @@ export default function PropertyDetailPage({ params }: Props) {
               onClick={() => { setSrTitle(""); setSrDesc(""); setShowSRModal("repair"); }}>
               <Hammer className="h-4 w-4" aria-hidden /> Request repair
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="justify-start"
-              onClick={() => setShowModeSwitch(true)}
-            >
-              {property.managementMode === "self_managed" ? (
+            {property.managementMode === "self_managed" ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="justify-start"
+                onClick={() => setShowModeSwitch(true)}
+              >
                 <ToggleLeft className="h-4 w-4" aria-hidden />
-              ) : (
-                <ToggleRight className="h-4 w-4 text-purple-600" aria-hidden />
-              )}
-              {property.managementMode === "self_managed" ? "Upgrade to Full Service" : "Switch to Self-Managed"}
-            </Button>
+                Need Management Assistance?
+              </Button>
+            ) : null}
             <Button type="button" className="justify-start" asChild>
               <Link href="/transactions">
                 <Wallet className="h-4 w-4" aria-hidden /> Escrow &amp; transactions
@@ -968,10 +966,10 @@ export default function PropertyDetailPage({ params }: Props) {
 
           {property.managementMode === "self_managed" ? (
             <div className="rounded-xl border border-purple-200 bg-purple-50 p-4">
-              <h3 className="font-semibold text-purple-800">Upgrade to Full Service</h3>
+              <h3 className="font-semibold text-purple-800">Need Management Assistance?</h3>
               <p className="mt-1 text-sm text-purple-700">
-                Secure Living takes over day-to-day operations: tenant sourcing, rent collection, maintenance coordination.
-                You retain oversight and approve major decisions. A management fee applies (typically 8% of rent).
+                Explore management support options for self-managed properties. This is not a takeover flow and is
+                hidden from agency-managed and third-party-managed properties.
               </p>
               <ul className="mt-2 space-y-1 text-sm text-purple-700">
                 <li>✓ Dedicated property manager assigned</li>
@@ -984,7 +982,7 @@ export default function PropertyDetailPage({ params }: Props) {
                 onClick={() => { void handleModeSwitch("full_service"); }}
                 disabled={saving}
               >
-                {saving ? "Switching…" : "Upgrade to Full Service"}
+                {saving ? "Switching..." : "Explore Management Options"}
               </Button>
             </div>
           ) : (

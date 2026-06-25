@@ -154,7 +154,7 @@ const landlordGroups: NavGroup[] = [
     items: [
       { href: "/investments", label: "Investments", icon: LineChart },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
-      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/reports", label: "Financial Reports", icon: BarChart2 },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
@@ -186,7 +186,7 @@ const superAdminGroups: NavGroup[] = [
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Wallets & Payouts", icon: BarChart3 },
       { href: "/expenses", label: "Expenses", icon: Receipt },
-      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/reports", label: "Financial Reports", icon: BarChart2 },
     ],
   },
   {
@@ -246,7 +246,7 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "Support",
     items: [
-      { href: "/admin/support", label: "Support Tickets", icon: Ticket },
+      { href: "/admin/support", label: "Support", icon: Ticket },
     ],
   },
 ];
@@ -273,7 +273,7 @@ const adminGroups: NavGroup[] = [
       { href: "/accounting", label: "Accounting", icon: ReceiptText },
       { href: "/banking", label: "Wallets & Payouts", icon: BarChart3 },
       { href: "/expenses", label: "Expenses", icon: Receipt },
-      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/reports", label: "Financial Reports", icon: BarChart2 },
     ],
   },
   {
@@ -424,7 +424,7 @@ const agencyGroups: NavGroup[] = [
   {
     label: "More",
     items: [
-      { href: "/reports", label: "Reports", icon: BarChart2 },
+      { href: "/reports", label: "Financial Reports", icon: BarChart2 },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },

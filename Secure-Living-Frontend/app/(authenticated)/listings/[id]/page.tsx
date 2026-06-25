@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Globe, X } from "lucide-react";
+import { ArrowLeft, Edit2, Globe } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { formatKes } from "@/lib/utils";
 
@@ -36,6 +37,16 @@ export default function ListingDetailPage({ params }: Props) {
   const [applications, setApplications] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"details" | "applications">("details");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    rentAmount: "",
+    availableFrom: "",
+    leaseDuration: "",
+    furnished: false,
+    petFriendly: false,
+  });
 
   async function load() {
     setLoading(true);
@@ -69,6 +80,44 @@ export default function ListingDetailPage({ params }: Props) {
     });
     if (res.ok) { toast("Listing withdrawn", "success"); load(); }
     else { const j = await res.json(); toast((j as { error?: string }).error ?? "Failed", "error"); }
+  }
+
+  function openEdit() {
+    if (!listing) return;
+    setEditForm({
+      title: String(listing.title ?? ""),
+      description: String(listing.description ?? ""),
+      rentAmount: String(listing.rentAmount ?? ""),
+      availableFrom: listing.availableFrom ? new Date(listing.availableFrom as string).toISOString().slice(0, 10) : "",
+      leaseDuration: String(listing.leaseDuration ?? ""),
+      furnished: Boolean(listing.furnished),
+      petFriendly: Boolean(listing.petFriendly),
+    });
+    setEditOpen(true);
+  }
+
+  async function handleEdit() {
+    const res = await fetch(`/api/v1/listings/${params.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
+      body: JSON.stringify({
+        title: editForm.title.trim(),
+        description: editForm.description.trim() || null,
+        rentAmount: Number(editForm.rentAmount),
+        availableFrom: editForm.availableFrom,
+        leaseDuration: editForm.leaseDuration.trim() || null,
+        furnished: editForm.furnished,
+        petFriendly: editForm.petFriendly,
+      }),
+    });
+    if (res.ok) {
+      toast("Listing updated", "success");
+      setEditOpen(false);
+      await load();
+    } else {
+      const j = await res.json();
+      toast((j as { error?: string }).error ?? "Failed to update listing", "error");
+    }
   }
 
   async function updateAppStatus(appId: string, status: string) {
@@ -106,7 +155,9 @@ export default function ListingDetailPage({ params }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openEdit} className="gap-2"><Edit2 className="h-4 w-4" /> Edit</Button>
           {status === "DRAFT" && <Button onClick={handlePublish} className="gap-2"><Globe className="h-4 w-4" /> Publish</Button>}
+          {status === "WITHDRAWN" && <Button onClick={handlePublish} className="gap-2"><Globe className="h-4 w-4" /> Republish</Button>}
           {status === "PUBLISHED" && <Button variant="ghost" onClick={handleWithdraw}>Withdraw</Button>}
         </div>
       </div>
@@ -201,6 +252,41 @@ export default function ListingDetailPage({ params }: Props) {
           </CardContent>
         </Card>
       )}
+
+      <Modal open={editOpen} onOpenChange={setEditOpen} title="Edit Listing">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Title</label>
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+            <textarea className="min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Monthly Rent (KES)</label>
+              <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.rentAmount} onChange={(e) => setEditForm((f) => ({ ...f, rentAmount: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Available From</label>
+              <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.availableFrom} onChange={(e) => setEditForm((f) => ({ ...f, availableFrom: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Lease Duration</label>
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={editForm.leaseDuration} onChange={(e) => setEditForm((f) => ({ ...f, leaseDuration: e.target.value }))} />
+          </div>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={editForm.furnished} onChange={(e) => setEditForm((f) => ({ ...f, furnished: e.target.checked }))} /> Furnished</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={editForm.petFriendly} onChange={(e) => setEditForm((f) => ({ ...f, petFriendly: e.target.checked }))} /> Pet friendly</label>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setEditOpen(false)} className="flex-1">Cancel</Button>
+            <Button onClick={handleEdit} disabled={!editForm.title || !editForm.rentAmount || !editForm.availableFrom} className="flex-1">Save Changes</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SrStatus } from "@prisma/client";
+import { ProviderCategory, SrStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
@@ -32,6 +32,17 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const parsed = await parseBody(req, assignSchema);
   if (!parsed.ok) return parsed.response;
+
+  const provider = await prisma.serviceProvider.findFirst({
+    where: { userId: parsed.data.assignedTo, status: "ACTIVE" },
+  });
+  if (!provider) return jsonError(400, "Assigned user must be an active service provider");
+  if (existing.serviceMode === "INTERNAL" && provider.category !== ProviderCategory.INTERNAL) {
+    return jsonError(400, "Internal service requests can only be assigned to internal providers");
+  }
+  if (existing.serviceMode === "MARKETPLACE" && provider.category !== ProviderCategory.VERIFIED_MARKETPLACE) {
+    return jsonError(400, "Marketplace service requests can only be assigned to verified marketplace providers");
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     const sr = await tx.serviceRequest.update({

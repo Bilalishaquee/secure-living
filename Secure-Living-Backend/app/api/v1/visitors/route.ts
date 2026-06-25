@@ -46,6 +46,15 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  if (body.phone) {
+    const existing = await prisma.visitor.findFirst({
+      where: { organizationId: body.organizationId, phone: body.phone },
+    });
+    if (existing) {
+      return Response.json({ error: "A visitor with this phone number already exists in this organization" }, { status: 409 });
+    }
+  }
+
   const row = await prisma.visitor.create({
     data: {
       id: randomUUID(),

@@ -11,7 +11,7 @@ const cards = [
     title: "For landlords",
     body: "Portfolio tools, escrow releases, and staff access — built for owners in Kenya and abroad.",
     cta: "Get started",
-    href: "/auth/register",
+    href: "/auth/register?role=landlord",
   },
   {
     id: "tenants",
@@ -19,7 +19,7 @@ const cards = [
     title: "For tenants",
     body: "Protected rent rails, KYC, and tenancy status without off-platform payment pressure.",
     cta: "Create account",
-    href: "/auth/register",
+    href: "/auth/register?role=tenant",
   },
   {
     id: "professionals",
@@ -27,7 +27,7 @@ const cards = [
     title: "For professionals",
     body: "Join the verified network — matched work, milestones, and reputation you can prove.",
     cta: "Apply",
-    href: "/auth/register",
+    href: "/auth/register?role=staff",
   },
 ];
 
@@ -95,7 +95,7 @@ export function RoleCtaSection() {
             Set up a property workflow in minutes — verification, listings, and escrow in one place.
           </p>
           <Link
-            href="/auth/register"
+            href="/auth/register?role=landlord"
             className="mt-6 inline-flex items-center justify-center rounded-md bg-brand-blue px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-blue/90"
           >
             Get started free

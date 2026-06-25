@@ -266,11 +266,13 @@ function AssignProviderModal({
   onClose,
   onAssigned,
   srId,
+  serviceMode,
 }: {
   open: boolean;
   onClose: () => void;
   onAssigned: () => void;
   srId: string;
+  serviceMode?: string;
 }) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -283,13 +285,16 @@ function AssignProviderModal({
   useEffect(() => {
     if (!open || !user?.authToken) return;
     setFetching(true);
-    void fetch("/api/v1/providers?status=ACTIVE", {
+    const params = new URLSearchParams({ status: "ACTIVE" });
+    if (serviceMode === "INTERNAL") params.set("category", "INTERNAL");
+    if (serviceMode === "MARKETPLACE") params.set("category", "VERIFIED_MARKETPLACE");
+    void fetch(`/api/v1/providers?${params.toString()}`, {
       headers: { Authorization: `Bearer ${user.authToken}` },
     })
       .then((r) => r.json())
       .then((j: { data: Provider[] }) => setProviders(j.data ?? []))
       .finally(() => setFetching(false));
-  }, [open, user?.authToken]);
+  }, [open, serviceMode, user?.authToken]);
 
   const filtered = providers.filter(
     (p) =>
@@ -325,7 +330,13 @@ function AssignProviderModal({
       open={open}
       onOpenChange={(v) => { if (!v) onClose(); }}
       title="Assign Provider"
-      description="Search and select an active service provider"
+      description={
+        serviceMode === "INTERNAL"
+          ? "Only internal providers are shown for this request."
+          : serviceMode === "MARKETPLACE"
+            ? "Only verified marketplace providers are shown for this request."
+            : "Search and select an active service provider."
+      }
     >
       <div className="space-y-4">
         <input
@@ -616,6 +627,7 @@ export default function ServiceRequestDetailPage() {
   const [showReject, setShowReject] = useState(false);
   const [showDispute, setShowDispute] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
+  const [showResubmit, setShowResubmit] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.authToken || !id) return;
@@ -1114,6 +1126,22 @@ export default function ServiceRequestDetailPage() {
                 </Button>
               )}
 
+              {/* REJECTED -> Resubmit with rectification notes */}
+              {sr.srStatus === "REJECTED" && (
+                <>
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    This request was rejected. Add rectification notes before resubmitting it for approval.
+                  </div>
+                  <Button
+                    className="w-full"
+                    disabled={actionLoading}
+                    onClick={() => setShowResubmit(true)}
+                  >
+                    Resubmit for Approval
+                  </Button>
+                </>
+              )}
+
               {/* Any active → Cancel (manager) */}
               {isManager &&
                 ![
@@ -1142,6 +1170,7 @@ export default function ServiceRequestDetailPage() {
         onClose={() => setShowAssign(false)}
         onAssigned={() => void load()}
         srId={id}
+        serviceMode={sr.serviceMode}
       />
 
       <BlockModal
@@ -1212,6 +1241,22 @@ export default function ServiceRequestDetailPage() {
         label="Reason"
         confirmLabel="Reject"
         confirmVariant="outline"
+        loading={actionLoading}
+      />
+
+      <TextInputModal
+        open={showResubmit}
+        onClose={() => setShowResubmit(false)}
+        onConfirm={(text) => {
+          void simpleAction("resubmit", { rectificationNotes: text }).then(() => {
+            setShowResubmit(false);
+          });
+        }}
+        title="Resubmit Request"
+        description="Explain what has been corrected before this request is sent back for approval"
+        label="Rectification Notes"
+        confirmLabel="Resubmit"
+        confirmVariant="secondary"
         loading={actionLoading}
       />
 

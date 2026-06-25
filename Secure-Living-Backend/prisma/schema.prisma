@@ -605,6 +605,74 @@ model ServiceEnquiry {
 
 // â”€â”€â”€ Airbnb / Short-Stay Module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+model SupportTicket {
+  id              String   @id @default(cuid())
+  ticketNumber    String   @unique
+  organizationId  String?
+  userId          String?
+  name            String
+  email           String
+  phone           String?
+  category        String
+  priority        String   @default("NORMAL")
+  assignedTo      String?
+  status          String   @default("NEW")
+  sla             String?
+  internalNotes   String?
+  resolutionNotes String?
+  message         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([userId])
+  @@index([assignedTo])
+  @@index([status, createdAt])
+}
+
+model ContactRequest {
+  id             String   @id @default(cuid())
+  contactNumber  String   @unique
+  organizationId String?
+  name           String
+  email          String
+  phone          String?
+  message        String
+  source         String   @default("website")
+  assignedTo     String?
+  status         String   @default("NEW")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([assignedTo])
+  @@index([status, createdAt])
+}
+
+model CrmLead {
+  id                  String   @id @default(cuid())
+  leadNumber          String   @unique
+  organizationId      String?
+  name                String
+  email               String
+  phone               String?
+  message             String
+  leadType            String
+  priority            String   @default("NORMAL")
+  pipeline            String
+  propertyRequirement String?
+  budget              String?
+  preferredLocation   String?
+  status              String   @default("NEW")
+  assignedTo          String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([organizationId, status])
+  @@index([leadType, status])
+  @@index([assignedTo])
+}
+
 model ShortStayProperty {
   id             String   @id @default(cuid())
   unitId         String   @unique
@@ -1076,6 +1144,7 @@ model Unit {
   @@index([branchId])
   @@index([propertyId])
   @@index([organizationId, status])
+  @@unique([propertyId, unitNumber])
 }
 
 model Property {
@@ -1086,7 +1155,7 @@ model Property {
   ownerUserId               String?
   managerUserId             String?
   name                      String
-  propertyCode              String?
+  propertyCode              String?   @unique
   propertyType              String
   ownershipType             String?
   addressLine1              String
@@ -1600,7 +1669,7 @@ model SlaPolicy {
 
 model ServiceProvider {
   id                String           @id @default(cuid())
-  userId            String
+  userId            String           @unique
   organizationId    String?
   category          ProviderCategory @default(LANDLORD_PREFERRED)
   status            ProviderStatus   @default(PENDING_APPROVAL)
@@ -2351,6 +2420,7 @@ model Visitor {
   @@index([propertyId])
   @@index([unitId])
   @@index([phone])
+  @@unique([organizationId, phone])
 }
 
 model VisitorLog {

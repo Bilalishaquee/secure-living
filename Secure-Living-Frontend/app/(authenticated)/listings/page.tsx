@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Megaphone, Plus, ExternalLink } from "lucide-react";
+import { Edit2, Globe, Megaphone, Plus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
@@ -103,6 +103,20 @@ export default function ListingsPage() {
     }
   }
 
+  async function republishListing(listingId: string) {
+    const res = await fetch(`/api/v1/listings/${listingId}/publish`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${user?.authToken}` },
+    });
+    if (res.ok) {
+      toast("Listing republished", "success");
+      await load();
+    } else {
+      const j = await res.json();
+      toast((j as { error?: string }).error ?? "Failed to republish listing", "error");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -145,14 +159,16 @@ export default function ListingsPage() {
           {filtered.map((l) => {
             const sc = STATUS_COLORS[l.status] ?? "bg-slate-100 text-slate-700";
             return (
-              <Card
-                key={l.id}
-                className="cursor-pointer transition-shadow hover:shadow-md"
-                onClick={() => router.push(`/listings/${l.id}`)}
-              >
+              <Card key={l.id} className="transition-shadow hover:shadow-md">
                 <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <h3 className="font-semibold text-slate-900 line-clamp-2">{l.title}</h3>
+                  <div className="flex items-start justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/listings/${l.id}`)}
+                      className="min-w-0 text-left font-semibold text-slate-900 hover:text-blue-700"
+                    >
+                      <span className="line-clamp-2">{l.title}</span>
+                    </button>
                     <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${sc}`}>{l.status}</span>
                   </div>
                   <p className="mt-1 text-sm text-slate-500">
@@ -165,6 +181,27 @@ export default function ListingsPage() {
                   <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                     <span>From {new Date(l.availableFrom).toLocaleDateString()}</span>
                     <span>{l._count.applications} application{l._count.applications !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => router.push(`/listings/${l.id}`)}
+                      className="gap-1.5"
+                    >
+                      <Edit2 className="h-3.5 w-3.5" /> Edit
+                    </Button>
+                    {l.status === "WITHDRAWN" ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void republishListing(l.id)}
+                        className="gap-1.5"
+                      >
+                        <Globe className="h-3.5 w-3.5" /> Republish
+                      </Button>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>

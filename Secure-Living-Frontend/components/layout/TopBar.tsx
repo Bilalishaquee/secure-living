@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronRight, AlertTriangle, XCircle, Info, CheckCircle2, X } from "lucide-react";
+import { Bell, ChevronRight, AlertTriangle, XCircle, Info, CheckCircle2, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -26,7 +26,7 @@ const labels: Record<string, string> = {
   new: "New property",
   properties: "Properties",
   expenses: "Expenses",
-  reports: "Reports",
+  reports: "Financial Reports",
   "lease-renewals": "Lease Renewals",
   transactions: "Transactions",
   listings: "Listings",
@@ -39,7 +39,7 @@ const labels: Record<string, string> = {
   rbac: "Roles & Permissions",
   "audit-logs": "Audit Logs",
   disputes: "Disputes",
-  support: "Support Tickets",
+  support: "Support",
   taxonomies: "Taxonomies",
   crm: "CRM",
   "custom-fields": "Custom Fields",
@@ -78,6 +78,14 @@ type NotifItem = {
   href: string;
 };
 
+type SearchResult = {
+  id: string;
+  type: string;
+  title: string;
+  subtitle?: string;
+  href: string;
+};
+
 const SEVERITY_ICON: Record<string, React.ReactNode> = {
   high:   <XCircle className="h-4 w-4 shrink-0 text-red-500" />,
   medium: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />,
@@ -108,7 +116,11 @@ export function TopBar() {
   const [notifCount, setNotifCount] = useState(0);
   const [notifItems, setNotifItems] = useState<NotifItem[]>([]);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.authToken) return;
@@ -135,13 +147,43 @@ export function TopBar() {
   // Close panel on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (panelRef.current && !panelRef.current.contains(target)) {
         setPanelOpen(false);
       }
+      if (searchRef.current && !searchRef.current.contains(target)) {
+        setSearchOpen(false);
+      }
     }
-    if (panelOpen) document.addEventListener("mousedown", handler);
+    if (panelOpen || searchOpen) document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [panelOpen]);
+  }, [panelOpen, searchOpen]);
+
+  useEffect(() => {
+    if (!user?.authToken || searchText.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => {
+      fetch(`/api/v1/search?q=${encodeURIComponent(searchText.trim())}&limit=8`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+        signal: ctrl.signal,
+      })
+        .then((res) => (res.ok ? res.json() : { data: [] }))
+        .then((json: { data?: SearchResult[] }) => {
+          setSearchResults(json.data ?? []);
+          setSearchOpen(true);
+        })
+        .catch(() => {
+          if (!ctrl.signal.aborted) setSearchResults([]);
+        });
+    }, 220);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [searchText, user?.authToken]);
 
   return (
     <header className="sticky top-0 z-30 shrink-0 border-b border-slate-200 bg-white pt-[var(--safe-top)] relative">
@@ -169,6 +211,44 @@ export function TopBar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+          <div className="relative hidden sm:block" ref={searchRef}>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              onFocus={() => searchResults.length > 0 && setSearchOpen(true)}
+              placeholder="Search records"
+              className="h-9 w-48 rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:w-64 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+              aria-label="Search dashboard records"
+            />
+            {searchOpen && searchText.trim().length >= 2 ? (
+              <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                {searchResults.length === 0 ? (
+                  <p className="px-4 py-4 text-sm text-slate-500">No matching records</p>
+                ) : (
+                  <div className="max-h-80 overflow-y-auto py-1 [scrollbar-width:thin]">
+                    {searchResults.map((item) => (
+                      <button
+                        key={`${item.type}-${item.id}`}
+                        type="button"
+                        className="block w-full px-4 py-2.5 text-left hover:bg-slate-50"
+                        onClick={() => {
+                          setSearchOpen(false);
+                          setSearchText("");
+                          router.push(item.href);
+                        }}
+                      >
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-brand-blue">{item.type}</span>
+                        <span className="mt-0.5 block truncate text-sm font-medium text-slate-900">{item.title}</span>
+                        {item.subtitle ? <span className="block truncate text-xs text-slate-500">{item.subtitle}</span> : null}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+
           {/* Notification bell */}
           <div className="relative" ref={panelRef}>
             <Button

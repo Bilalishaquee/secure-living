@@ -69,6 +69,17 @@ export default function RegisterPage() {
   const [orgCode, setOrgCode] = useState("");
   const [orgName, setOrgName] = useState("");
   const [dir, setDir] = useState(1);
+  const [nextPath, setNextPath] = useState("/dashboard");
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const requestedRole = searchParams.get("role");
+    if (requestedRole === "landlord" || requestedRole === "tenant" || requestedRole === "staff") {
+      setRole(requestedRole);
+    }
+    const requestedNext = searchParams.get("next");
+    if (requestedNext?.startsWith("/")) setNextPath(requestedNext);
+  }, []);
 
   useEffect(() => {
     if (hydrated && user) {
@@ -121,7 +132,7 @@ export default function RegisterPage() {
       toast("Registration failed. Please verify details and retry.", "error");
       return;
     }
-    router.push("/dashboard");
+    router.push(nextPath);
   };
 
   const slide = {

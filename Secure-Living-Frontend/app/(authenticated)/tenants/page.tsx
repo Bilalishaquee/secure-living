@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { Mail, MessageSquare, Phone, Users } from "lucide-react";
+import { Mail, MessageSquare, Phone, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/lib/toast-context";
 import { formatKes } from "@/lib/utils";
@@ -46,6 +46,7 @@ export default function TenantsPage() {
   const { toast } = useToast();
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -122,7 +123,11 @@ export default function TenantsPage() {
     {
       key: "status",
       header: "Status",
-      render: (r) => <Badge variant={statusVariant(r.status)}>{r.status}</Badge>,
+      render: (r) => (
+        <Badge variant={statusVariant(r.status)}>
+          {r.status === "Arrears" ? `Arrears - ${formatKes(r.rent)}` : r.status}
+        </Badge>
+      ),
     },
     {
       key: "id",
@@ -163,6 +168,22 @@ export default function TenantsPage() {
 
   const current = useMemo(() => rows.filter((t) => t.status === "Current").length, [rows]);
   const arrears = useMemo(() => rows.filter((t) => t.status === "Arrears").length, [rows]);
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) =>
+      [
+        row.id,
+        row.tenantUserId,
+        row.name,
+        row.email ?? "",
+        row.property,
+        row.propertyId,
+        row.status,
+        row.leaseEnd,
+      ].some((value) => value.toLowerCase().includes(q))
+    );
+  }, [rows, search]);
 
   return (
     <div className="w-full space-y-8">
@@ -241,7 +262,18 @@ export default function TenantsPage() {
 
       <Card className="overflow-hidden">
         <CardContent className="p-0">
-          <DataTable data={rows} columns={columns} rowKey={(r) => r.id} />
+          <div className="border-b border-slate-100 p-4">
+            <div className="relative max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search tenants by ID, name, email, property, unit, or status"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+              />
+            </div>
+          </div>
+          <DataTable data={filteredRows} columns={columns} rowKey={(r) => r.id} />
           {error ? <p className="px-4 pb-4 text-sm text-red-600">{error}</p> : null}
         </CardContent>
       </Card>

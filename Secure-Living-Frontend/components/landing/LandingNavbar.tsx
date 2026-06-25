@@ -2,37 +2,49 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { ChevronDown, Menu, Search, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LogoShield } from "@/components/brand/LogoShield";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
 const featureLinks = [
-  { label: "Accounting", href: "#newsletter" },
-  { label: "Leasing", href: "#newsletter" },
-  { label: "Tenant Screening", href: "#newsletter" },
-  { label: "Landlord Banking", href: "#newsletter" },
-  { label: "Rent Collection", href: "#newsletter" },
-  { label: "Investment Properties", href: "#newsletter" },
+  { label: "Accounting", href: "/auth/register?role=landlord&next=/accounting" },
+  { label: "Leasing", href: "/auth/register?role=landlord&next=/leasing" },
+  { label: "Tenant Screening", href: "/auth/register?role=landlord&next=/screening" },
+  { label: "Landlord Banking", href: "/auth/register?role=landlord&next=/banking" },
+  { label: "Rent Collection", href: "/auth/register?role=landlord&next=/rent-collection" },
+  { label: "Investment Properties", href: "/auth/register?role=landlord&next=/investments" },
 ];
 
 const resourceLinks = [
-  { label: "Tax Center", href: "/help" },
+  { label: "Tax Center", href: "/help/landlord" },
   { label: "Blog", href: "/help" },
   { label: "Help Center", href: "/help" },
   { label: "Forums", href: "/help" },
   { label: "Newsletter", href: "#newsletter" },
-  { label: "Landlord Insurance", href: "/help" },
-  { label: "Preferred Services", href: "/help" },
+  { label: "Landlord Insurance", href: "/services/landlord-insurance" },
+  { label: "Preferred Services", href: "/services" },
 ];
 
 const residentLinks = [
   { label: "Register / Log In", href: "/auth/login" },
-  { label: "Pay Rent", href: "/auth/register" },
-  { label: "Complete Screening", href: "/auth/register" },
+  { label: "Pay Rent", href: "/auth/register?role=tenant&next=/rent-collection" },
+  { label: "Complete Screening", href: "/auth/register?role=tenant&next=/screening" },
   { label: "Find a Home", href: "/listings" },
-  { label: "Get Renters Insurance", href: "/help" },
+  { label: "Get Renters Insurance", href: "/services/renters-insurance" },
+];
+
+const searchTargets = [
+  { label: "pricing", href: "/pricing" },
+  { label: "features", href: "#platform" },
+  { label: "listings", href: "/listings" },
+  { label: "help", href: "/help" },
+  { label: "tenant", href: "/auth/register?role=tenant" },
+  { label: "landlord", href: "/auth/register?role=landlord" },
+  { label: "manager", href: "/auth/register?role=staff" },
+  { label: "provider", href: "/auth/register?role=provider" },
+  { label: "services", href: "/services" },
 ];
 
 type DropdownKey = "features" | "resources" | "residents" | null;
@@ -41,6 +53,7 @@ export function LandingNavbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const [dd, setDd] = useState<DropdownKey>(null);
+  const [search, setSearch] = useState("");
   const closeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -125,6 +138,14 @@ export function LandingNavbar() {
     </div>
   );
 
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+    const match = searchTargets.find((item) => item.label.includes(q) || q.includes(item.label));
+    window.location.href = match?.href ?? `/help?search=${encodeURIComponent(q)}`;
+  };
+
   return (
     <motion.header
       initial={{ y: -12, opacity: 0 }}
@@ -146,7 +167,7 @@ export function LandingNavbar() {
         <nav className="z-[110] hidden items-center gap-1 lg:flex" aria-label="Primary">
           <NavDropdown label="Features" k="features" items={featureLinks} />
           <Link
-            href="/help"
+            href="/pricing"
             className="rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
           >
             Pricing
@@ -156,13 +177,23 @@ export function LandingNavbar() {
         </nav>
 
         <div className="z-[110] hidden items-center gap-2 lg:flex">
+          <form onSubmit={onSearch} className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
+              className="h-9 w-36 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm text-slate-700 outline-none transition focus:w-48 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+              aria-label="Search Secure Living"
+            />
+          </form>
           <Button variant="ghost" asChild>
             <Link href="/auth/login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">
-              Landlord Log In
+              Log In
             </Link>
           </Button>
           <Button asChild className="rounded-md bg-brand-blue px-4 font-semibold text-white hover:bg-brand-blue/90">
-            <Link href="/auth/register">Landlord Sign Up</Link>
+            <Link href="/auth/register?role=landlord">Sign Up</Link>
           </Button>
         </div>
 
@@ -188,7 +219,7 @@ export function LandingNavbar() {
           >
             <div className="flex flex-col gap-0.5 px-4 py-4">
               <Link
-                href="/auth/register"
+                href="/auth/register?role=landlord"
                 className="mb-2 rounded-md bg-brand-blue py-3 text-center text-sm font-semibold text-white"
                 onClick={() => setOpen(false)}
               >
@@ -215,7 +246,7 @@ export function LandingNavbar() {
                 </Link>
               ))}
               <Link
-                href="/help"
+                href="/pricing"
                 className="rounded-md py-2 pl-1 text-sm text-slate-700"
                 onClick={() => setOpen(false)}
               >

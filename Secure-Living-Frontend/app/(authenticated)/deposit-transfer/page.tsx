@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -45,9 +45,18 @@ export default function DepositTransferPage() {
 
   // List deposit form
   const [showList, setShowList] = useState(false);
+  const listFormRef = useRef<HTMLDivElement>(null);
   const [leaseId, setLeaseId] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [listing, setListing] = useState(false);
+
+  function openListForm() {
+    setTab("my");
+    setShowList(true);
+    window.setTimeout(() => {
+      listFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
 
   function authHeader() {
     return { Authorization: `Bearer ${user?.authToken ?? ""}`, "Content-Type": "application/json" };
@@ -124,7 +133,7 @@ export default function DepositTransferPage() {
             Transfer your deposit directly to an incoming tenant — no cash, no delays.
           </p>
         </div>
-        <Button type="button" onClick={() => setShowList(true)}>
+        <Button type="button" onClick={openListForm}>
           <Plus className="mr-1.5 h-4 w-4" /> List My Deposit
         </Button>
       </div>
@@ -157,6 +166,7 @@ export default function DepositTransferPage() {
 
       {/* List deposit form */}
       {showList && (
+        <div ref={listFormRef}>
         <Card>
           <CardHeader><CardTitle>List Your Deposit for Transfer</CardTitle></CardHeader>
           <CardContent className="space-y-4">
@@ -190,6 +200,7 @@ export default function DepositTransferPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Tabs */}
@@ -245,7 +256,7 @@ export default function DepositTransferPage() {
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-slate-400">You have no deposit transfers listed.</p>
-              <Button type="button" className="mt-4" onClick={() => setShowList(true)}>
+              <Button type="button" className="mt-4" onClick={openListForm}>
                 <Plus className="mr-1.5 h-4 w-4" /> List My Deposit
               </Button>
             </CardContent>

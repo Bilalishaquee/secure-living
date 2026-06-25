@@ -5,6 +5,18 @@ import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler
 type Ctx = { params: { id: string } };
 
 const updateUnitSchema = z.object({
+  unitNumber: z.string().min(1).optional(),
+  unitType: z.string().min(1).optional(),
+  category: z.enum(["residential", "commercial", "industrial", "mixed_use"]).optional(),
+  floor: z.string().nullable().optional(),
+  bedrooms: z.number().int().nonnegative().nullable().optional(),
+  bathrooms: z.number().nonnegative().nullable().optional(),
+  sizeSqft: z.number().positive().nullable().optional(),
+  rentAmountKes: z.number().nonnegative().nullable().optional(),
+  depositAmountKes: z.number().nonnegative().nullable().optional(),
+  isFurnished: z.boolean().optional(),
+  parkingBay: z.string().nullable().optional(),
+  specialNotes: z.string().nullable().optional(),
   readinessStatus: z.enum(["READY", "PENDING_CLEAN", "PENDING_INSPECTION", "BLOCKED"]).optional(),
   status: z.string().optional(),
   currentTenantId: z.string().nullable().optional(),
@@ -36,6 +48,18 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const updated = await prisma.unit.update({
     where: { id: params.id },
     data: {
+      ...(parsed.data.unitNumber !== undefined && { unitNumber: parsed.data.unitNumber }),
+      ...(parsed.data.unitType !== undefined && { unitType: parsed.data.unitType }),
+      ...(parsed.data.category !== undefined && { category: parsed.data.category }),
+      ...(parsed.data.floor !== undefined && { floor: parsed.data.floor }),
+      ...(parsed.data.bedrooms !== undefined && { bedrooms: parsed.data.bedrooms }),
+      ...(parsed.data.bathrooms !== undefined && { bathrooms: parsed.data.bathrooms }),
+      ...(parsed.data.sizeSqft !== undefined && { sizeSqft: parsed.data.sizeSqft }),
+      ...(parsed.data.rentAmountKes !== undefined && { rentAmountKes: parsed.data.rentAmountKes }),
+      ...(parsed.data.depositAmountKes !== undefined && { depositAmountKes: parsed.data.depositAmountKes }),
+      ...(parsed.data.isFurnished !== undefined && { isFurnished: parsed.data.isFurnished }),
+      ...(parsed.data.parkingBay !== undefined && { parkingBay: parsed.data.parkingBay }),
+      ...(parsed.data.specialNotes !== undefined && { specialNotes: parsed.data.specialNotes }),
       ...(parsed.data.readinessStatus !== undefined && { readinessStatus: parsed.data.readinessStatus as never }),
       ...(parsed.data.status !== undefined && { status: parsed.data.status }),
       ...(parsed.data.currentTenantId !== undefined && { currentTenantId: parsed.data.currentTenantId }),

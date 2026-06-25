@@ -15,16 +15,15 @@ export const GET = withErrorHandler(async (req: Request) => {
   const status = searchParams.get("status") as ProviderStatus | null;
   const category = searchParams.get("category") as ProviderCategory | null;
   const organizationId = searchParams.get("organizationId");
+  const isGlobal = actor.role === "super_admin" || actor.permissions.includes("*");
 
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
   if (category) where.category = category;
 
-  // Landlords only see their org's providers
-  if (actor.role === "landlord") {
-    const orgId = actor.orgIds?.[0];
-    if (!orgId) return jsonError(403, "No organization context");
-    where.organizationId = orgId;
+  if (!isGlobal) {
+    if (!actor.orgIds.length) return jsonError(403, "No organization context");
+    where.organizationId = { in: actor.orgIds };
   } else if (organizationId) {
     where.organizationId = organizationId;
   }
@@ -35,7 +34,21 @@ export const GET = withErrorHandler(async (req: Request) => {
     orderBy: { createdAt: "desc" },
   });
 
-  return Response.json({ data: rows });
+  const users = rows.length
+    ? await prisma.appUser.findMany({
+        where: { id: { in: Array.from(new Set(rows.map((row) => row.userId))) } },
+        select: { id: true, fullName: true, email: true },
+      })
+    : [];
+  const userMap = new Map(users.map((u) => [u.id, u]));
+
+  return Response.json({
+    data: rows.map((row) => ({
+      ...row,
+      name: userMap.get(row.userId)?.fullName ?? null,
+      email: userMap.get(row.userId)?.email ?? null,
+    })),
+  });
 });
 
 const createProviderSchema = z.object({
@@ -57,12 +70,26 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  const existingProvider = await prisma.serviceProvider.findFirst({ where: { userId: body.userId } });
+  if (existingProvider) return jsonError(409, "This user is already registered as a service provider");
+
+  const providerUser = await prisma.appUser.findUnique({
+    where: { id: body.userId },
+    include: { roleAssignments: true },
+  });
+  if (!providerUser) return jsonError(404, "Selected user account was not found");
+
+  const isGlobal = actor.role === "super_admin" || actor.permissions.includes("*");
+  const targetOrgId = body.organizationId ?? actor.orgIds?.[0] ?? null;
+  const inScope = isGlobal || providerUser.roleAssignments.some((ra) => actor.orgIds.includes(ra.organizationId));
+  if (!inScope) return jsonError(403, "Selected user is outside your organization scope");
+
   const newId = randomUUID();
   const provider = await prisma.serviceProvider.create({
     data: {
       id: newId,
       userId: body.userId,
-      organizationId: body.organizationId ?? null,
+      organizationId: targetOrgId,
       category: body.category,
       status: ProviderStatus.PENDING_APPROVAL,
       specializations: body.specializations,

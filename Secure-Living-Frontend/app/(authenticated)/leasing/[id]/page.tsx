@@ -53,7 +53,9 @@ export default function LeaseDetailPage({ params }: PageProps) {
   const [lease, setLease] = useState<Lease | null>(null);
   const [loading, setLoading] = useState(true);
   const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showRenewModal, setShowRenewModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState("");
+  const [renewForm, setRenewForm] = useState({ startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "" });
   const [saving, setSaving] = useState(false);
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
@@ -94,6 +96,51 @@ export default function LeaseDetailPage({ params }: PageProps) {
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         toast(err.error ?? "Failed to update status.", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openRenewModal() {
+    if (!lease) return;
+    const nextStart = new Date(lease.endDate);
+    nextStart.setDate(nextStart.getDate() + 1);
+    const nextEnd = new Date(nextStart);
+    nextEnd.setFullYear(nextEnd.getFullYear() + 1);
+    nextEnd.setDate(nextEnd.getDate() - 1);
+    setRenewForm({
+      startDate: nextStart.toISOString().slice(0, 10),
+      endDate: nextEnd.toISOString().slice(0, 10),
+      rentAmount: lease.rentAmount.toString(),
+      depositAmount: lease.depositAmount?.toString() ?? "",
+      paymentFrequency: lease.paymentFrequency ?? "monthly",
+    });
+    setShowRenewModal(true);
+  }
+
+  async function handleRenewLease() {
+    if (!lease) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leases/${lease.id}/renew`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({
+          startDate: renewForm.startDate,
+          endDate: renewForm.endDate,
+          rentAmount: Number(renewForm.rentAmount),
+          depositAmount: renewForm.depositAmount ? Number(renewForm.depositAmount) : undefined,
+          paymentFrequency: renewForm.paymentFrequency || undefined,
+        }),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { data: Lease };
+        toast("Renewal draft created. Activate it after review/signing.", "success");
+        router.push(`/leasing/${json.data.id}`);
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast(err.error ?? "Failed to renew lease.", "error");
       }
     } finally {
       setSaving(false);
@@ -144,6 +191,11 @@ export default function LeaseDetailPage({ params }: PageProps) {
               onClick={() => { setPendingStatus(transitions[0]); setShowStatusModal(true); }}
             >
               Change Status
+            </Button>
+          )}
+          {["active", "expired", "terminated"].includes(lease.status) && (
+            <Button size="sm" onClick={openRenewModal}>
+              Renew Lease
             </Button>
           )}
         </div>
@@ -256,6 +308,42 @@ export default function LeaseDetailPage({ params }: PageProps) {
             <Button variant="outline" onClick={() => setShowStatusModal(false)}>Cancel</Button>
             <Button onClick={() => { void handleStatusChange(); }} disabled={!pendingStatus || saving}>
               {saving ? "Saving…" : "Confirm"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={showRenewModal} onOpenChange={setShowRenewModal} title="Renew Lease">
+        <div className="space-y-4">
+          <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+            A terminated lease is kept as a historical record. Renewal creates a new draft lease for the same tenant and unit, then it can be activated after review/signing.
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Start Date</label>
+              <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={renewForm.startDate} onChange={(e) => setRenewForm((f) => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">End Date</label>
+              <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={renewForm.endDate} onChange={(e) => setRenewForm((f) => ({ ...f, endDate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Rent Amount</label>
+              <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={renewForm.rentAmount} onChange={(e) => setRenewForm((f) => ({ ...f, rentAmount: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Deposit Amount</label>
+              <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={renewForm.depositAmount} onChange={(e) => setRenewForm((f) => ({ ...f, depositAmount: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Payment Frequency</label>
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={renewForm.paymentFrequency} onChange={(e) => setRenewForm((f) => ({ ...f, paymentFrequency: e.target.value }))} />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="outline" onClick={() => setShowRenewModal(false)}>Cancel</Button>
+            <Button onClick={() => { void handleRenewLease(); }} disabled={!renewForm.startDate || !renewForm.endDate || !renewForm.rentAmount || saving}>
+              {saving ? "Creating..." : "Create Renewal Draft"}
             </Button>
           </div>
         </div>

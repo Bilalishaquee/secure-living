@@ -10,7 +10,7 @@ const cols = [
   {
     title: "Product",
     links: [
-      { label: "Pricing", href: "/help" },
+      { label: "Pricing", href: "/pricing" },
       { label: "Demo Videos", href: "/help" },
       { label: "Security", href: "/help" },
       { label: "API Access", href: "/help" },
@@ -39,11 +39,11 @@ const cols = [
   {
     title: "Legal",
     links: [
-      { label: "Terms of Service", href: "/help" },
-      { label: "Privacy Policy", href: "/help" },
-      { label: "Data Processing", href: "/help" },
+      { label: "Terms of Service", href: "/terms" },
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Data Processing", href: "/privacy#data-processing" },
       { label: "Responsible Disclosure", href: "/help" },
-      { label: "Cookie Policy", href: "/help" },
+      { label: "Cookie Policy", href: "/cookies" },
     ],
   },
 ];
@@ -157,13 +157,17 @@ export function LandingFooter() {
             © {new Date().getFullYear()} Secure Living, Inc. All rights reserved.
           </p>
           <div className="flex items-center gap-5">
-            {["Privacy", "Terms", "Cookies"].map((item) => (
+            {[
+              { label: "Privacy", href: "/privacy" },
+              { label: "Terms", href: "/terms" },
+              { label: "Cookies", href: "/cookies" },
+            ].map((item) => (
               <Link
-                key={item}
-                href="/help"
+                key={item.label}
+                href={item.href}
                 className="text-xs text-slate-500 transition-colors hover:text-slate-300"
               >
-                {item}
+                {item.label}
               </Link>
             ))}
           </div>

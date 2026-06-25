@@ -205,6 +205,11 @@ export default function LeasingPage() {
               <FileText className="mr-1.5 h-4 w-4" /> Templates
             </Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/leasing/templates">
+              <FilePlus className="mr-1.5 h-4 w-4" /> Upload Lease
+            </Link>
+          </Button>
           <Button onClick={() => setShowCreate(true)}>
             <FilePlus className="mr-1.5 h-4 w-4" /> New Lease
           </Button>

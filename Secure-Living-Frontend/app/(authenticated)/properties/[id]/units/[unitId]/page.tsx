@@ -110,6 +110,7 @@ type RentHistory = {
 type Tab = "overview" | "history" | "rent";
 
 type EditForm = {
+  unitNumber: string;
   unitType: string;
   category: string;
   floor: string;
@@ -255,6 +256,7 @@ export default function UnitDetailPage({ params }: Props) {
   function openEdit() {
     if (!unit) return;
     setEditForm({
+      unitNumber: unit.unitNumber,
       unitType: unit.unitType,
       category: unit.category,
       floor: unit.floor ?? "",
@@ -283,6 +285,7 @@ export default function UnitDetailPage({ params }: Props) {
           Authorization: `Bearer ${user.authToken}`,
         },
         body: JSON.stringify({
+          unitNumber: editForm.unitNumber.trim(),
           unitType: editForm.unitType,
           category: editForm.category,
           floor: editForm.floor || undefined,
@@ -929,6 +932,15 @@ export default function UnitDetailPage({ params }: Props) {
         {editForm && (
           <form onSubmit={(e) => { void handleSave(e); }} className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Unit Number / Name</label>
+                <input
+                  value={editForm.unitNumber}
+                  onChange={(e) => setEditForm((f) => f ? { ...f, unitNumber: e.target.value } : f)}
+                  placeholder="A4, C4, S3"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                />
+              </div>
               <div>
                 <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Unit Type</label>
                 <select

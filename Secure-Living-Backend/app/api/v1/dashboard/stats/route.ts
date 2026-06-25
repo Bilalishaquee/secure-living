@@ -44,6 +44,13 @@ export const GET = withErrorHandler(async (req: Request) => {
     allMonthInvoices,
     escrowTrendRaw,
     myAssignedJobs,
+    totalOrganizations,
+    activeLandlords,
+    activePropertyManagers,
+    activeProviders,
+    serviceRequestsInProgress,
+    serviceRequestsAwaitingConfirmation,
+    serviceRequestsOverdue,
   ] = await Promise.all([
     // Single aggregate gives both property count and the sum of their declared unit capacity
     prisma.property.aggregate({
@@ -110,6 +117,36 @@ export const GET = withErrorHandler(async (req: Request) => {
         serviceRequest: {
           srStatus: { in: ACTIVE_SR_STATUSES },
         },
+      },
+    }),
+    prisma.organization.count({ where: isGlobal ? {} : { id: { in: actor.orgIds } } }),
+    prisma.userRoleAssignment.count({
+      where: {
+        status: "active",
+        ...(isGlobal ? {} : { organizationId: { in: actor.orgIds } }),
+        role: { slug: { in: ["landlord", "owner", "property_owner"] } },
+      },
+    }),
+    prisma.userRoleAssignment.count({
+      where: {
+        status: "active",
+        ...(isGlobal ? {} : { organizationId: { in: actor.orgIds } }),
+        role: { slug: { in: ["admin", "agency", "manager", "property_manager"] } },
+      },
+    }),
+    prisma.serviceProvider.count({
+      where: {
+        ...(isGlobal ? {} : { organizationId: { in: actor.orgIds } }),
+        status: "ACTIVE",
+      },
+    }),
+    prisma.serviceRequest.count({ where: { ...orgFilter, srStatus: SrStatus.IN_PROGRESS } }),
+    prisma.serviceRequest.count({ where: { ...orgFilter, srStatus: { in: [SrStatus.SUBMITTED, SrStatus.APPROVED, SrStatus.QUOTING] } } }),
+    prisma.serviceRequest.count({
+      where: {
+        ...orgFilter,
+        srStatus: { in: ACTIVE_SR_STATUSES },
+        dueAt: { lt: now },
       },
     }),
   ]);
@@ -212,6 +249,13 @@ export const GET = withErrorHandler(async (req: Request) => {
       blockedServiceRequests,
       slaBreachCount,
       myAssignedJobs,
+      totalOrganizations,
+      activeLandlords,
+      activePropertyManagers,
+      activeProviders,
+      serviceRequestsInProgress,
+      serviceRequestsAwaitingConfirmation,
+      serviceRequestsOverdue,
       weeklyEscrowTrend,
       recentActivity: recentAuditLogs,
       alerts,

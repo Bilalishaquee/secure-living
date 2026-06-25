@@ -53,6 +53,14 @@ interface CreateProviderPayload {
   bio: string;
 }
 
+interface UserOption {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  status: string;
+}
+
 // ─── Badge helpers ─────────────────────────────────────────────────────────────
 
 function categoryBadge(category: ProviderCategory) {
@@ -118,6 +126,9 @@ function AddProviderModal({
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState("");
+  const [userSearch, setUserSearch] = useState("");
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [fetchingUsers, setFetchingUsers] = useState(false);
   const [category, setCategory] = useState<ProviderCategory>("VERIFIED_MARKETPLACE");
   const [specs, setSpecs] = useState("");
   const [coverage, setCoverage] = useState("");
@@ -126,11 +137,37 @@ function AddProviderModal({
   useEffect(() => {
     if (!open) {
       setUserId("");
+      setUserSearch("");
+      setUserOptions([]);
       setSpecs("");
       setCoverage("");
       setBio("");
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !user?.authToken) return;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => {
+      setFetchingUsers(true);
+      void fetch(`/api/v1/users?q=${encodeURIComponent(userSearch.trim())}&excludeProviders=true&limit=12`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+        signal: ctrl.signal,
+      })
+        .then((res) => (res.ok ? res.json() : { data: [] }))
+        .then((json: { data?: UserOption[] }) => setUserOptions(json.data ?? []))
+        .catch(() => {
+          if (!ctrl.signal.aborted) setUserOptions([]);
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted) setFetchingUsers(false);
+        });
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [open, user?.authToken, userSearch]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -155,8 +192,8 @@ function AddProviderModal({
       });
 
       if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        toast(err.message ?? "Failed to create provider", "error");
+        const err = (await res.json()) as { message?: string; error?: string };
+        toast(err.message ?? err.error ?? "Failed to create provider", "error");
         return;
       }
 
@@ -180,16 +217,39 @@ function AddProviderModal({
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-slate-700">
-            User ID <span className="text-red-500">*</span>
+            User account <span className="text-red-500">*</span>
           </label>
           <input
             className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            required
-            placeholder="UUID of the user account"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            placeholder="Search by name, email, phone, or user ID"
           />
-          <p className="mt-1 text-xs text-slate-400">The user must already have an account in the system</p>
+          <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-1 [scrollbar-width:thin]">
+            {fetchingUsers ? (
+              <p className="px-3 py-2 text-sm text-slate-500">Loading users...</p>
+            ) : userOptions.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-slate-500">No available users found.</p>
+            ) : (
+              userOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    setUserId(option.id);
+                    setUserSearch(`${option.name} - ${option.email}`);
+                  }}
+                  className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
+                    userId === option.id ? "bg-blue-100 text-blue-900" : "hover:bg-white"
+                  }`}
+                >
+                  <span className="block font-medium">{option.name}</span>
+                  <span className="block text-xs text-slate-500">{option.email} - {option.id}</span>
+                </button>
+              ))
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Each user can only be registered as one provider.</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700">Category</label>
@@ -235,7 +295,7 @@ function AddProviderModal({
         </div>
         <div className="flex justify-end gap-3 pt-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || !userId}>
             {loading ? "Adding…" : "Add Provider"}
           </Button>
         </div>

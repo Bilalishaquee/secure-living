@@ -49,6 +49,13 @@ type DashboardStats = {
   blockedServiceRequests: number;
   slaBreachCount: number;
   myAssignedJobs: number;
+  totalOrganizations: number;
+  activeLandlords: number;
+  activePropertyManagers: number;
+  activeProviders: number;
+  serviceRequestsInProgress: number;
+  serviceRequestsAwaitingConfirmation: number;
+  serviceRequestsOverdue: number;
   weeklyEscrowTrend: EscrowChartPoint[];
   recentActivity: ActivityItem[];
   alerts: AlertItem[];
@@ -246,9 +253,34 @@ function buildMetrics(stats: DashboardStats, role: UserRole | string): MetricCar
     icon: BarChart2, color: "text-brand-blue", bg: "bg-blue-50",
     href: "/rent-collection/receipts",
   };
+  const organizations: MetricCard = {
+    label: "Total Organisations",
+    value: String(stats.totalOrganizations ?? 0),
+    icon: Building2, color: "text-indigo-600", bg: "bg-indigo-50",
+    href: "/admin/organizations",
+  };
+  const activeLandlords: MetricCard = {
+    label: "Active Landlords",
+    value: String(stats.activeLandlords ?? 0),
+    icon: Users, color: "text-sky-600", bg: "bg-sky-50",
+    href: "/team",
+  };
+  const activePropertyManagers: MetricCard = {
+    label: "Active Property Managers",
+    value: String(stats.activePropertyManagers ?? 0),
+    icon: ConciergeBell, color: "text-violet-600", bg: "bg-violet-50",
+    href: "/team",
+  };
+  const activeProviders: MetricCard = {
+    label: "Active Providers",
+    value: String(stats.activeProviders ?? 0),
+    icon: Wrench, color: "text-emerald-600", bg: "bg-emerald-50",
+    href: "/providers",
+  };
 
   switch (role) {
     case "super_admin":
+      return [organizations, activeLandlords, activePropertyManagers, activeProviders, escrow, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
     case "admin":
       return [escrow, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
     case "landlord":
@@ -352,11 +384,22 @@ type RoleConfig = {
 function getRoleConfig(role: UserRole | string): RoleConfig {
   switch (role) {
     case "super_admin":
-    case "admin":
       return {
         title: "Operations Dashboard",
         subtitle: "Real-time platform intelligence",
         sectionLabel: "Platform Overview",
+        headerLinks: [
+          { label: "Properties", href: "/properties", variant: "secondary" },
+          { label: "Service Requests", href: "/maintenance", variant: "outline" },
+        ],
+        showActivity: true,
+        showChart: true,
+      };
+    case "admin":
+      return {
+        title: "Manager Dashboard",
+        subtitle: "Organisation operations overview",
+        sectionLabel: "Manager Overview",
         headerLinks: [
           { label: "Properties", href: "/properties", variant: "secondary" },
           { label: "Service Requests", href: "/maintenance", variant: "outline" },
@@ -567,7 +610,7 @@ export default function DashboardPage() {
 
   const topMetrics = stats ? buildMetrics(stats, role) : [];
   const quickActions = getQuickActions(role);
-  const skeletonCount = role === "tenant" ? 2 : role === "staff" ? 6 : role === "landlord" ? 8 : 12;
+  const skeletonCount = role === "tenant" ? 2 : role === "staff" ? 6 : role === "landlord" ? 8 : role === "super_admin" ? 16 : 12;
 
   return (
     <div className="w-full space-y-8">
@@ -832,7 +875,43 @@ export default function DashboardPage() {
           Service Requests
         </h2>
         <div className="grid gap-4 lg:grid-cols-2">
-          {/* My Service Requests */}
+          {role === "super_admin" ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <ConciergeBell className="h-4 w-4 text-blue-500" />
+                    Service Requests
+                  </span>
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/service-requests" className="text-xs text-blue-600 hover:underline">
+                      View all
+                    </Link>
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <p className="text-2xl font-bold text-blue-700">{stats?.openServiceRequests ?? 0}</p>
+                    <p className="text-xs text-blue-600">Open</p>
+                  </div>
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                    <p className="text-2xl font-bold text-indigo-700">{stats?.serviceRequestsInProgress ?? 0}</p>
+                    <p className="text-xs text-indigo-600">In Progress</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 p-3">
+                    <p className="text-2xl font-bold text-amber-700">{stats?.serviceRequestsAwaitingConfirmation ?? 0}</p>
+                    <p className="text-xs text-amber-600">Awaiting Confirmation</p>
+                  </div>
+                  <div className="rounded-xl border border-red-100 bg-red-50 p-3">
+                    <p className="text-2xl font-bold text-red-700">{stats?.serviceRequestsOverdue ?? 0}</p>
+                    <p className="text-xs text-red-600">Overdue</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between gap-2">
@@ -883,6 +962,7 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Manager Queue */}
           {(role === "admin" || role === "super_admin" || role === "landlord") && (
