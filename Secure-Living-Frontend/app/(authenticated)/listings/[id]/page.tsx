@@ -153,6 +153,15 @@ export default function ListingDetailPage({ params }: Props) {
           <p className="mt-1 text-sm text-slate-500">
             Unit {(listing.unit as Record<string, unknown>)?.unitNumber as string} · {formatKes(listing.rentAmount as number)}/month
           </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {listing.escrowBadge ? (
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">Escrow Badge</span>
+            ) : listing.fullyCoveredBadge ? (
+              <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">Fully Covered</span>
+            ) : (
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">Landlord Reserve</span>
+            )}
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={openEdit} className="gap-2"><Edit2 className="h-4 w-4" /> Edit</Button>

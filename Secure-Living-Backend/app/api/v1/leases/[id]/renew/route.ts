@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { ensureDepositEscrowForLease } from "@/lib/server/deposit";
 
 type Ctx = { params: { id: string } };
 
@@ -44,6 +45,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       leaseType: existing.leaseType,
       rentAmount: parsed.data.rentAmount ?? existing.rentAmount,
       depositAmount: parsed.data.depositAmount ?? existing.depositAmount,
+      depositModel: existing.depositModel,
       startDate: new Date(parsed.data.startDate),
       endDate: new Date(parsed.data.endDate),
       paymentFrequency: parsed.data.paymentFrequency ?? existing.paymentFrequency,
@@ -51,6 +53,8 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       createdBy: actor.userId,
     },
   });
+
+  await ensureDepositEscrowForLease(renewed.id);
 
   await appendAudit({
     userId: actor.userId,

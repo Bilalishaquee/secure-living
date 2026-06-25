@@ -14,6 +14,7 @@ const createListingSchema = z.object({
   petFriendly: z.boolean().default(false),
   features: z.array(z.string()).default([]),
   photos: z.array(z.string()).default([]),
+  depositModel: z.enum(["LANDLORD_RESERVE", "DEPOSIT_ESCROW"]).default("LANDLORD_RESERVE"),
 });
 
 export const GET = withErrorHandler(async (req: Request) => {
@@ -25,7 +26,7 @@ export const GET = withErrorHandler(async (req: Request) => {
     const rows = await prisma.listing.findMany({
       where: { status: "PUBLISHED" },
       include: { unit: { select: { unitNumber: true, unitType: true, bedrooms: true, bathrooms: true, sizeSqft: true, propertyId: true } } },
-      orderBy: { publishedAt: "desc" },
+      orderBy: [{ escrowBadge: "desc" }, { fullyCoveredBadge: "desc" }, { publishedAt: "desc" }],
     });
     return Response.json({ data: rows });
   }
@@ -76,6 +77,8 @@ export const POST = withErrorHandler(async (req: Request) => {
       petFriendly: parsed.data.petFriendly,
       features: parsed.data.features,
       photos: parsed.data.photos,
+      depositModel: parsed.data.depositModel,
+      escrowBadge: parsed.data.depositModel === "DEPOSIT_ESCROW",
       status: "DRAFT",
     },
   });

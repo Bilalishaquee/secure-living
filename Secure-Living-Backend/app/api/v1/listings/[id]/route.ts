@@ -15,6 +15,7 @@ const updateListingSchema = z.object({
   petFriendly: z.boolean().optional(),
   features: z.array(z.string()).optional(),
   photos: z.array(z.string()).optional(),
+  depositModel: z.enum(["LANDLORD_RESERVE", "DEPOSIT_ESCROW"]).optional(),
 });
 
 export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
@@ -59,6 +60,10 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
       ...(parsed.data.petFriendly !== undefined && { petFriendly: parsed.data.petFriendly }),
       ...(parsed.data.features !== undefined && { features: parsed.data.features }),
       ...(parsed.data.photos !== undefined && { photos: parsed.data.photos }),
+      ...(parsed.data.depositModel !== undefined && {
+        depositModel: parsed.data.depositModel,
+        escrowBadge: parsed.data.depositModel === "DEPOSIT_ESCROW",
+      }),
     },
   });
 

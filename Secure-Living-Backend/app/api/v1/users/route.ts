@@ -1,11 +1,9 @@
 import { prisma } from "@/lib/server/db";
-import { requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
+import { requireActor, withErrorHandler } from "@/lib/server/http";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "service-request:manage");
-  if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
   const q = (searchParams.get("q") ?? "").trim();

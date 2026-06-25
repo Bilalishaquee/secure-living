@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/server/db";
 import { requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { ensureDepositEscrowForLease } from "@/lib/server/deposit";
 
 type Ctx = { params: { id: string } };
 
@@ -38,6 +39,17 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       status: "PENDING",
     },
   });
+
+  const deposit = await ensureDepositEscrowForLease(notice.leaseId);
+  if (deposit) {
+    await prisma.depositEscrow.update({
+      where: { leaseId: notice.leaseId },
+      data: {
+        status: totalDeductions > 0 ? "captured" : deposit.status,
+        currentBalance: Math.max(0, depositAmount - totalDeductions),
+      },
+    });
+  }
 
   await prisma.vacatingNotice.update({
     where: { id: params.id },

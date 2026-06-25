@@ -56,6 +56,10 @@ type DashboardStats = {
   serviceRequestsInProgress: number;
   serviceRequestsAwaitingConfirmation: number;
   serviceRequestsOverdue: number;
+  depositFullyCovered: number;
+  depositAtRisk: number;
+  depositShortfall: number;
+  depositEscrowBalanceKes: number;
   weeklyEscrowTrend: EscrowChartPoint[];
   recentActivity: ActivityItem[];
   alerts: AlertItem[];
@@ -253,6 +257,15 @@ function buildMetrics(stats: DashboardStats, role: UserRole | string): MetricCar
     icon: BarChart2, color: "text-brand-blue", bg: "bg-blue-50",
     href: "/rent-collection/receipts",
   };
+  const depositHealth: MetricCard = {
+    label: "Deposit Health",
+    value: String((stats.depositFullyCovered ?? 0) + (stats.depositAtRisk ?? 0) + (stats.depositShortfall ?? 0)),
+    sub: `${stats.depositAtRisk ?? 0} at risk, ${stats.depositShortfall ?? 0} shortfall`,
+    icon: ShieldCheck,
+    color: (stats.depositShortfall ?? 0) > 0 ? "text-red-600" : (stats.depositAtRisk ?? 0) > 0 ? "text-amber-600" : "text-emerald-600",
+    bg: (stats.depositShortfall ?? 0) > 0 ? "bg-red-50" : (stats.depositAtRisk ?? 0) > 0 ? "bg-amber-50" : "bg-emerald-50",
+    href: "/leasing",
+  };
   const organizations: MetricCard = {
     label: "Total Organisations",
     value: String(stats.totalOrganizations ?? 0),
@@ -280,15 +293,15 @@ function buildMetrics(stats: DashboardStats, role: UserRole | string): MetricCar
 
   switch (role) {
     case "super_admin":
-      return [organizations, activeLandlords, activePropertyManagers, activeProviders, escrow, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
+      return [organizations, activeLandlords, activePropertyManagers, activeProviders, escrow, depositHealth, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
     case "admin":
-      return [escrow, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
+      return [escrow, depositHealth, rent, occupancy, arrears, properties, units, tenants, kyc, disputes, serviceRequests, sla, collection];
     case "landlord":
-      return [escrow, rent, occupancy, arrears, properties, units, tenants, serviceRequests];
+      return [escrow, depositHealth, rent, occupancy, arrears, properties, units, tenants, serviceRequests];
     case "staff":
       return [properties, units, tenants, serviceRequests, sla, myAssignedJobsCard];
     case "tenant":
-      return [myLease, myMaintenance];
+      return [myLease, depositHealth, myMaintenance];
     default:
       return [properties, units, tenants, serviceRequests];
   }
@@ -610,7 +623,7 @@ export default function DashboardPage() {
 
   const topMetrics = stats ? buildMetrics(stats, role) : [];
   const quickActions = getQuickActions(role);
-  const skeletonCount = role === "tenant" ? 2 : role === "staff" ? 6 : role === "landlord" ? 8 : role === "super_admin" ? 16 : 12;
+  const skeletonCount = role === "tenant" ? 3 : role === "staff" ? 6 : role === "landlord" ? 9 : role === "super_admin" ? 17 : 13;
 
   return (
     <div className="w-full space-y-8">

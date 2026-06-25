@@ -3,6 +3,7 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope , withErrorHandler } from "@/lib/server/http";
 import { createLeaseSchema } from "@/lib/server/validation";
+import { ensureDepositEscrowForLease, refreshDepositHealth } from "@/lib/server/deposit";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
@@ -17,7 +18,11 @@ export const GET = withErrorHandler(async (req: Request) => {
         organizationId: { in: actor.orgIds },
       };
 
-  const rows = await prisma.lease.findMany({ where, orderBy: { createdAt: "desc" } });
+  const rows = await prisma.lease.findMany({
+    where,
+    include: { depositEscrow: true },
+    orderBy: { createdAt: "desc" },
+  });
 
   // Enrich each lease with tenant name + email from AppUser
   const tenantIds = Array.from(new Set(rows.map((r) => r.tenantUserId)));
@@ -29,7 +34,12 @@ export const GET = withErrorHandler(async (req: Request) => {
     : [];
   const userMap = new Map(users.map((u) => [u.id, u]));
 
-  const enriched = rows.map((r) => ({
+  const refreshed = await Promise.all(rows.map(async (r) => {
+    const depositEscrow = r.status === "active" ? await refreshDepositHealth(r.id) : r.depositEscrow;
+    return { ...r, depositEscrow };
+  }));
+
+  const enriched = refreshed.map((r) => ({
     ...r,
     tenantName: userMap.get(r.tenantUserId)?.fullName ?? null,
     tenantEmail: userMap.get(r.tenantUserId)?.email ?? null,
@@ -61,6 +71,7 @@ export const POST = withErrorHandler(async (req: Request) => {
       leaseType: body.leaseType,
       rentAmount: body.rentAmount,
       depositAmount: body.depositAmount,
+      depositModel: body.depositModel,
       startDate: new Date(body.startDate),
       endDate: new Date(body.endDate),
       paymentFrequency: body.paymentFrequency,
@@ -68,6 +79,8 @@ export const POST = withErrorHandler(async (req: Request) => {
       createdBy: actor.userId,
     },
   });
+
+  await ensureDepositEscrowForLease(row.id);
 
   await appendAudit({
     userId: actor.userId,

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError , withErrorHandler } from "@/lib/server/http";
 import { updateLeaseSchema } from "@/lib/server/validation";
+import { refreshDepositHealth } from "@/lib/server/deposit";
 
 type Ctx = { params: { id: string } };
 
@@ -11,13 +12,14 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const denied = requirePermission(actor, "lease:view");
   if (denied) return denied;
 
-  const lease = await prisma.lease.findUnique({ where: { id: params.id } });
+  const lease = await prisma.lease.findUnique({ where: { id: params.id }, include: { depositEscrow: true } });
   if (!lease) return jsonError(404, "Lease not found");
 
   const scoped = requireScope(actor, lease.organizationId, lease.branchId);
   if (scoped) return scoped;
 
-  return Response.json({ data: lease });
+  const depositEscrow = await refreshDepositHealth(lease.id);
+  return Response.json({ data: { ...lease, depositEscrow } });
 });
 
 export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {

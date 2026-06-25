@@ -51,6 +51,10 @@ export const GET = withErrorHandler(async (req: Request) => {
     serviceRequestsInProgress,
     serviceRequestsAwaitingConfirmation,
     serviceRequestsOverdue,
+    depositFullyCovered,
+    depositAtRisk,
+    depositShortfall,
+    depositEscrowBalance,
   ] = await Promise.all([
     // Single aggregate gives both property count and the sum of their declared unit capacity
     prisma.property.aggregate({
@@ -148,6 +152,13 @@ export const GET = withErrorHandler(async (req: Request) => {
         srStatus: { in: ACTIVE_SR_STATUSES },
         dueAt: { lt: now },
       },
+    }),
+    prisma.depositEscrow.count({ where: { ...orgFilter, healthStatus: "fully_covered", status: { in: ["active", "captured"] } } }),
+    prisma.depositEscrow.count({ where: { ...orgFilter, healthStatus: "at_risk", status: { in: ["active", "captured"] } } }),
+    prisma.depositEscrow.count({ where: { ...orgFilter, healthStatus: "shortfall", status: { in: ["active", "captured"] } } }),
+    prisma.depositEscrow.aggregate({
+      where: { ...orgFilter, model: "DEPOSIT_ESCROW", status: { in: ["active", "captured"] } },
+      _sum: { currentBalance: true },
     }),
   ]);
 
@@ -256,6 +267,10 @@ export const GET = withErrorHandler(async (req: Request) => {
       serviceRequestsInProgress,
       serviceRequestsAwaitingConfirmation,
       serviceRequestsOverdue,
+      depositFullyCovered,
+      depositAtRisk,
+      depositShortfall,
+      depositEscrowBalanceKes: depositEscrowBalance._sum.currentBalance ?? 0,
       weeklyEscrowTrend,
       recentActivity: recentAuditLogs,
       alerts,

@@ -20,6 +20,13 @@ type Lease = {
   leaseType: string;
   rentAmount: number;
   depositAmount: number;
+  depositModel: string;
+  depositEscrow?: {
+    healthStatus: string;
+    currentBalance: number;
+    walletWatchActive: boolean;
+    status: string;
+  } | null;
   status: string;
   startDate: string;
   endDate: string;
@@ -45,6 +52,10 @@ export default function LeasingPage() {
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [properties, setProperties] = useState<Array<{ id: string; name: string; propertyCode?: string | null }>>([]);
+  const [units, setUnits] = useState<Array<{ id: string; unitNumber: string; status: string }>>([]);
+  const [tenantQuery, setTenantQuery] = useState("");
+  const [tenantOptions, setTenantOptions] = useState<Array<{ id: string; name: string; email: string }>>([]);
 
   const [form, setForm] = useState({
     propertyId: "",
@@ -53,6 +64,7 @@ export default function LeasingPage() {
     leaseType: "fixed_term",
     rentAmount: "",
     depositAmount: "",
+    depositModel: "LANDLORD_RESERVE",
     startDate: "",
     endDate: "",
     paymentFrequency: "monthly",
@@ -76,6 +88,33 @@ export default function LeasingPage() {
 
   useEffect(() => { void loadLeases(); }, [user]);
 
+  async function loadProperties() {
+    const res = await fetch("/api/v1/properties", { headers: authHeader() });
+    if (res.ok) {
+      const json = (await res.json()) as { data: Array<{ id: string; name: string; propertyCode?: string | null }> };
+      setProperties(json.data ?? []);
+    }
+  }
+
+  async function loadUnits(propertyId: string) {
+    if (!propertyId) { setUnits([]); return; }
+    const res = await fetch(`/api/v1/units?propertyId=${encodeURIComponent(propertyId)}`, { headers: authHeader() });
+    if (res.ok) {
+      const json = (await res.json()) as { data: Array<{ id: string; unitNumber: string; status: string }> };
+      setUnits(json.data ?? []);
+    }
+  }
+
+  async function searchTenants(q: string) {
+    setTenantQuery(q);
+    if (q.trim().length < 2) { setTenantOptions([]); return; }
+    const res = await fetch(`/api/v1/users?q=${encodeURIComponent(q)}&limit=10`, { headers: authHeader() });
+    if (res.ok) {
+      const json = (await res.json()) as { data: Array<{ id: string; name: string; email: string }> };
+      setTenantOptions(json.data ?? []);
+    }
+  }
+
   async function handleCreate() {
     if (!user) return;
     setSaving(true);
@@ -92,6 +131,7 @@ export default function LeasingPage() {
           leaseType: form.leaseType,
           rentAmount: parseFloat(form.rentAmount),
           depositAmount: form.depositAmount ? parseFloat(form.depositAmount) : 0,
+          depositModel: form.depositModel,
           startDate: new Date(form.startDate).toISOString(),
           endDate: new Date(form.endDate).toISOString(),
           paymentFrequency: form.paymentFrequency,
@@ -100,7 +140,10 @@ export default function LeasingPage() {
       if (res.ok) {
         toast("Lease created successfully.", "success");
         setShowCreate(false);
-        setForm({ propertyId: "", unitId: "", tenantUserId: "", leaseType: "fixed_term", rentAmount: "", depositAmount: "", startDate: "", endDate: "", paymentFrequency: "monthly" });
+        setForm({ propertyId: "", unitId: "", tenantUserId: "", leaseType: "fixed_term", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", startDate: "", endDate: "", paymentFrequency: "monthly" });
+        setTenantQuery("");
+        setTenantOptions([]);
+        setUnits([]);
         await loadLeases();
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
@@ -152,6 +195,27 @@ export default function LeasingPage() {
       header: "Rent / mo",
       sortable: true,
       render: (r) => <span className="font-mono text-sm font-medium">{formatKes(r.rentAmount)}</span>,
+    },
+    {
+      key: "depositModel",
+      header: "Deposit",
+      render: (r) => {
+        const health = r.depositEscrow?.healthStatus ?? "fully_covered";
+        const color = health === "shortfall" ? "error" : health === "at_risk" ? "warning" : "success";
+        return (
+          <div className="space-y-1">
+            <Badge variant={r.depositModel === "DEPOSIT_ESCROW" ? "info" : "neutral"}>
+              {r.depositModel === "DEPOSIT_ESCROW" ? "Escrow" : "Reserve"}
+            </Badge>
+            <div>
+              <Badge variant={color} className="text-[10px]">
+                {health.replace(/_/g, " ")}
+              </Badge>
+            </div>
+            {r.depositEscrow?.walletWatchActive ? <p className="text-[10px] text-amber-600">Wallet Watch</p> : null}
+          </div>
+        );
+      },
     },
     {
       key: "startDate",
@@ -210,7 +274,7 @@ export default function LeasingPage() {
               <FilePlus className="mr-1.5 h-4 w-4" /> Upload Lease
             </Link>
           </Button>
-          <Button onClick={() => setShowCreate(true)}>
+          <Button onClick={() => { setShowCreate(true); void loadProperties(); }}>
             <FilePlus className="mr-1.5 h-4 w-4" /> New Lease
           </Button>
         </div>
@@ -263,33 +327,76 @@ export default function LeasingPage() {
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Property ID *</label>
-              <input
+              <label className="mb-1 block text-sm font-medium text-slate-700">Property *</label>
+              <select
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Property ID"
                 value={form.propertyId}
-                onChange={(e) => setForm((f) => ({ ...f, propertyId: e.target.value }))}
-              />
+                onChange={(e) => {
+                  const propertyId = e.target.value;
+                  setForm((f) => ({ ...f, propertyId, unitId: "" }));
+                  void loadUnits(propertyId);
+                }}
+              >
+                <option value="">Select property...</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}{p.propertyCode ? ` (${p.propertyCode})` : ""}</option>
+                ))}
+              </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Unit ID *</label>
-              <input
+              <label className="mb-1 block text-sm font-medium text-slate-700">Unit *</label>
+              <select
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                placeholder="Unit ID"
                 value={form.unitId}
                 onChange={(e) => setForm((f) => ({ ...f, unitId: e.target.value }))}
-              />
+                disabled={!form.propertyId}
+              >
+                <option value="">Select unit...</option>
+                {units.map((u) => (
+                  <option key={u.id} value={u.id}>Unit {u.unitNumber} - {u.status}</option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Tenant User ID *</label>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Deposit Handling Model</label>
+            <select
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={form.depositModel}
+              onChange={(e) => setForm((f) => ({ ...f, depositModel: e.target.value }))}
+            >
+              <option value="LANDLORD_RESERVE">Model A - Landlord Reserve</option>
+              <option value="DEPOSIT_ESCROW">Model B2 - Deposit Escrow + Top-Ups</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Deposit Escrow enables the Escrow Badge. Landlord Reserve enables wallet health monitoring and Wallet Watch.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Tenant *</label>
             <input
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Tenant's user ID"
-              value={form.tenantUserId}
-              onChange={(e) => setForm((f) => ({ ...f, tenantUserId: e.target.value }))}
+              placeholder="Search tenant by name, email, phone, or ID"
+              value={tenantQuery}
+              onChange={(e) => { void searchTenants(e.target.value); }}
             />
+            {tenantOptions.length > 0 && (
+              <div className="mt-2 max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white">
+                {tenantOptions.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-blue-50 ${form.tenantUserId === t.id ? "bg-blue-50 text-blue-700" : ""}`}
+                    onClick={() => { setForm((f) => ({ ...f, tenantUserId: t.id })); setTenantQuery(`${t.name} - ${t.email}`); setTenantOptions([]); }}
+                  >
+                    <span className="font-medium">{t.name}</span>
+                    <span className="ml-2 text-xs text-slate-500">{t.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">

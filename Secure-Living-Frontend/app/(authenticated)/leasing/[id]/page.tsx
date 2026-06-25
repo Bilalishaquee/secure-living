@@ -20,6 +20,13 @@ type Lease = {
   leaseType: string;
   rentAmount: number;
   depositAmount: number | null;
+  depositModel: string;
+  depositEscrow?: {
+    currentBalance: number;
+    healthStatus: string;
+    walletWatchActive: boolean;
+    status: string;
+  } | null;
   status: string;
   startDate: string;
   endDate: string;
@@ -54,8 +61,10 @@ export default function LeaseDetailPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showRenewModal, setShowRenewModal] = useState(false);
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [pendingStatus, setPendingStatus] = useState("");
   const [renewForm, setRenewForm] = useState({ startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "" });
+  const [topUpForm, setTopUpForm] = useState({ amount: "", reason: "" });
   const [saving, setSaving] = useState(false);
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
@@ -141,6 +150,47 @@ export default function LeaseDetailPage({ params }: PageProps) {
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         toast(err.error ?? "Failed to renew lease.", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTopUpRequest() {
+    if (!lease) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/deposit/top-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ leaseId: lease.id, amount: Number(topUpForm.amount), reason: topUpForm.reason }),
+      });
+      if (res.ok) {
+        toast("Top-up request submitted.", "success");
+        setShowTopUpModal(false);
+        setTopUpForm({ amount: "", reason: "" });
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast(err.error ?? "Failed to submit top-up.", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCaptureDeposit() {
+    if (!lease) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/deposit/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ leaseId: lease.id }),
+      });
+      if (res.ok) toast("Deposit captured for deduction processing.", "success");
+      else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast(err.error ?? "Unable to capture deposit.", "error");
       }
     } finally {
       setSaving(false);
@@ -249,6 +299,27 @@ export default function LeaseDetailPage({ params }: PageProps) {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Deposit Protection</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 text-sm sm:grid-cols-4">
+          <Row label="Model" value={lease.depositModel === "DEPOSIT_ESCROW" ? "Deposit Escrow + Top-Ups" : "Landlord Reserve"} />
+          <Row label="Balance" value={formatKes(lease.depositEscrow?.currentBalance ?? lease.depositAmount ?? 0)} mono />
+          <Row label="Health" value={(lease.depositEscrow?.healthStatus ?? "fully_covered").replace(/_/g, " ")} />
+          <Row label="Wallet Watch" value={lease.depositEscrow?.walletWatchActive ? "Active" : "Inactive"} />
+          <div className="sm:col-span-4 flex flex-wrap gap-2">
+            {lease.depositModel === "DEPOSIT_ESCROW" ? (
+              <Button size="sm" onClick={() => setShowTopUpModal(true)}>Request Top-Up</Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={() => { void handleCaptureDeposit(); }} disabled={saving}>
+                Capture Reserve
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Timeline */}
       <Card>
         <CardHeader>
@@ -344,6 +415,25 @@ export default function LeaseDetailPage({ params }: PageProps) {
             <Button variant="outline" onClick={() => setShowRenewModal(false)}>Cancel</Button>
             <Button onClick={() => { void handleRenewLease(); }} disabled={!renewForm.startDate || !renewForm.endDate || !renewForm.rentAmount || saving}>
               {saving ? "Creating..." : "Create Renewal Draft"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={showTopUpModal} onOpenChange={setShowTopUpModal} title="Deposit Top-Up Request">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Amount (KES)</label>
+            <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={topUpForm.amount} onChange={(e) => setTopUpForm((f) => ({ ...f, amount: e.target.value }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Reason</label>
+            <textarea className="min-h-24 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" value={topUpForm.reason} onChange={(e) => setTopUpForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Rent increase at renewal, damage incident, voluntary extra protection..." />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowTopUpModal(false)}>Cancel</Button>
+            <Button onClick={() => { void handleTopUpRequest(); }} disabled={!topUpForm.amount || !topUpForm.reason || saving}>
+              Submit Top-Up
             </Button>
           </div>
         </div>

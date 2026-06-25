@@ -171,7 +171,7 @@ export default function UnitDetailPage({ params }: Props) {
   const [rentHistory, setRentHistory] = useState<RentHistory | null>(null);
   const [rentLoading, setRentLoading] = useState(false);
   const [showCreateLease, setShowCreateLease] = useState(false);
-  const [leaseForm, setLeaseForm] = useState({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "monthly" });
+  const [leaseForm, setLeaseForm] = useState({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" });
   const [showNewSR, setShowNewSR] = useState(false);
   const [srForm, setSrForm] = useState({ title: "", description: "", priority: "medium", category: "other" });
 
@@ -332,6 +332,7 @@ export default function UnitDetailPage({ params }: Props) {
           leaseType: leaseForm.leaseType,
           rentAmount: parseFloat(leaseForm.rentAmount) || (unit.rentAmountKes ?? 0),
           depositAmount: leaseForm.depositAmount ? parseFloat(leaseForm.depositAmount) : undefined,
+          depositModel: leaseForm.depositModel,
           startDate: new Date(leaseForm.startDate).toISOString(),
           endDate: new Date(leaseForm.endDate).toISOString(),
           paymentFrequency: leaseForm.paymentFrequency,
@@ -344,7 +345,7 @@ export default function UnitDetailPage({ params }: Props) {
       }
       toast("Lease created successfully", "success");
       setShowCreateLease(false);
-      setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "monthly" });
+      setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" });
       await load();
     } finally {
       setSaving(false);
@@ -618,7 +619,7 @@ export default function UnitDetailPage({ params }: Props) {
                 type="button"
                 className="mt-4"
                 size="sm"
-                onClick={() => { setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: unit.rentAmountKes?.toString() ?? "", depositAmount: unit.depositAmountKes?.toString() ?? "", paymentFrequency: "monthly" }); setShowCreateLease(true); }}
+                onClick={() => { setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: unit.rentAmountKes?.toString() ?? "", depositAmount: unit.depositAmountKes?.toString() ?? "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" }); setShowCreateLease(true); }}
               >
                 Create Lease
               </Button>
@@ -852,6 +853,18 @@ export default function UnitDetailPage({ params }: Props) {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Deposit Handling Model</label>
+            <select
+              value={leaseForm.depositModel}
+              onChange={(e) => setLeaseForm((f) => ({ ...f, depositModel: e.target.value }))}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+            >
+              <option value="LANDLORD_RESERVE">Model A - Landlord Reserve</option>
+              <option value="DEPOSIT_ESCROW">Model B2 - Deposit Escrow + Top-Ups</option>
+            </select>
+            <p className="mt-1 text-[11px] text-[var(--text-muted)]">Escrow model shows the Escrow Badge and enables top-up requests.</p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => setShowCreateLease(false)}>Cancel</Button>

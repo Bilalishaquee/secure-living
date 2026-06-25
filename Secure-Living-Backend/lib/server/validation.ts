@@ -29,6 +29,7 @@ export const createLeaseSchema = z.object({
   leaseType: z.enum(["fixed_term", "month_to_month"]),
   rentAmount: z.number().positive(),
   depositAmount: z.number().nonnegative().optional(),
+  depositModel: z.enum(["LANDLORD_RESERVE", "DEPOSIT_ESCROW"]).default("LANDLORD_RESERVE"),
   startDate: z.string().datetime(),
   endDate: z.string().datetime(),
   paymentFrequency: z.enum(["monthly", "quarterly"]),
