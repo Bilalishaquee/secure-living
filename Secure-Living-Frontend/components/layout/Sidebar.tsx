@@ -154,6 +154,7 @@ const landlordGroups: NavGroup[] = [
     items: [
       { href: "/investments", label: "Investments", icon: LineChart },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
+      { href: "/commercial-readiness", label: "Plan & Referrals", icon: Ticket },
       { href: "/reports", label: "Financial Reports", icon: BarChart2 },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
@@ -233,6 +234,7 @@ const superAdminGroups: NavGroup[] = [
       { href: "/admin/service-categories", label: "Service Categories", icon: Tags },
       { href: "/admin/service-enquiries", label: "Service Enquiries", icon: Ticket },
       { href: "/team", label: "Team Invitations", icon: UserPlus },
+      { href: "/commercial-readiness", label: "Commercial Readiness", icon: Ticket },
     ],
   },
   {
@@ -315,6 +317,7 @@ const adminGroups: NavGroup[] = [
     items: [
       { href: "/admin/organizations", label: "Organisations", icon: Globe },
       { href: "/team", label: "Team", icon: UserPlus },
+      { href: "/commercial-readiness", label: "Commercial Readiness", icon: Ticket },
     ],
   },
   {
@@ -322,6 +325,7 @@ const adminGroups: NavGroup[] = [
     items: [
       { href: "/data-import", label: "Data Migration", icon: FileInput },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
+      { href: "/commercial-readiness", label: "Plan & Referrals", icon: Ticket },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
@@ -419,6 +423,7 @@ const agencyGroups: NavGroup[] = [
     items: [
       { href: "/team", label: "Agency Team", icon: UserPlus },
       { href: "/data-import", label: "Data Migration", icon: FileInput },
+      { href: "/commercial-readiness", label: "Plan & Referrals", icon: Ticket },
     ],
   },
   {
@@ -426,6 +431,7 @@ const agencyGroups: NavGroup[] = [
     items: [
       { href: "/reports", label: "Financial Reports", icon: BarChart2 },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
+      { href: "/commercial-readiness", label: "Plan & Referrals", icon: Ticket },
       { href: "/kyc", label: "KYC & Verification", icon: Upload },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
@@ -463,6 +469,7 @@ const agencyManagerGroups: NavGroup[] = [
     items: [
       { href: "/kyc", label: "KYC & Docs", icon: Upload },
       { href: "/properties/transfers", label: "Property Transfers", icon: GitCompare },
+      { href: "/commercial-readiness", label: "Plan & Referrals", icon: Ticket },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },
@@ -494,6 +501,7 @@ const tenantGroups: NavGroup[] = [
     items: [
       { href: "/kyc", label: "KYC & Docs", icon: Upload },
       { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
+      { href: "/commercial-readiness", label: "Referrals", icon: Ticket },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },

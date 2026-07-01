@@ -145,7 +145,7 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   // ── Package-based service request gating ──────────────────────────────────
   const subscription = await prisma.userPackageSubscription.findFirst({
-    where: { userId: actor.userId, status: "active" },
+    where: { userId: actor.userId, status: { in: ["active", "trial", "trialing"] } },
     include: { package: true },
     orderBy: { startedAt: "desc" },
   });

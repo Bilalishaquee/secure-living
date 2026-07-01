@@ -21,7 +21,7 @@ export const GET = withErrorHandler(async (req: Request) => {
           { userId: actor.userId },
           ...(orgId ? [{ organizationId: orgId }] : []),
         ],
-        status: { in: ["active", "trialing"] },
+        status: { in: ["active", "trial", "trialing"] },
       },
       include: { package: true },
       orderBy: { createdAt: "desc" },

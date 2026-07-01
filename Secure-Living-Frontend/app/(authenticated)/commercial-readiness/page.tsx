@@ -1,0 +1,343 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Gift, Plus, RefreshCw } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { useToast } from "@/lib/toast-context";
+import { formatKes } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+
+type Plan = {
+  id: string;
+  name: string;
+  tier: string;
+  listingSlots: number;
+  hasServiceRequests: boolean;
+  serviceRequestMonthlyLimit: number | null;
+  monthlyPriceKes: string | number;
+  isListingOnly: boolean;
+  isActive: boolean;
+};
+
+type Subscription = {
+  id: string;
+  userId: string;
+  organizationId: string | null;
+  status: string;
+  billingCycle: string;
+  nextBillingAt: string | null;
+  trialEndsAt: string | null;
+  acquisitionSource: string;
+  package: Plan;
+  billingHistory?: { id: string; invoiceNumber: string; amountKes: string | number; status: string; issuedAt: string }[];
+};
+
+type ReferralCode = {
+  id: string;
+  code: string;
+  referrerRole: string;
+  rewardType: string;
+  rewardValue: string;
+  isActive: boolean;
+  referrals: Referral[];
+};
+
+type Referral = {
+  id: string;
+  referredName: string | null;
+  referredEmail: string | null;
+  status: string;
+  rewardEligible: boolean;
+  rewardApprovedAt: string | null;
+  rewardIssuedAt: string | null;
+  referralCode?: { code: string; referrerRole: string };
+};
+
+type Metrics = {
+  subscriptionPlanAdoption: { planId: string; planName: string; tier: string; count: number }[];
+  trialToPaidConversionRate: number;
+  subscriptionRenewalRate: number;
+  referralConversionRate: number;
+  successfulReferrals: number;
+  acquisitionSources: Record<string, number>;
+  averageRevenuePerOrganization: number;
+  totals: { subscriptions: number; trial: number; active: number; cancelled: number; expired: number; referrals: number; revenueKes: number };
+};
+
+const statusClass: Record<string, string> = {
+  trial: "bg-blue-50 text-blue-700",
+  active: "bg-emerald-50 text-emerald-700",
+  suspended: "bg-amber-50 text-amber-700",
+  cancelled: "bg-slate-100 text-slate-600",
+  expired: "bg-red-50 text-red-700",
+  invited: "bg-blue-50 text-blue-700",
+  registered: "bg-indigo-50 text-indigo-700",
+  verified: "bg-violet-50 text-violet-700",
+  qualified: "bg-emerald-50 text-emerald-700",
+  rewarded: "bg-teal-50 text-teal-700",
+};
+
+function statusBadge(status: string) {
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass[status] ?? "bg-slate-100 text-slate-600"}`}>{status.replace(/_/g, " ")}</span>;
+}
+
+export default function CommercialReadinessPage() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [codes, setCodes] = useState<ReferralCode[]>([]);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [creatingCode, setCreatingCode] = useState(false);
+  const [newReferral, setNewReferral] = useState({ code: "", name: "", email: "" });
+
+  const isAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const headers = useMemo(() => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${user?.authToken ?? ""}`,
+  }), [user?.authToken]);
+
+  async function load() {
+    if (!user?.authToken) return;
+    setLoading(true);
+    try {
+      const [planRes, subRes, codeRes, refRes, metricRes] = await Promise.all([
+        fetch("/api/v1/commercial/subscription-plans", { headers }),
+        fetch(`/api/v1/commercial/subscriptions${isAdmin ? "" : "?current=true"}`, { headers }),
+        fetch(`/api/v1/commercial/referral-codes${isAdmin ? "" : "?mine=true"}`, { headers }),
+        fetch("/api/v1/commercial/referrals", { headers }),
+        fetch("/api/v1/commercial/metrics", { headers }),
+      ]);
+      if (planRes.ok) setPlans(((await planRes.json()) as { data: Plan[] }).data ?? []);
+      if (subRes.ok) {
+        const data = ((await subRes.json()) as { data: Subscription[] | Subscription | null }).data;
+        setSubscriptions(Array.isArray(data) ? data : data ? [data] : []);
+      }
+      if (codeRes.ok) setCodes(((await codeRes.json()) as { data: ReferralCode[] }).data ?? []);
+      if (refRes.ok) setReferrals(((await refRes.json()) as { data: Referral[] }).data ?? []);
+      if (metricRes.ok) setMetrics(((await metricRes.json()) as { data: Metrics }).data);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, [user?.authToken, isAdmin]);
+
+  async function createReferralCode() {
+    setCreatingCode(true);
+    try {
+      const res = await fetch("/api/v1/commercial/referral-codes", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ rewardType: "free_subscription_period", rewardValue: "1_month" }),
+      });
+      if (res.ok) {
+        toast("Referral code created", "success");
+        await load();
+      } else {
+        const j = await res.json();
+        toast((j as { error?: string }).error ?? "Failed to create referral code", "error");
+      }
+    } finally {
+      setCreatingCode(false);
+    }
+  }
+
+  async function createReferral() {
+    if (!newReferral.code || !newReferral.email) {
+      toast("Referral code and email are required", "error");
+      return;
+    }
+    const res = await fetch("/api/v1/commercial/referrals", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        referralCode: newReferral.code,
+        referredName: newReferral.name || undefined,
+        referredEmail: newReferral.email,
+        status: "invited",
+      }),
+    });
+    if (res.ok) {
+      toast("Referral invitation tracked", "success");
+      setNewReferral({ code: "", name: "", email: "" });
+      await load();
+    } else {
+      const j = await res.json();
+      toast((j as { error?: string }).error ?? "Failed to track referral", "error");
+    }
+  }
+
+  async function updateReferral(id: string, action: "qualified" | "approveReward" | "issueReward") {
+    const body = action === "qualified"
+      ? { status: "qualified", rewardEligible: true, note: "Referral qualified during pilot review" }
+      : action === "approveReward"
+        ? { approveReward: true, note: "Reward approved" }
+        : { status: "rewarded", issueReward: true, note: "Reward issued" };
+    const res = await fetch(`/api/v1/commercial/referrals/${id}`, { method: "PUT", headers, body: JSON.stringify(body) });
+    if (res.ok) {
+      toast("Referral updated", "success");
+      await load();
+    }
+  }
+
+  async function updateSubscription(id: string, status: string) {
+    const res = await fetch(`/api/v1/commercial/subscriptions/${id}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ status, note: `Pilot subscription moved to ${status}` }),
+    });
+    if (res.ok) {
+      toast("Subscription updated", "success");
+      await load();
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="app-page-toolbar">
+        <div>
+          <h1 className="app-page-title">Commercial Readiness</h1>
+          <p className="app-page-lead">Pilot subscription management, referral tracking, rewards, and commercial validation metrics.</p>
+        </div>
+        <Button variant="outline" onClick={() => void load()} disabled={loading}>
+          <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+        </Button>
+      </div>
+
+      {metrics && (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Subscriptions</p><p className="mt-1 text-2xl font-bold text-slate-900">{metrics.totals.subscriptions}</p><p className="text-xs text-slate-500">{metrics.totals.trial} trial, {metrics.totals.active} active</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Trial to Paid</p><p className="mt-1 text-2xl font-bold text-slate-900">{metrics.trialToPaidConversionRate}%</p><p className="text-xs text-slate-500">Pilot conversion rate</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Referral Conversion</p><p className="mt-1 text-2xl font-bold text-slate-900">{metrics.referralConversionRate}%</p><p className="text-xs text-slate-500">{metrics.successfulReferrals} successful referrals</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-sm text-slate-500">Avg Revenue / Org</p><p className="mt-1 text-2xl font-bold text-slate-900">{formatKes(metrics.averageRevenuePerOrganization)}</p><p className="text-xs text-slate-500">Paid billing records</p></CardContent></Card>
+        </section>
+      )}
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle>Subscription Plans</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {plans.map((plan) => (
+              <div key={plan.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{plan.name}</p>
+                    <p className="text-xs text-slate-500">{plan.tier} · {plan.listingSlots} listing slots · {plan.hasServiceRequests ? "Service requests enabled" : "No service requests"}</p>
+                  </div>
+                  <p className="font-semibold text-blue-700">{formatKes(Number(plan.monthlyPriceKes))}/mo</p>
+                </div>
+              </div>
+            ))}
+            {!plans.length && <p className="text-sm text-slate-500">No plans configured yet.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Organisation Subscriptions</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            {subscriptions.map((sub) => (
+              <div key={sub.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-slate-900">{sub.package?.name ?? "Subscription"}</p>
+                    <p className="text-xs text-slate-500">{sub.billingCycle} · source: {sub.acquisitionSource} · next billing {sub.nextBillingAt ? new Date(sub.nextBillingAt).toLocaleDateString() : "not set"}</p>
+                  </div>
+                  {statusBadge(sub.status)}
+                </div>
+                {isAdmin && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {["active", "suspended", "cancelled", "expired"].map((s) => (
+                      <Button key={s} size="sm" variant="outline" onClick={() => void updateSubscription(sub.id, s)}>{s}</Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            {!subscriptions.length && <p className="text-sm text-slate-500">No subscription records found.</p>}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between gap-3">
+              <span>Referral Codes</span>
+              <Button size="sm" onClick={createReferralCode} disabled={creatingCode}>
+                <Gift className="mr-2 h-4 w-4" /> Generate
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {codes.map((code) => (
+              <div key={code.id} className="rounded-lg border border-slate-200 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-lg font-bold text-slate-900">{code.code}</p>
+                    <p className="text-xs text-slate-500">{code.rewardType.replace(/_/g, " ")} · {code.rewardValue} · {code.referrals?.length ?? 0} recent referrals</p>
+                  </div>
+                  {code.isActive ? statusBadge("active") : statusBadge("cancelled")}
+                </div>
+              </div>
+            ))}
+            {!codes.length && <p className="text-sm text-slate-500">No referral codes yet.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>Track Referral</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Referral code" value={newReferral.code} onChange={(e) => setNewReferral((f) => ({ ...f, code: e.target.value.toUpperCase() }))} />
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Referred name" value={newReferral.name} onChange={(e) => setNewReferral((f) => ({ ...f, name: e.target.value }))} />
+            <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Referred email" value={newReferral.email} onChange={(e) => setNewReferral((f) => ({ ...f, email: e.target.value }))} />
+            <Button onClick={createReferral} className="w-full"><Plus className="mr-2 h-4 w-4" /> Add Referral</Button>
+          </CardContent>
+        </Card>
+      </section>
+
+      <Card>
+        <CardHeader><CardTitle>Referral Activity</CardTitle></CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3 text-left">Referral</th>
+                <th className="px-4 py-3 text-left">Code</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">Reward</th>
+                {isAdmin && <th className="px-4 py-3 text-left">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {referrals.map((ref) => (
+                <tr key={ref.id}>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-slate-900">{ref.referredName ?? "Unnamed referral"}</p>
+                    <p className="text-xs text-slate-500">{ref.referredEmail ?? "No email"}</p>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs">{ref.referralCode?.code ?? "-"}</td>
+                  <td className="px-4 py-3">{statusBadge(ref.status)}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{ref.rewardIssuedAt ? "Issued" : ref.rewardApprovedAt ? "Approved" : ref.rewardEligible ? "Eligible" : "Not eligible"}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="outline" onClick={() => void updateReferral(ref.id, "qualified")}>Qualify</Button>
+                        <Button size="sm" variant="outline" onClick={() => void updateReferral(ref.id, "approveReward")}>Approve</Button>
+                        <Button size="sm" variant="outline" onClick={() => void updateReferral(ref.id, "issueReward")}>Issue</Button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!referrals.length && <p className="p-4 text-sm text-slate-500">No referral activity yet.</p>}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

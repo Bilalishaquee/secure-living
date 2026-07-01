@@ -1862,22 +1862,119 @@ model UserPackageSubscription {
   userId           String
   organizationId   String?
   packageId        String
-  status           String    @default("active") // active, cancelled, expired
+  status           String    @default("active") // trial, active, suspended, cancelled, expired
   billingCycle     String    @default("monthly") // monthly, annual
   startedAt        DateTime  @default(now())
   nextBillingAt    DateTime?
+  trialEndsAt      DateTime?
+  suspendedAt      DateTime?
   canceledAt       DateTime?
+  expiredAt        DateTime?
+  acquisitionSource String   @default("direct") // direct, referral, partner
+  referralId       String?
+  renewalReminderAt DateTime?
   srUsedThisMonth  Int       @default(0)
   srCounterResetAt DateTime  @default(now())
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   package Package @relation(fields: [packageId], references: [id])
+  billingHistory SubscriptionBillingHistory[]
+  referral Referral? @relation(fields: [referralId], references: [id])
 
   @@index([userId, status])
   @@index([organizationId])
   @@index([packageId])
   @@index([organizationId, status])
+  @@index([acquisitionSource])
+  @@index([referralId])
+}
+
+model SubscriptionBillingHistory {
+  id             String   @id @default(cuid())
+  subscriptionId String
+  organizationId String?
+  userId         String
+  packageId      String
+  billingCycle   String
+  amountKes      Decimal  @default(0)
+  invoiceNumber  String   @unique
+  status         String   @default("pending") // pending, paid, failed, waived, cancelled
+  paymentMethod  String?
+  paymentReference String?
+  periodStart    DateTime
+  periodEnd      DateTime
+  issuedAt       DateTime @default(now())
+  paidAt         DateTime?
+  notes          String?
+
+  subscription UserPackageSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([userId, issuedAt])
+  @@index([subscriptionId, issuedAt])
+}
+
+model ReferralCode {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  referrerUserId String
+  referrerRole   String
+  organizationId String?
+  rewardType     String   @default("free_subscription_period")
+  rewardValue    String   @default("1_month")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  referrals Referral[]
+
+  @@index([referrerUserId])
+  @@index([organizationId])
+  @@index([isActive])
+}
+
+model Referral {
+  id                String   @id @default(cuid())
+  referralCodeId    String
+  referredUserId    String?
+  referredEmail     String?
+  referredName      String?
+  status            String   @default("invited") // invited, registered, verified, qualified, rewarded
+  acquisitionSource String   @default("referral")
+  qualificationNote String?
+  rewardType        String?
+  rewardValue       String?
+  rewardEligible    Boolean  @default(false)
+  rewardApprovedAt  DateTime?
+  rewardApprovedBy  String?
+  rewardIssuedAt    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  referralCode ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  subscriptions UserPackageSubscription[]
+  activity ReferralActivity[]
+
+  @@index([status])
+  @@index([referredUserId])
+  @@index([referredEmail])
+  @@index([referralCodeId, status])
+  @@index([acquisitionSource])
+}
+
+model ReferralActivity {
+  id          String   @id @default(cuid())
+  referralId String
+  actorUserId String?
+  eventType   String
+  note        String?
+  createdAt   DateTime @default(now())
+
+  referral Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  @@index([referralId, createdAt])
+  @@index([eventType])
 }
 
 // â”€â”€â”€ Account Freeze & Appeals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
