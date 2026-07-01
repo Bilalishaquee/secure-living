@@ -1,0 +1,146 @@
+PHASE 1  --  Identity, Organizations & Access Control (THE BEDROCK)
+⏱ 2 - 3 weeks | 💰 ~$500🎯 Must be hosted
+Purpose
+Nothing else is safe without this.
+Includes
+  oo   User registration (Landlord, Tenant, Professional, Staff, Admin)
+  oo   Organization model (Diaspora client, Agency, Independent Manager)
+  oo   Branch & scope logic
+  oo   Role-based access control (RBAC)
+  oo   Permission middleware (branch & role enforced at API level)
+  oo   KYC document upload (not approval yet)
+  oo   Audit log (append-only)
+Deliverables
+  oo   Hosted staging environment
+  oo   Login works
+  oo   Admin can create roles & assign scopes
+  oo   API protected by role + branch checks
+
+🏘 PHASE 2  --  Property, Units & Ownership Graph
+⏱ 2 - 3 weeks | 💰 ~$500
+Purpose
+Create the asset truth layer.
+Includes
+  oo   Properties & units
+  oo   Ownership & management relationships
+  oo   Branch-property binding
+  oo   GPS, media, tags
+  oo   Property roles (owner, manager, caretaker)
+Deliverables
+  oo   CRUD properties & units
+  oo   Role-scoped visibility (branch isolation works)
+  oo   API + basic UI
+
+🧾 PHASE 3  --  Service Request Engine (Polymorphic Core)
+⏱ 2 - 3 weeks | 💰 ~$500
+Purpose
+Everything becomes a service workflow, not hard-coded features.
+Includes
+  oo   Generic service_requests engine
+  oo   Types: maintenance, inspection, proxy, legal
+  oo   Status machine (draft --> approved --> in_progress --> completed)
+  oo   Assignment & escalation rules
+  oo   Evidence upload (photos/videos)
+Deliverables
+  oo   One engine, many services
+  oo   No duplicate tables per service
+  oo   Proof of extensibility
+
+💰 PHASE 4  --  Wallets, Ledgers & Immutable Transactions
+⏱ 3 weeks | 💰 ~$500
+Purpose
+This is the financial spine.
+Includes
+  oo   Wallets (user, property, service)
+  oo   Sub-ledgers (rent, deposit, escrow, reserve)
+  oo   Immutable transaction table
+  oo   Double-entry rules
+  oo   Derived balances (not mutable fields)
+Deliverables
+  oo   Ledger math checks out
+  oo   No UPDATE/DELETE on transactions
+  oo   Reversal entries only
+⚠️ This must come BEFORE rent collection
+
+🔐 PHASE 5  --  Escrow State Machine & Holds
+⏱ 2 - 3 weeks | 💰 ~$500
+Purpose
+Prevent fraud, double spend, premature payouts.
+Includes
+  oo   Escrow states (pending, held, released, disputed)
+  oo   FSM enforcement
+  oo   Idempotency keys
+  oo   Freeze / unfreeze logic
+  oo   Dispute escrow
+Deliverables
+  oo   Illegal transitions blocked
+  oo   Duplicate API calls safe
+  oo   Funds cannot "disappear"
+
+🧮 PHASE 6  --  Rent Collection & Reconciliation
+⏱ 2 - 3 weeks | 💰 ~$500
+Purpose
+Money enters the system safely.
+Includes
+  oo   Rent invoices
+  oo   Manual / hybrid / escrow payments
+  oo   Payment verification
+  oo   Daily reconciliation jobSum(Escrow) + Sum(Reserve) = 0
+  oo   Alerting on mismatch
+Deliverables
+  oo   Reconciliation report
+  oo   Non-blocking background jobs
+  oo   Freeze payouts on mismatch
+
+🧑‍💼 PHASE 7  --  Tenant Lifecycle & Lease Management
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   Tenant onboarding
+  oo   Lease creation
+  oo   Lease states
+  oo   Move-in / move-out workflows
+  oo   Deposit tracking
+
+🛠 PHASE 8  --  Professional Network & Milestone Payouts
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   Professionals onboarding
+  oo   Quotes & approvals
+  oo   Milestone-based escrow release
+  oo   Performance ratings
+  oo   Clawbacks
+
+📊 PHASE 9  --  Finance & Management Dashboards
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   OPEX & runway
+  oo   Vendor aging
+  oo   Delegated approvals
+  oo   Financial health indicators
+
+🧠 PHASE 10  --  Feedback --> Risk --> SOP Engine
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   Feedback capture
+  oo   Pattern detection
+  oo   Risk register
+  oo   SOP suggestions
+  oo   Training triggers
+
+📣 PHASE 11  --  Marketing & Growth Action Panel
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   Lead funnel
+  oo   Campaign tracking
+  oo   Budget approvals
+  oo   ROI analytics
+
+🚀 PHASE 12  --  AI, Automation & Scale Readiness
+⏱ 2 - 3 weeks | 💰 ~$500
+Includes
+  oo   Image comparison (move-in/out)
+  oo   Predictive alerts
+  oo   API hardening
+  oo   Scale & performance testing
+  oo   Compliance review
+
