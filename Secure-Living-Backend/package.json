@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "clean": "npx rimraf .next",
-    "dev": "next dev -p 4000",
-    "dev:clean": "npm run clean && next dev -p 4000",
-    "build": "prisma migrate deploy && prisma generate && next build",
-    "start": "next start -p 4000",
+    "dev": "node init && next dev -p 4000",
+    "dev:clean": "node init && npm run clean && next dev -p 4000",
+    "build": "node init && prisma migrate deploy && prisma generate && next build",
+    "start": "node init && next start -p 4000",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed"
