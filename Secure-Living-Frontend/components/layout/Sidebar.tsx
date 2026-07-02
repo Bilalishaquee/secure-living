@@ -485,7 +485,7 @@ const tenantGroups: NavGroup[] = [
     label: "My Home",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/leasing", label: "My Lease", icon: FileText },
+      { href: "/tenant/lease", label: "My Lease", icon: FileText },
       { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
       { href: "/maintenance", label: "Maintenance", icon: Hammer },
       { href: "/tenant/vacate", label: "Move-Out Notice", icon: LogOut },

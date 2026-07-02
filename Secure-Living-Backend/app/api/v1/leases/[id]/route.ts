@@ -15,11 +15,24 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const lease = await prisma.lease.findUnique({ where: { id: params.id }, include: { depositEscrow: true } });
   if (!lease) return jsonError(404, "Lease not found");
 
+  // A tenant may only ever view their own lease, even within the same org/branch as others.
+  if (actor.role === "tenant" && lease.tenantUserId !== actor.userId) return jsonError(403, "Forbidden");
+
   const scoped = requireScope(actor, lease.organizationId, lease.branchId);
   if (scoped) return scoped;
 
   const depositEscrow = await refreshDepositHealth(lease.id);
-  return Response.json({ data: { ...lease, depositEscrow } });
+
+  // Same rationale as GET /leases — resolve a readable name/number without granting
+  // broader unit:view access (see leases/route.ts comment).
+  const [property, unit] = await Promise.all([
+    prisma.property.findUnique({ where: { id: lease.propertyId }, select: { name: true } }),
+    prisma.unit.findUnique({ where: { id: lease.unitId }, select: { unitNumber: true } }),
+  ]);
+
+  return Response.json({
+    data: { ...lease, depositEscrow, propertyName: property?.name ?? null, unitNumber: unit?.unitNumber ?? null },
+  });
 });
 
 export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
