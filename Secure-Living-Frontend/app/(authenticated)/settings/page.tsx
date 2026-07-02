@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Switch } from "@/components/ui/Switch";
 import { Avatar } from "@/components/ui/Avatar";
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
 
 const inputClass =
   "mt-1 w-full rounded-xl border border-[var(--surface-border)] bg-[var(--surface-white)] px-3 py-2 text-sm text-[var(--text-primary)] shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40";
@@ -217,7 +218,10 @@ export default function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            Profile
+            {user?.id && <VerificationBadge userId={user.id} subjectType="USER" />}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2">

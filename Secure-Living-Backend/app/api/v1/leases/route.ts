@@ -39,10 +39,25 @@ export const GET = withErrorHandler(async (req: Request) => {
     return { ...r, depositEscrow };
   }));
 
+  // Exact arrears figure per lease (usability report: "Status: Arrears can show exact
+  // figure of arrears"), from overdue/pending rent invoices past their due date.
+  const leaseIds = rows.map((r) => r.id);
+  const overdueInvoices = leaseIds.length
+    ? await prisma.rentInvoice.findMany({
+        where: { leaseId: { in: leaseIds }, status: { in: ["pending", "overdue"] }, dueDate: { lt: new Date() } },
+        select: { leaseId: true, balanceKes: true },
+      })
+    : [];
+  const arrearsByLease = new Map<string, number>();
+  for (const inv of overdueInvoices) {
+    arrearsByLease.set(inv.leaseId, (arrearsByLease.get(inv.leaseId) ?? 0) + inv.balanceKes);
+  }
+
   const enriched = refreshed.map((r) => ({
     ...r,
     tenantName: userMap.get(r.tenantUserId)?.fullName ?? null,
     tenantEmail: userMap.get(r.tenantUserId)?.email ?? null,
+    arrearsKes: arrearsByLease.get(r.id) ?? 0,
   }));
 
   return Response.json({ data: enriched });

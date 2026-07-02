@@ -7,7 +7,7 @@ import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
-type DisputeStatus = "OPEN" | "LANDLORD_RESPONDED" | "ESCALATED" | "RESOLVED_ACCEPTED" | "RESOLVED_REJECTED";
+type DisputeStatus = "OPEN" | "LANDLORD_RESPONDED" | "ESCALATED" | "RESOLVED_ACCEPTED" | "RESOLVED_REJECTED" | "RESOLVED_OTHER";
 
 type Dispute = {
   id: string;
@@ -32,8 +32,9 @@ const STATUS_CONFIG: Record<DisputeStatus, { label: string; color: string }> = {
   OPEN:               { label: "Open",                color: "bg-red-100 text-red-700" },
   LANDLORD_RESPONDED: { label: "Landlord Responded",  color: "bg-amber-100 text-amber-700" },
   ESCALATED:          { label: "Escalated",           color: "bg-orange-100 text-orange-700" },
-  RESOLVED_ACCEPTED:  { label: "Resolved — Accepted", color: "bg-emerald-100 text-emerald-700" },
-  RESOLVED_REJECTED:  { label: "Resolved — Rejected", color: "bg-slate-100 text-slate-600" },
+  RESOLVED_ACCEPTED:  { label: "Resolved — Approved", color: "bg-emerald-100 text-emerald-700" },
+  RESOLVED_REJECTED:  { label: "Resolved — Declined", color: "bg-slate-100 text-slate-600" },
+  RESOLVED_OTHER:     { label: "Resolved — Other",    color: "bg-blue-100 text-blue-700" },
 };
 
 const REASON_LABELS: Record<string, string> = {
@@ -72,9 +73,9 @@ export default function DisputesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function resolveDispute(disputeId: string, dec: string) {
+  async function resolveDispute(disputeId: string, outcome: "approve" | "decline" | "other", dec: string) {
     if (!user?.authToken || !dec.trim()) {
-      toast("Enter a decision reason", "error");
+      toast("Enter a resolution note", "error");
       return;
     }
     const res = await fetch("/api/v1/utility-disputes?admin=true", {
@@ -83,7 +84,7 @@ export default function DisputesPage() {
         Authorization: `Bearer ${user.authToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ disputeId, decision: dec }),
+      body: JSON.stringify({ disputeId, outcome, decision: dec }),
     });
     if (res.ok) {
       toast("Dispute resolved", "success");
@@ -211,25 +212,34 @@ export default function DisputesPage() {
                   <div className="pt-1">
                     {actionId === d.id ? (
                       <div className="space-y-2">
+                        <p className="text-xs text-slate-500">
+                          Decide this dispute: Approve the tenant's claim, Decline it, or record another resolution. A note is required either way.
+                        </p>
                         <textarea
                           className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue"
                           rows={2}
-                          placeholder="Enter admin decision / resolution reason…"
+                          placeholder="Resolution note (required)…"
                           value={decision}
                           onChange={(e) => setDecision(e.target.value)}
                         />
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => void resolveDispute(d.id, decision)}>
-                            Resolve Dispute
+                          <Button size="sm" onClick={() => void resolveDispute(d.id, "approve", decision)}>
+                            Approve
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => { setActionId(null); setDecision(""); }}>
+                          <Button size="sm" variant="outline" onClick={() => void resolveDispute(d.id, "decline", decision)}>
+                            Decline
+                          </Button>
+                          <Button size="sm" variant="secondary" onClick={() => void resolveDispute(d.id, "other", decision)}>
+                            Other Resolution
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setActionId(null); setDecision(""); }}>
                             Cancel
                           </Button>
                         </div>
                       </div>
                     ) : (
                       <Button size="sm" variant="secondary" onClick={() => setActionId(d.id)}>
-                        Resolve / Mediate
+                        Resolve Dispute
                       </Button>
                     )}
                   </div>

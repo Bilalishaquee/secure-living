@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { appendAudit } from "@/lib/server/audit";
 
 type Ctx = { params: { id: string } };
 
@@ -75,6 +76,16 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   await prisma.lease.update({
     where: { id: notice.leaseId },
     data: { status: "terminated", terminatedAt: new Date() },
+  });
+
+  await appendAudit({
+    userId: actor.userId,
+    role: actor.role,
+    action: "DEPOSIT_REFUND_PAID",
+    resourceType: "DepositRefund",
+    resourceId: refund.id,
+    orgId: notice.organizationId,
+    afterJson: { refundAmount: refund.refundAmount, voucherNumber: refund.voucherNumber },
   });
 
   return Response.json({ data: refund });

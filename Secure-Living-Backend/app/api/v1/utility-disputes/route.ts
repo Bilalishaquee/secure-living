@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/server/db";
-import { requireActor, jsonError, withErrorHandler, parseBody } from "@/lib/server/http";
+import { requireActor, requirePermission, jsonError, withErrorHandler, parseBody } from "@/lib/server/http";
 import { z } from "zod";
 
 const raiseSchema = z.object({
@@ -14,9 +14,13 @@ const respondSchema = z.object({
   responseReason: z.string().min(1),
 });
 
+// Dispute Management (UPDATE.md): resolution is a distinct Approve / Decline / Other-resolution
+// decision, always with a note, and only the party authorized to decide (dispute:resolve) may
+// make the final call — see requirePermission(actor, "dispute:resolve") below.
 const adminDecideSchema = z.object({
   disputeId: z.string().min(1),
   correctedReading: z.number().optional(),
+  outcome: z.enum(["approve", "decline", "other"]),
   decision: z.string().min(1),
 });
 
@@ -92,17 +96,25 @@ export const PATCH = withErrorHandler(async (req: Request) => {
   const isAdmin = url.searchParams.get("admin") === "true";
 
   if (isAdmin) {
+    const denied = requirePermission(actor, "dispute:resolve");
+    if (denied) return denied;
+
     const parsed = await parseBody(req, adminDecideSchema);
     if (!parsed.ok) return parsed.response;
-    const { disputeId, correctedReading, decision } = parsed.data;
+    const { disputeId, correctedReading, outcome, decision } = parsed.data;
 
     const dispute = await prisma.utilityDispute.findUnique({ where: { id: disputeId } });
     if (!dispute) return jsonError(404, "Dispute not found");
+    if (dispute.status === "RESOLVED_ACCEPTED" || dispute.status === "RESOLVED_REJECTED" || dispute.status === "RESOLVED_OTHER") {
+      return jsonError(400, "Dispute is already resolved");
+    }
+
+    const status = outcome === "approve" ? "RESOLVED_ACCEPTED" : outcome === "decline" ? "RESOLVED_REJECTED" : "RESOLVED_OTHER";
 
     await prisma.utilityDispute.update({
       where: { id: disputeId },
       data: {
-        status: "RESOLVED_ACCEPTED",
+        status,
         adminDecision: decision,
         adminDecidedAt: new Date(),
         adminDecidedBy: actor.userId,
@@ -110,7 +122,7 @@ export const PATCH = withErrorHandler(async (req: Request) => {
       },
     });
 
-    if (correctedReading !== undefined) {
+    if (outcome === "approve" && correctedReading !== undefined) {
       const original = await prisma.utilityReading.findUnique({ where: { id: dispute.readingId } });
       if (original) {
         await prisma.utilityReading.create({
@@ -128,10 +140,13 @@ export const PATCH = withErrorHandler(async (req: Request) => {
       }
     }
 
-    return Response.json({ data: { message: "Admin decision recorded" } });
+    return Response.json({ data: { message: `Dispute resolved: ${outcome}` } });
   }
 
-  // Landlord response
+  // Landlord response — first-line reply before an unresolved dispute reaches an admin decision.
+  const respondDenied = requirePermission(actor, "dispute:respond");
+  if (respondDenied) return respondDenied;
+
   const parsed = await parseBody(req, respondSchema);
   if (!parsed.ok) return parsed.response;
   const { disputeId, action, correctedReading, responseReason } = parsed.data;

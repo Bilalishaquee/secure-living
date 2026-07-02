@@ -23,7 +23,8 @@ export const GET = withErrorHandler(async (_req: Request) => {
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
-  const denied = requirePermission(actor, "service-request:manage");
+  // Service modes are platform-wide (not org-scoped) — restricted to Super Admin per spec.
+  const denied = requirePermission(actor, "platform:service-modes:manage");
   if (denied) return denied;
 
   const parsed = await parseBody(req, createConfigSchema);

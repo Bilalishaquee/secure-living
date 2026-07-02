@@ -4,8 +4,14 @@ import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler
 
 type Ctx = { params: { id: string; appId: string } };
 
+// Screening decision workflow (Secure Living UPDATE.md — "Screening Process"): after
+// reviewing an applicant (and any TenantScreeningReport on file), the responsible party
+// — whoever holds listing:edit (landlord/agency staff/property manager on this listing) —
+// takes one of: Shortlist, Reject, Accept, or Request More Information (-> REVIEWING with
+// a note asking the applicant/agent to supply more evidence before a final decision).
 const updateSchema = z.object({
   status: z.enum(["PENDING", "REVIEWING", "SHORTLISTED", "REJECTED", "ACCEPTED"]),
+  adminNotes: z.string().max(2000).optional(),
 });
 
 export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
@@ -23,7 +29,12 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const updated = await prisma.rentalApplication.update({
     where: { id: params.appId },
-    data: { status: parsed.data.status as never },
+    data: {
+      status: parsed.data.status as never,
+      reviewerId: actor.userId,
+      reviewedAt: new Date(),
+      ...(parsed.data.adminNotes !== undefined && { adminNotes: parsed.data.adminNotes }),
+    },
   });
 
   return Response.json({ data: updated });

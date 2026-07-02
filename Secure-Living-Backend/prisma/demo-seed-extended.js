@@ -986,11 +986,57 @@ async function main() {
     { inspectionId: insp.id, description: "Small hole in living room wall (picture hook)",
       amount: 2500, category: "damage", responsibility: "tenant" });
 
+  // Three worked examples of the Dynamic Inspection & Deposit Deduction System's
+  // evidence-backed deduction workflow (spec: "Evidence Requirements" + "Tenant Review & Dispute").
+  //
+  // Example 1 — DAMAGE: requires before/after photos, accepted by the tenant.
+  const insp_ded_damage = await upsert(prisma.inspectionDeduction,
+    { inspectionId: insp.id, description: "Cracked kitchen countertop tile" },
+    { inspectionId: insp.id, description: "Cracked kitchen countertop tile",
+      amount: 4500, category: "DAMAGE", responsibility: "TENANT", status: "accepted",
+      beforePhotoUrl: "https://cdn.secureliving.app/demo/unit102-counter-movein.jpg",
+      afterPhotoUrl: "https://cdn.secureliving.app/demo/unit102-counter-moveout.jpg",
+      repairQuoteUrl: "https://cdn.secureliving.app/demo/quotes/counter-repair-Q1029.pdf" });
+
+  // Example 2 — UTILITY_BALANCE: requires a bill/meter/invoice reference, disputed by the tenant.
+  const insp_ded_utility = await upsert(prisma.inspectionDeduction,
+    { inspectionId: insp.id, description: "Outstanding water bill at handover" },
+    { inspectionId: insp.id, description: "Outstanding water bill at handover",
+      amount: 1800, category: "UTILITY_BALANCE", responsibility: "TENANT", status: "disputed",
+      billOrMeterRef: "NCWSC-INV-88213",
+      disputeNote: "This bill covers a period after I moved out — please check the meter reading date." });
+
+  // Example 3 — CLEANING: requires an inspector note, still pending tenant review.
+  const insp_ded_cleaning = await upsert(prisma.inspectionDeduction,
+    { inspectionId: insp.id, description: "Deep cleaning required — kitchen and bathroom" },
+    { inspectionId: insp.id, description: "Deep cleaning required — kitchen and bathroom",
+      amount: 1500, category: "CLEANING", responsibility: "TENANT", status: "proposed",
+      inspectorNote: "Grease buildup on cooker hood and grout staining in bathroom at move-out inspection." });
+
   const depRefund = await upsert(prisma.depositRefund,
     { vacatingNoticeId: vn.id },
     { vacatingNoticeId: vn.id, organizationId: ORG_ID,
-      depositAmount: 80000, totalDeductions: 2500, refundAmount: 77500, status: "PENDING" });
-  console.log(`  ✓ Inspection PROPOSED (${insp.id}), deduction KES 2,500, refund KES 77,500`);
+      depositAmount: 80000, totalDeductions: 2500 + 4500 + 1800 + 1500, refundAmount: 80000 - (2500 + 4500 + 1800 + 1500), status: "PENDING" });
+  console.log(`  ✓ Inspection PROPOSED (${insp.id}) with 4 deductions (damage, utility [disputed], cleaning [pending], + original)`);
+  void insp_ded_damage; void insp_ded_utility; void insp_ded_cleaning;
+
+  // ── 30b. Custom checklist columns example (spec: "Custom Columns") ──────────
+  console.log("\n📋  Custom-column checklist template example...");
+  const customColumnsTemplate = await upsert(prisma.checklistTemplate,
+    { organizationId: ORG_ID, name: "Furnished Handover — Extended Evidence" },
+    { organizationId: ORG_ID, name: "Furnished Handover — Extended Evidence",
+      category: "FURNISHED",
+      description: "Move-out checklist demonstrating landlord-defined custom columns.",
+      customColumns: [
+        { key: "tenant_initials", label: "Tenant Initials", type: "text" },
+        { key: "inspector_notes", label: "Inspector Notes", type: "text" },
+        { key: "contractor_quote", label: "Contractor Quote", type: "file" },
+        { key: "invoice_upload", label: "Invoice Upload", type: "file" },
+      ] });
+  await upsert(prisma.checklistTemplateItem,
+    { templateId: customColumnsTemplate.id, item: "Sofa set — condition" },
+    { templateId: customColumnsTemplate.id, section: "Living Room", item: "Sofa set — condition", defaultQty: 1, order: 0 });
+  console.log(`  ✓ Template "${customColumnsTemplate.name}" with 4 custom columns (${customColumnsTemplate.id})`);
 
   // ── 31. More Lease Renewal Alerts ────────────────────────────────────────────
   console.log("\n🔔  More lease renewal alerts...");

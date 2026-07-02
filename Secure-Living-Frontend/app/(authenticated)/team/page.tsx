@@ -26,6 +26,8 @@ const ROLE_LABELS: Record<string, string> = {
   property_manager: "Property Manager",
   accountant: "Accountant",
   full_delegate: "Full Delegate",
+  short_stay_attendant: "Short Stay Attendant",
+  security_gate_officer: "Security / Gate Officer",
 };
 
 const ROLE_DESCRIPTIONS: Record<string, string> = {
@@ -33,7 +35,15 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   property_manager: "Add/remove units, request repairs, view lease details. Partial financial view.",
   accountant: "View all financial reports and statements. Cannot approve payments.",
   full_delegate: "Almost full access — approve payments up to configurable limits.",
+  short_stay_attendant: "Visitor check-in/out for short-stay guests only. No tenant, lease, or financial access.",
+  security_gate_officer: "Logs and approves visitors at the gate only. No tenant, lease, or financial access.",
 };
+
+// Platform/system roles — not offered as team-delegate invite targets, only custom roles
+// created via Admin > Roles & Permissions (in addition to the built-in delegate roles above).
+const SYSTEM_ROLE_SLUGS = new Set(["super_admin", "admin", "landlord", "agency", "staff", "tenant"]);
+
+type RbacRole = { id: string; slug: string; displayName: string };
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   pending: <Clock className="h-4 w-4 text-amber-500" />,
@@ -53,22 +63,35 @@ export default function TeamPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [customRoles, setCustomRoles] = useState<RbacRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [showInvite, setShowInvite] = useState(false);
   const [form, setForm] = useState<InviteForm>({ inviteeEmail: "", roleSlug: "caretaker", propertyIdsCsv: "" });
   const [saving, setSaving] = useState(false);
   const [revoking, setRevoking] = useState<string | null>(null);
 
+  // Custom roles created via Admin > Roles & Permissions can also be invited into, not just
+  // the 6 built-in delegate roles above (UPDATE.md #13: "Team roles should have permissions
+  // controlled by the landlord/superadmin"). Silently skipped if the actor lacks rbac:manage.
+  const allRoleLabels = { ...ROLE_LABELS, ...Object.fromEntries(customRoles.map((r) => [r.slug, r.displayName])) };
+
   const load = useCallback(async () => {
     if (!user?.authToken) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/team?organizationId=${user.organizationId ?? ""}`, {
-        headers: { Authorization: `Bearer ${user.authToken}` },
-      });
-      if (res.ok) {
-        const json = (await res.json()) as { data: Invitation[] };
+      const [invRes, rolesRes] = await Promise.all([
+        fetch(`/api/v1/team?organizationId=${user.organizationId ?? ""}`, {
+          headers: { Authorization: `Bearer ${user.authToken}` },
+        }),
+        fetch(`/api/v1/rbac/roles`, { headers: { Authorization: `Bearer ${user.authToken}` } }),
+      ]);
+      if (invRes.ok) {
+        const json = (await invRes.json()) as { data: Invitation[] };
         setInvitations(json.data);
+      }
+      if (rolesRes.ok) {
+        const json = (await rolesRes.json()) as { data: RbacRole[] };
+        setCustomRoles(json.data.filter((r) => !SYSTEM_ROLE_SLUGS.has(r.slug) && !(r.slug in ROLE_LABELS)));
       }
     } finally {
       setLoading(false);
@@ -158,10 +181,12 @@ export default function TeamPage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 sm:grid-cols-2">
-            {Object.entries(ROLE_LABELS).map(([slug, label]) => (
+            {Object.entries(allRoleLabels).map(([slug, label]) => (
               <div key={slug} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                 <p className="text-sm font-semibold text-[var(--text-primary)]">{label}</p>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">{ROLE_DESCRIPTIONS[slug]}</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {ROLE_DESCRIPTIONS[slug] ?? "Custom role — permissions configured in Admin > Roles & Permissions."}
+                </p>
               </div>
             ))}
           </div>
@@ -183,7 +208,7 @@ export default function TeamPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[var(--text-primary)]">{inv.inviteeEmail}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">{ROLE_LABELS[inv.roleSlug] ?? inv.roleSlug}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">{allRoleLabels[inv.roleSlug] ?? inv.roleSlug}</p>
                     {inv.propertyIdsCsv && (
                       <p className="text-xs text-[var(--text-muted)]">Limited to specific properties</p>
                     )}
@@ -221,7 +246,7 @@ export default function TeamPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-[var(--text-primary)]">{inv.inviteeEmail}</p>
                     <p className="text-xs text-[var(--text-secondary)]">
-                      {ROLE_LABELS[inv.roleSlug] ?? inv.roleSlug} · Expires {new Date(inv.expiresAt).toLocaleDateString()}
+                      {allRoleLabels[inv.roleSlug] ?? inv.roleSlug} · Expires {new Date(inv.expiresAt).toLocaleDateString()}
                     </p>
                   </div>
                 </div>
@@ -268,7 +293,7 @@ export default function TeamPage() {
               <div key={inv.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm opacity-70">
                 {STATUS_ICONS.revoked}
                 <span>{inv.inviteeEmail}</span>
-                <span className="text-[var(--text-muted)]">— {ROLE_LABELS[inv.roleSlug] ?? inv.roleSlug}</span>
+                <span className="text-[var(--text-muted)]">— {allRoleLabels[inv.roleSlug] ?? inv.roleSlug}</span>
                 <Badge variant="neutral" className="ml-auto capitalize">{isExpired(inv) ? "Expired" : "Revoked"}</Badge>
               </div>
             ))}
@@ -304,12 +329,12 @@ export default function TeamPage() {
               onChange={(e) => setForm((f) => ({ ...f, roleSlug: e.target.value }))}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
             >
-              {Object.entries(ROLE_LABELS).map(([slug, label]) => (
+              {Object.entries(allRoleLabels).map(([slug, label]) => (
                 <option key={slug} value={slug}>{label}</option>
               ))}
             </select>
             <p className="mt-1 text-xs text-[var(--text-muted)]">
-              {ROLE_DESCRIPTIONS[form.roleSlug]}
+              {ROLE_DESCRIPTIONS[form.roleSlug] ?? "Custom role — permissions configured in Admin > Roles & Permissions."}
             </p>
           </div>
 

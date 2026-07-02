@@ -26,6 +26,7 @@ function flagFor(statusIn: string, statusOut: string): "NO_ACTION" | "REVIEW_REQ
   return "NO_ACTION";
 }
 
+type CustomColumn = { key: string; label: string; type: "text" | "number" | "photo" | "file" | "checkbox" };
 type TemplateItem = {
   id: string;
   section: string;
@@ -48,6 +49,7 @@ type Entry = {
   note: string | null;
   photoInUrl: string | null;
   photoOutUrl: string | null;
+  customFields: Record<string, string> | null;
 };
 type TenantChecklist = {
   id: string;
@@ -55,7 +57,7 @@ type TenantChecklist = {
   status: string;
   signedAt: string | null;
   createdAt: string;
-  template: { id: string; name: string; category: string | null; items: TemplateItem[] };
+  template: { id: string; name: string; category: string | null; items: TemplateItem[]; customColumns?: CustomColumn[] | null };
   entries: Entry[];
 };
 type RowState = {
@@ -71,6 +73,7 @@ type RowState = {
   note: string;
   photoInUrl: string;
   photoOutUrl: string;
+  customFields: Record<string, string>;
 };
 type Reconciliation = {
   depositAmount: number; totalCharges: number; totalDeductions: number; refundAmount: number; flaggedCount: number;
@@ -131,6 +134,7 @@ export default function TenantChecklistPage() {
           note: e?.note ?? "",
           photoInUrl: e?.photoInUrl ?? "",
           photoOutUrl: e?.photoOutUrl ?? "",
+          customFields: { ...(e?.customFields ?? {}) },
         };
       });
       setRows(init);
@@ -143,10 +147,19 @@ export default function TenantChecklistPage() {
     setRows((prev) => ({ ...prev, [itemId]: { ...prev[itemId], [field]: value } }));
   }
 
+  function setCustomField(itemId: string, key: string, value: string) {
+    setRows((prev) => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], customFields: { ...prev[itemId]?.customFields, [key]: value } },
+    }));
+  }
+
+  const emptyRow: RowState = { statusIn: "", statusOut: "", qty: 1, charge: "", replacementCost: "", followUpDate: "", evidenceScore: "", responsibility: "", actionRequired: "", note: "", photoInUrl: "", photoOutUrl: "", customFields: {} };
+
   function buildPayload() {
     if (!selected) return [];
     return selected.template.items.map((it) => {
-      const r = rows[it.id] ?? { statusIn: "", statusOut: "", qty: 1, charge: "", replacementCost: "", followUpDate: "", evidenceScore: "", responsibility: "", actionRequired: "", note: "", photoInUrl: "", photoOutUrl: "" };
+      const r = rows[it.id] ?? emptyRow;
       return {
         itemId: it.id,
         statusIn: r.statusIn || null,
@@ -161,6 +174,7 @@ export default function TenantChecklistPage() {
         note: r.note || null,
         photoInUrl: r.photoInUrl || null,
         photoOutUrl: r.photoOutUrl || null,
+        customFields: Object.keys(r.customFields ?? {}).length > 0 ? r.customFields : undefined,
       };
     });
   }
@@ -306,12 +320,15 @@ export default function TenantChecklistPage() {
                   <th className="px-3 py-2 text-left w-32">Photo In URL</th>
                   <th className="px-3 py-2 text-left w-32">Photo Out URL</th>
                   <th className="px-3 py-2 text-left">Notes</th>
+                  {(selected.template.customColumns ?? []).map((c) => (
+                    <th key={c.key} className="px-3 py-2 text-left w-32">{c.label}</th>
+                  ))}
                   <th className="px-3 py-2 text-left w-28">Flag</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {selected.template.items.slice().sort((a, b) => a.order - b.order).map((it) => {
-                  const r = rows[it.id] ?? { statusIn: "", statusOut: "", qty: 1, charge: "", replacementCost: "", followUpDate: "", evidenceScore: "", responsibility: "", actionRequired: "", note: "", photoInUrl: "", photoOutUrl: "" };
+                  const r = rows[it.id] ?? emptyRow;
                   const isUtility = !!it.isUtilityMeter;
                   const flag = isUtility ? "NO_ACTION" : flagFor(r.statusIn, r.statusOut);
                   const meterUsage = isUtility && r.statusIn && r.statusOut
@@ -407,6 +424,23 @@ export default function TenantChecklistPage() {
                         <input disabled={isSigned} className="w-full rounded border border-slate-200 px-2 py-1" placeholder="Damage notes…" value={r.note}
                           onChange={(e) => setRow(it.id, "note", e.target.value)} />
                       </td>
+                      {(selected.template.customColumns ?? []).map((c) => (
+                        <td key={c.key} className="px-3 py-2">
+                          {c.type === "checkbox" ? (
+                            <input type="checkbox" disabled={isSigned} checked={r.customFields[c.key] === "true"}
+                              onChange={(e) => setCustomField(it.id, c.key, e.target.checked ? "true" : "false")} />
+                          ) : (
+                            <input
+                              type={c.type === "number" ? "number" : "text"}
+                              disabled={isSigned}
+                              className="w-full rounded border border-slate-200 px-2 py-1"
+                              placeholder={c.type === "photo" || c.type === "file" ? "URL or ref…" : c.label}
+                              value={r.customFields[c.key] ?? ""}
+                              onChange={(e) => setCustomField(it.id, c.key, e.target.value)}
+                            />
+                          )}
+                        </td>
+                      ))}
                       <td className="px-3 py-2">
                         {isUtility ? (
                           <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold bg-blue-100 text-blue-700">METER</span>
