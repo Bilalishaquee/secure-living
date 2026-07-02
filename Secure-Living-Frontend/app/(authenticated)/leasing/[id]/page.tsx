@@ -36,20 +36,38 @@ type Lease = {
   documentUrl: string | null;
   documentFileName: string | null;
   documentUploadedAt: string | null;
+  applicationId: string | null;
+  tenantSignedAt: string | null;
+  declinedAt: string | null;
+  declineReason: string | null;
+  renewalRequestedAt: string | null;
   createdAt: string;
+};
+
+type LeaseQuestion = {
+  id: string;
+  question: string;
+  answer: string | null;
+  askedBy: string;
+  createdAt: string;
+  answeredAt: string | null;
 };
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "neutral" | "info"> = {
   active:     "success",
   draft:      "neutral",
+  offered:    "info",
+  declined:   "error",
   pending:    "warning",
   terminated: "error",
   expired:    "neutral",
 };
 
 const STATUS_TRANSITIONS: Record<string, string[]> = {
-  draft:      ["active", "terminated"],
+  draft:      ["offered", "active", "terminated"],
+  offered:    ["active", "declined"],
   active:     ["terminated", "expired"],
+  declined:   [],
   terminated: [],
   expired:    [],
 };
@@ -70,6 +88,41 @@ export default function LeaseDetailPage({ params }: PageProps) {
   const [topUpForm, setTopUpForm] = useState({ amount: "", reason: "" });
   const [saving, setSaving] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [questions, setQuestions] = useState<LeaseQuestion[]>([]);
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [answering, setAnswering] = useState<string | null>(null);
+
+  async function loadQuestions(leaseId: string) {
+    const res = await fetch(`/api/v1/leases/${leaseId}/questions`, { headers: authHeader() });
+    if (res.ok) {
+      const json = (await res.json()) as { data: LeaseQuestion[] };
+      setQuestions(json.data);
+    }
+  }
+
+  async function handleAnswer(questionId: string) {
+    if (!lease) return;
+    const answer = answerDrafts[questionId]?.trim();
+    if (!answer) return;
+    setAnswering(questionId);
+    try {
+      const res = await fetch(`/api/v1/leases/${lease.id}/questions/${questionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeader() },
+        body: JSON.stringify({ answer }),
+      });
+      if (res.ok) {
+        toast("Answer sent to tenant", "success");
+        setAnswerDrafts((d) => ({ ...d, [questionId]: "" }));
+        void loadQuestions(lease.id);
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        toast(err.error ?? "Failed to send answer", "error");
+      }
+    } finally {
+      setAnswering(null);
+    }
+  }
 
   async function handleUploadDocument(file: File) {
     if (!lease) return;
@@ -109,6 +162,7 @@ export default function LeaseDetailPage({ params }: PageProps) {
         if (!res.ok) { toast("Lease not found.", "error"); router.replace("/leasing"); return; }
         const json = (await res.json()) as { data: Lease };
         setLease(json.data);
+        void loadQuestions(params.id);
       } finally {
         setLoading(false);
       }
@@ -298,6 +352,22 @@ export default function LeaseDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {lease.status === "offered" && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-800">
+          Awaiting the tenant&apos;s signature. They can review, ask questions, accept & sign, or decline this offer from their portal.
+        </div>
+      )}
+      {lease.status === "declined" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
+          The tenant declined this lease offer{lease.declineReason ? `: "${lease.declineReason}"` : "."}
+        </div>
+      )}
+      {lease.renewalRequestedAt && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          The tenant requested a renewal on {new Date(lease.renewalRequestedAt).toLocaleDateString("en-GB")}. Use &quot;Renew Lease&quot; above to prepare the new terms.
+        </div>
+      )}
+
       {/* Details grid */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
@@ -381,6 +451,37 @@ export default function LeaseDetailPage({ params }: PageProps) {
           </div>
         </CardContent>
       </Card>
+
+      {questions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Tenant Questions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {questions.map((q) => (
+              <div key={q.id} className="rounded-lg border border-slate-200 p-3 text-sm">
+                <p className="font-medium text-slate-800">{q.question}</p>
+                <p className="mt-0.5 text-xs text-slate-400">Asked {new Date(q.createdAt).toLocaleString("en-GB")}</p>
+                {q.answer ? (
+                  <p className="mt-2 rounded-md bg-emerald-50 px-3 py-2 text-emerald-800">{q.answer}</p>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm"
+                      placeholder="Type your answer…"
+                      value={answerDrafts[q.id] ?? ""}
+                      onChange={(e) => setAnswerDrafts((d) => ({ ...d, [q.id]: e.target.value }))}
+                    />
+                    <Button size="sm" disabled={answering === q.id || !answerDrafts[q.id]?.trim()} onClick={() => { void handleAnswer(q.id); }}>
+                      {answering === q.id ? "Sending…" : "Answer"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Timeline */}
       <Card>

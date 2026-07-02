@@ -11,12 +11,15 @@ export const GET = withErrorHandler(async (req: Request) => {
   const denied = requirePermission(actor, "lease:view");
   if (denied) return denied;
 
-  const where = actor.permissions.includes("*")
-    ? {}
-    : {
-        branchId: { in: actor.branchIds },
-        organizationId: { in: actor.orgIds },
-      };
+  // Tenants only ever see their own lease(s) — never other tenants' in the same org/branch.
+  const where = actor.role === "tenant"
+    ? { tenantUserId: actor.userId }
+    : actor.permissions.includes("*")
+      ? {}
+      : {
+          branchId: { in: actor.branchIds },
+          organizationId: { in: actor.orgIds },
+        };
 
   const rows = await prisma.lease.findMany({
     where,
@@ -53,11 +56,25 @@ export const GET = withErrorHandler(async (req: Request) => {
     arrearsByLease.set(inv.leaseId, (arrearsByLease.get(inv.leaseId) ?? 0) + inv.balanceKes);
   }
 
+  // Tenant Portal "My Lease" needs a readable property name + unit number without granting
+  // tenants the broader unit:view permission (which would leak every other unit's current
+  // tenant in the same property) — so resolve just their own lease's property/unit here.
+  const propertyIds = Array.from(new Set(rows.map((r) => r.propertyId)));
+  const unitIds = Array.from(new Set(rows.map((r) => r.unitId)));
+  const [properties, units] = await Promise.all([
+    propertyIds.length ? prisma.property.findMany({ where: { id: { in: propertyIds } }, select: { id: true, name: true } }) : [],
+    unitIds.length ? prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, unitNumber: true } }) : [],
+  ]);
+  const propertyMap = new Map(properties.map((p) => [p.id, p.name]));
+  const unitMap = new Map(units.map((u) => [u.id, u.unitNumber]));
+
   const enriched = refreshed.map((r) => ({
     ...r,
     tenantName: userMap.get(r.tenantUserId)?.fullName ?? null,
     tenantEmail: userMap.get(r.tenantUserId)?.email ?? null,
     arrearsKes: arrearsByLease.get(r.id) ?? 0,
+    propertyName: propertyMap.get(r.propertyId) ?? null,
+    unitNumber: unitMap.get(r.unitId) ?? null,
   }));
 
   return Response.json({ data: enriched });

@@ -17,6 +17,7 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const rows = await prisma.rentalApplication.findMany({
     where: { listingId: params.id },
+    include: { lease: { select: { id: true, status: true } } },
     orderBy: { submittedAt: "desc" },
   });
 

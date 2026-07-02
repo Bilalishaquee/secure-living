@@ -6,9 +6,26 @@ import { parseBody, requireActor, requirePermission , withErrorHandler } from "@
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+
+  const url = new URL(req.url);
+  const leaseId = url.searchParams.get("leaseId") ?? undefined;
+
+  // Tenant Portal "View Payment Schedule": a tenant may only ever see their own invoices,
+  // never anyone else's — this bypasses the finance:view staff permission entirely.
+  if (actor.role === "tenant") {
+    const rows = await prisma.rentInvoice.findMany({
+      where: { tenantId: actor.userId, ...(leaseId && { leaseId }) },
+      orderBy: { dueDate: "asc" },
+    });
+    return Response.json({ data: rows });
+  }
+
   const denied = requirePermission(actor, "finance:view");
   if (denied) return denied;
-  const rows = await prisma.rentInvoice.findMany({ orderBy: { createdAt: "desc" } });
+  const rows = await prisma.rentInvoice.findMany({
+    where: { ...(leaseId && { leaseId }) },
+    orderBy: { createdAt: "desc" },
+  });
   return Response.json({ data: rows });
 })
 

@@ -625,6 +625,7 @@ model RentalApplication {
   listing           Listing                       @relation(fields: [listingId], references: [id], onDelete: Cascade)
   evidences         ApplicationEvidence[]
   customFieldValues ApplicationCustomFieldValue[]
+  lease             Lease?
 
   @@index([listingId, status])
   @@index([applicantId])
@@ -1006,10 +1007,24 @@ model Lease {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  // Lease Offer workflow (Update-2.md "Tenant Portal — Lease Offer"): a lease created from
+  // an accepted RentalApplication starts life as status "offered" — the tenant then
+  // accepts/signs (-> "active") or declines (-> "declined"). The landlord authors the
+  // lease; the tenant only ever responds to it, never edits its terms.
+  applicationId      String?   @unique
+  tenantSignedAt     DateTime?
+  declinedAt         DateTime?
+  declineReason      String?
+  // Tenant Portal "Request Renewal": the tenant can only ask — the landlord still
+  // authors the actual renewal lease via the existing renew flow.
+  renewalRequestedAt DateTime?
+
+  application      RentalApplication? @relation(fields: [applicationId], references: [id])
   rentInvoices     RentInvoice[]
   vacatingNotice   VacatingNotice?
   tenantChecklists TenantChecklist[]
   depositEscrow    DepositEscrow?
+  questions        LeaseQuestion[]
 
   @@index([organizationId])
   @@index([branchId])
@@ -1017,6 +1032,24 @@ model Lease {
   @@index([propertyId])
   @@index([createdBy])
   @@index([organizationId, status])
+}
+
+// Update-2.md "Lease Offer — Ask Questions": a lightweight Q&A thread between tenant and
+// landlord attached to a specific lease, so a tenant can ask before signing without a full
+// messaging system.
+model LeaseQuestion {
+  id         String    @id @default(cuid())
+  leaseId    String
+  askedBy    String
+  question   String
+  answer     String?
+  answeredBy String?
+  answeredAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  lease Lease @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@index([leaseId])
 }
 
 model ProfessionalProfile {

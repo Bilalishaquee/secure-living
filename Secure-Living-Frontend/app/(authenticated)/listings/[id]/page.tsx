@@ -52,6 +52,16 @@ export default function ListingDetailPage({ params }: Props) {
   });
   const [photoDrafts, setPhotoDrafts] = useState<string[]>([]);
   const [attributeDrafts, setAttributeDrafts] = useState<{ key: string; label: string; value: string }[]>([]);
+  const [offerAppId, setOfferAppId] = useState<string | null>(null);
+  const [offerForm, setOfferForm] = useState({
+    leaseType: "fixed_term",
+    rentAmount: "",
+    depositAmount: "",
+    startDate: "",
+    endDate: "",
+    paymentFrequency: "monthly",
+  });
+  const [sendingOffer, setSendingOffer] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -194,6 +204,50 @@ export default function ListingDetailPage({ params }: Props) {
     if (!note) { toast("Add a note describing what's needed from the applicant", "error"); return; }
     updateAppStatus(appId, "REVIEWING", note);
     setNoteDraft((prev) => ({ ...prev, [appId]: "" }));
+  }
+
+  function openSendOffer() {
+    const rent = (listing?.rentAmount as number | undefined) ?? undefined;
+    const availableFrom = listing?.availableFrom ? new Date(listing.availableFrom as string) : new Date();
+    const oneYearLater = new Date(availableFrom);
+    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+    setOfferForm({
+      leaseType: "fixed_term",
+      rentAmount: rent ? String(rent) : "",
+      depositAmount: "",
+      startDate: availableFrom.toISOString().slice(0, 10),
+      endDate: oneYearLater.toISOString().slice(0, 10),
+      paymentFrequency: "monthly",
+    });
+  }
+
+  async function handleSendLeaseOffer() {
+    if (!offerAppId) return;
+    setSendingOffer(true);
+    try {
+      const res = await fetch(`/api/v1/listings/${params.id}/applications/${offerAppId}/send-lease-offer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
+        body: JSON.stringify({
+          leaseType: offerForm.leaseType,
+          rentAmount: Number(offerForm.rentAmount),
+          depositAmount: offerForm.depositAmount ? Number(offerForm.depositAmount) : undefined,
+          startDate: new Date(offerForm.startDate).toISOString(),
+          endDate: new Date(offerForm.endDate).toISOString(),
+          paymentFrequency: offerForm.paymentFrequency,
+        }),
+      });
+      if (res.ok) {
+        toast("Lease offer sent to the tenant", "success");
+        setOfferAppId(null);
+        await load();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toast((j as { error?: string }).error ?? "Failed to send lease offer", "error");
+      }
+    } finally {
+      setSendingOffer(false);
+    }
   }
 
   if (loading) return <div className="h-64 animate-pulse rounded-xl bg-slate-100" />;
@@ -359,6 +413,17 @@ export default function ListingDetailPage({ params }: Props) {
                             {app.status !== "SHORTLISTED" && <Button size="sm" variant="ghost" onClick={() => updateAppStatus(app.id as string, "SHORTLISTED")}>Shortlist</Button>}
                             {app.status !== "REJECTED" && <Button size="sm" variant="ghost" onClick={() => updateAppStatus(app.id as string, "REJECTED")}>Reject</Button>}
                             {app.status === "SHORTLISTED" && <Button size="sm" onClick={() => updateAppStatus(app.id as string, "ACCEPTED")}>Accept</Button>}
+                            {app.status === "ACCEPTED" && (
+                              (app.lease as { id: string; status: string } | null) ? (
+                                <span className="text-xs text-slate-500">
+                                  Lease {(app.lease as { status: string }).status}
+                                </span>
+                              ) : (
+                                <Button size="sm" onClick={() => { setOfferAppId(app.id as string); openSendOffer(); }}>
+                                  Send Lease Offer
+                                </Button>
+                              )
+                            )}
                             <input
                               className="w-32 rounded-lg border border-slate-200 px-2 py-1 text-xs focus:border-blue-500 focus:outline-none"
                               placeholder="Info needed…"
@@ -472,6 +537,68 @@ export default function ListingDetailPage({ params }: Props) {
           <div className="flex gap-3 pt-2">
             <Button variant="ghost" onClick={() => setEditOpen(false)} className="flex-1">Cancel</Button>
             <Button onClick={handleEdit} disabled={!editForm.title || !editForm.rentAmount || !editForm.availableFrom} className="flex-1">Save Changes</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!offerAppId} onOpenChange={(open) => { if (!open) setOfferAppId(null); }} title="Send Lease Offer">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            You author the lease — the tenant will only be able to review it and Accept & Sign or Decline, not edit its terms.
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Lease Type</label>
+            <select
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={offerForm.leaseType}
+              onChange={(e) => setOfferForm((f) => ({ ...f, leaseType: e.target.value }))}
+            >
+              <option value="fixed_term">Fixed Term</option>
+              <option value="month_to_month">Month to Month</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Monthly Rent (KES)</label>
+              <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={offerForm.rentAmount} onChange={(e) => setOfferForm((f) => ({ ...f, rentAmount: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Deposit (KES)</label>
+              <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={offerForm.depositAmount} onChange={(e) => setOfferForm((f) => ({ ...f, depositAmount: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Start Date</label>
+              <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={offerForm.startDate} onChange={(e) => setOfferForm((f) => ({ ...f, startDate: e.target.value }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">End Date</label>
+              <input type="date" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={offerForm.endDate} onChange={(e) => setOfferForm((f) => ({ ...f, endDate: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Payment Frequency</label>
+            <select
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+              value={offerForm.paymentFrequency}
+              onChange={(e) => setOfferForm((f) => ({ ...f, paymentFrequency: e.target.value }))}
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+            </select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setOfferAppId(null)} className="flex-1">Cancel</Button>
+            <Button
+              onClick={() => { void handleSendLeaseOffer(); }}
+              disabled={sendingOffer || !offerForm.rentAmount || !offerForm.startDate || !offerForm.endDate}
+              className="flex-1"
+            >
+              {sendingOffer ? "Sending…" : "Send Offer to Tenant"}
+            </Button>
           </div>
         </div>
       </Modal>
