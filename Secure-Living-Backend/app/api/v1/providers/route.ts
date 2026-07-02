@@ -4,6 +4,7 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 import { ProviderCategory, ProviderStatus } from "@prisma/client";
+import { isServiceTypeBlocked } from "@/lib/server/service-access";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
@@ -84,6 +85,17 @@ export const POST = withErrorHandler(async (req: Request) => {
   const inScope = isGlobal || providerUser.roleAssignments.some((ra) => actor.orgIds.includes(ra.organizationId));
   if (!inScope) return jsonError(403, "Selected user is outside your organization scope");
 
+  // Admin-managed service restrictions: silently drop any specialization this user/org
+  // is blocked from offering, rather than rejecting the whole registration.
+  const restrictionChecks = await Promise.all(
+    body.specializations.map(async (s) => ({
+      s,
+      ...(await isServiceTypeBlocked(s, { userId: body.userId, organizationId: targetOrgId })),
+    })),
+  );
+  const allowedSpecializations = restrictionChecks.filter((r) => !r.blocked).map((r) => r.s);
+  const blockedSpecializations = restrictionChecks.filter((r) => r.blocked).map((r) => r.s);
+
   const newId = randomUUID();
   const provider = await prisma.serviceProvider.create({
     data: {
@@ -92,7 +104,7 @@ export const POST = withErrorHandler(async (req: Request) => {
       organizationId: targetOrgId,
       category: body.category,
       status: ProviderStatus.PENDING_APPROVAL,
-      specializations: body.specializations,
+      specializations: allowedSpecializations,
       coverageAreas: body.coverageAreas,
       bio: body.bio ?? null,
       qrCodeUrl: `/providers/${newId}/qr`,
@@ -127,5 +139,8 @@ export const POST = withErrorHandler(async (req: Request) => {
     afterJson: provider,
   });
 
-  return Response.json({ data: provider }, { status: 201 });
+  return Response.json(
+    { data: provider, blockedSpecializations: blockedSpecializations.length ? blockedSpecializations : undefined },
+    { status: 201 },
+  );
 });

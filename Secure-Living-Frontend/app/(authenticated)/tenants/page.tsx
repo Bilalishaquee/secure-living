@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { Mail, MessageSquare, Phone, Search, Users } from "lucide-react";
+import { FileText, Mail, MessageSquare, Phone, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/lib/toast-context";
 import { formatKes } from "@/lib/utils";
@@ -21,6 +21,7 @@ type LeaseRow = {
   rentAmount: number;
   status: string;
   endDate: string;
+  arrearsKes: number;
 };
 
 type Row = {
@@ -29,10 +30,12 @@ type Row = {
   name: string;
   property: string;
   propertyId: string;
+  unitId: string;
   rent: number;
   status: "Current" | "Arrears" | "Notice";
   email: string | null;
   leaseEnd: string;
+  arrearsKes: number;
 };
 
 function statusVariant(s: Row["status"]): "success" | "error" | "warning" {
@@ -66,10 +69,12 @@ export default function TenantsPage() {
         name: l.tenantName ?? `Tenant …${l.tenantUserId.slice(-6)}`,
         property: `${l.propertyId.slice(0, 8)}… / ${l.unitId.slice(0, 8)}…`,
         propertyId: l.propertyId,
+        unitId: l.unitId,
         rent: l.rentAmount,
-        status: (l.status === "active" ? "Current" : l.status === "terminated" ? "Notice" : "Arrears") as Row["status"],
+        status: (l.arrearsKes > 0 ? "Arrears" : l.status === "terminated" ? "Notice" : "Current") as Row["status"],
         email: l.tenantEmail ?? null,
         leaseEnd: new Date(l.endDate).toISOString().slice(0, 10),
+        arrearsKes: l.arrearsKes ?? 0,
       }));
       setRows(mapped);
       setError(null);
@@ -89,6 +94,37 @@ export default function TenantsPage() {
     } catch { toast("Failed to send reminders", "error"); }
   }
 
+  function downloadCsv(filename: string, header: string[], rowsData: (string | number)[][]) {
+    const csv = [header, ...rowsData]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function generateTenantReport(r: Row) {
+    downloadCsv(
+      `tenant-report-${r.name.replace(/\s+/g, "-").toLowerCase()}.csv`,
+      ["Tenant", "Email", "Property/Unit", "Rent (KES)", "Status", "Arrears (KES)", "Lease End"],
+      [[r.name, r.email ?? "—", r.property, r.rent, r.status, r.arrearsKes, r.leaseEnd]],
+    );
+    toast(`Report generated for ${r.name}`, "success");
+  }
+
+  function generateAllTenantsReport() {
+    downloadCsv(
+      "tenants-report.csv",
+      ["Tenant", "Email", "Property/Unit", "Rent (KES)", "Status", "Arrears (KES)", "Lease End"],
+      filteredRows.map((r) => [r.name, r.email ?? "—", r.property, r.rent, r.status, r.arrearsKes, r.leaseEnd]),
+    );
+    toast(`Report generated for ${filteredRows.length} tenants`, "success");
+  }
+
   const columns: Column<Row>[] = [
     { key: "name", header: "Tenant", sortable: true },
     {
@@ -96,7 +132,7 @@ export default function TenantsPage() {
       header: "Property / unit",
       render: (r) => (
         <Link
-          href={`/properties/${r.propertyId}`}
+          href={`/properties/${r.propertyId}/units/${r.unitId}`}
           className="font-medium text-brand-blue hover:underline"
         >
           {r.property}
@@ -125,7 +161,7 @@ export default function TenantsPage() {
       header: "Status",
       render: (r) => (
         <Badge variant={statusVariant(r.status)}>
-          {r.status === "Arrears" ? `Arrears - ${formatKes(r.rent)}` : r.status}
+          {r.status === "Arrears" ? `Arrears - ${formatKes(r.arrearsKes)}` : r.status}
         </Badge>
       ),
     },
@@ -156,10 +192,20 @@ export default function TenantsPage() {
             SMS
           </Button>
           <Button type="button" variant="outline" size="sm" className="h-8" asChild>
-            <Link href={`/tenants/${r.tenantUserId}`}>View</Link>
+            <Link href={`/tenants/${r.tenantUserId}`}>Full Profile</Link>
           </Button>
           <Button type="button" variant="outline" size="sm" className="h-8" asChild>
-            <Link href={`/properties/${r.propertyId}`}>Property</Link>
+            <Link href={`/properties/${r.propertyId}/units/${r.unitId}`}>Unit</Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8"
+            onClick={() => generateTenantReport(r)}
+          >
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            Report
           </Button>
         </div>
       ),
@@ -195,6 +241,10 @@ export default function TenantsPage() {
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" asChild>
             <Link href="/transactions">View payments</Link>
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={generateAllTenantsReport}>
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            Generate Report
           </Button>
           <Button
             type="button"

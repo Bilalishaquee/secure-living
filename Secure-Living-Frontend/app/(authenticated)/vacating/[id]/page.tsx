@@ -19,7 +19,23 @@ const STEPS = [
   { key: "COMPLETED",            label: "Completed" },
 ];
 
-type Deduction = { description: string; amount: string; category: string; responsibility: string };
+type Deduction = {
+  description: string;
+  amount: string;
+  category: string;
+  responsibility: string;
+  beforePhotoUrl: string;
+  afterPhotoUrl: string;
+  repairQuoteUrl: string;
+  invoiceUrl: string;
+  inspectorNote: string;
+  billOrMeterRef: string;
+};
+
+const emptyDeduction: Deduction = {
+  description: "", amount: "", category: "DAMAGE", responsibility: "TENANT",
+  beforePhotoUrl: "", afterPhotoUrl: "", repairQuoteUrl: "", invoiceUrl: "", inspectorNote: "", billOrMeterRef: "",
+};
 
 const DEDUCTION_CATEGORIES = [
   { value: "DAMAGE", label: "Property Damage" },
@@ -36,6 +52,28 @@ const CATEGORY_BADGE: Record<string, string> = {
   UTILITY_BALANCE: "bg-purple-100 text-purple-700",
   LEASE_VIOLATION: "bg-amber-100 text-amber-700",
 };
+const DEDUCTION_STATUS_BADGE: Record<string, string> = {
+  proposed: "bg-slate-100 text-slate-600",
+  accepted: "bg-green-100 text-green-700",
+  disputed: "bg-red-100 text-red-700",
+  finalised: "bg-blue-100 text-blue-700",
+};
+
+// Mirrors lib/server/evidence.ts — required evidence per deduction category (charge-exempt
+// responsibilities skip validation since they aren't taken out of the tenant's deposit).
+function missingEvidenceFor(d: Deduction): string[] {
+  if (d.responsibility === "LANDLORD" || d.responsibility === "WEAR_TEAR") return [];
+  const missing: string[] = [];
+  if (d.category === "DAMAGE") {
+    if (!d.beforePhotoUrl) missing.push("Before photo");
+    if (!d.afterPhotoUrl) missing.push("After photo");
+  } else if (d.category === "UTILITY_BALANCE") {
+    if (!d.billOrMeterRef && !d.invoiceUrl) missing.push("Bill / meter reading / invoice reference");
+  } else if (d.category === "CLEANING") {
+    if (!d.inspectorNote) missing.push("Inspector note");
+  }
+  return missing;
+}
 
 type Notice = {
   id: string;
@@ -51,7 +89,12 @@ type Notice = {
     scheduledDate: string;
     status: string;
     notes: string | null;
-    deductions: Array<{ id: string; description: string; amount: number; category: string | null; responsibility: string | null; photoUrl: string | null }>;
+    deductions: Array<{
+      id: string; description: string; amount: number; category: string | null; responsibility: string | null;
+      photoUrl: string | null; status: string; disputeNote: string | null;
+      beforePhotoUrl: string | null; afterPhotoUrl: string | null; repairQuoteUrl: string | null;
+      invoiceUrl: string | null; inspectorNote: string | null; billOrMeterRef: string | null;
+    }>;
   } | null;
   depositRefund: {
     depositAmount: number;
@@ -73,10 +116,17 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
   const [payOpen, setPayOpen] = useState(false);
   const [schedDate, setSchedDate] = useState("");
   const [inspNotes, setInspNotes] = useState("");
-  const [deductions, setDeductions] = useState<Deduction[]>([{ description: "", amount: "", category: "DAMAGE", responsibility: "TENANT" }]);
+  const [deductions, setDeductions] = useState<Deduction[]>([{ ...emptyDeduction }]);
   const [depositAmt, setDepositAmt] = useState("");
   const [voucherNum, setVoucherNum] = useState("");
   const [saving, setSaving] = useState(false);
+  const [evidenceEditId, setEvidenceEditId] = useState<string | null>(null);
+  const [evidenceForm, setEvidenceForm] = useState<Partial<Deduction>>({});
+  const [respondingId, setRespondingId] = useState<string | null>(null);
+  const [disputeNoteDraft, setDisputeNoteDraft] = useState<Record<string, string>>({});
+
+  const isTenantViewer = !!notice && !!user && user.id === notice.lease.tenantUserId;
+  const canManage = !isTenantViewer;
 
   async function load() {
     setLoading(true);
@@ -118,9 +168,17 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
   }
 
   async function handleCompleteInspection() {
+    const validDeductions = deductions.filter((d) => d.description && d.amount);
+    const blocked = validDeductions
+      .map((d) => ({ d, missing: missingEvidenceFor(d) }))
+      .filter((x) => x.missing.length > 0);
+    if (blocked.length > 0) {
+      toast(`Missing evidence for "${blocked[0].d.description}": ${blocked[0].missing.join(", ")}`, "error");
+      return;
+    }
+
     setSaving(true);
     try {
-      const validDeductions = deductions.filter((d) => d.description && d.amount);
       const res = await fetch(`/api/v1/vacating-notices/${params.id}/complete-inspection`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
@@ -131,6 +189,12 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
             amount: parseFloat(d.amount),
             category: d.category || undefined,
             responsibility: d.responsibility || undefined,
+            beforePhotoUrl: d.beforePhotoUrl || undefined,
+            afterPhotoUrl: d.afterPhotoUrl || undefined,
+            repairQuoteUrl: d.repairQuoteUrl || undefined,
+            invoiceUrl: d.invoiceUrl || undefined,
+            inspectorNote: d.inspectorNote || undefined,
+            billOrMeterRef: d.billOrMeterRef || undefined,
           })),
         }),
       });
@@ -140,6 +204,52 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
         load();
       } else {
         const j = await res.json();
+        const detail = Array.isArray(j.details) && j.details.length > 0
+          ? `${j.details[0].description}: ${j.details[0].missing.join(", ")}`
+          : j.error;
+        toast(detail ?? "Failed", "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRespond(deductionId: string, action: "accept" | "dispute" | "finalise", note?: string) {
+    setRespondingId(deductionId);
+    try {
+      const res = await fetch(`/api/v1/deductions/${deductionId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
+        body: JSON.stringify({ action, note }),
+      });
+      if (res.ok) {
+        toast(action === "accept" ? "Deduction accepted" : action === "dispute" ? "Deduction disputed — landlord will be notified" : "Deduction finalised", "success");
+        load();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toast(j.error ?? "Failed", "error");
+      }
+    } finally {
+      setRespondingId(null);
+    }
+  }
+
+  async function handleResubmitEvidence() {
+    if (!evidenceEditId) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/deductions/${evidenceEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
+        body: JSON.stringify({ ...evidenceForm, resubmit: true }),
+      });
+      if (res.ok) {
+        toast("Evidence updated — resubmitted for tenant review", "success");
+        setEvidenceEditId(null);
+        setEvidenceForm({});
+        load();
+      } else {
+        const j = await res.json().catch(() => ({}));
         toast(j.error ?? "Failed", "error");
       }
     } finally {
@@ -268,22 +378,80 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
                   <thead>
                     <tr>
                       <th className="text-left text-xs text-slate-500 py-1">Description</th>
+                      <th className="text-left text-xs text-slate-500 py-1">Status</th>
                       <th className="text-right text-xs text-slate-500 py-1">Amount</th>
+                      <th className="py-1" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {notice.inspection.deductions.map((d) => (
                       <tr key={d.id}>
-                        <td className="py-2 text-slate-700">
+                        <td className="py-2 text-slate-700 align-top">
                           {d.description}
                           {d.category && (
                             <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_BADGE[d.category] ?? "bg-slate-100 text-slate-600"}`}>
                               {d.category.replace(/_/g, " ")}
                             </span>
                           )}
-                          {d.responsibility && <span className="ml-1 text-[10px] text-slate-400">Â· {d.responsibility.replace("_", " ")}</span>}
+                          {d.responsibility && <span className="ml-1 text-[10px] text-slate-400">· {d.responsibility.replace("_", " ")}</span>}
+                          {d.disputeNote && (
+                            <p className="mt-1 text-xs text-red-600">Tenant dispute: {d.disputeNote}</p>
+                          )}
                         </td>
-                        <td className="py-2 text-right font-medium text-red-600">KES {d.amount.toLocaleString()}</td>
+                        <td className="py-2 align-top">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${DEDUCTION_STATUS_BADGE[d.status] ?? "bg-slate-100 text-slate-600"}`}>
+                            {d.status}
+                          </span>
+                        </td>
+                        <td className="py-2 text-right font-medium text-red-600 align-top">KES {d.amount.toLocaleString()}</td>
+                        <td className="py-2 text-right align-top">
+                          <div className="flex flex-col items-end gap-1.5">
+                            {isTenantViewer && d.status === "proposed" && (
+                              <div className="flex gap-1.5">
+                                <Button size="sm" onClick={() => handleRespond(d.id, "accept")} disabled={respondingId === d.id}>
+                                  Accept
+                                </Button>
+                                <Button size="sm" variant="outline"
+                                  onClick={() => handleRespond(d.id, "dispute", disputeNoteDraft[d.id] || undefined)}
+                                  disabled={respondingId === d.id}>
+                                  Dispute
+                                </Button>
+                              </div>
+                            )}
+                            {isTenantViewer && d.status === "proposed" && (
+                              <input
+                                className="w-40 rounded-lg border border-slate-200 px-2 py-1 text-[11px] focus:border-blue-500 focus:outline-none"
+                                placeholder="Reason if disputing…"
+                                value={disputeNoteDraft[d.id] ?? ""}
+                                onChange={(e) => setDisputeNoteDraft((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                              />
+                            )}
+                            {canManage && d.status === "disputed" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEvidenceEditId(d.id);
+                                  setEvidenceForm({
+                                    beforePhotoUrl: d.beforePhotoUrl ?? "",
+                                    afterPhotoUrl: d.afterPhotoUrl ?? "",
+                                    repairQuoteUrl: d.repairQuoteUrl ?? "",
+                                    invoiceUrl: d.invoiceUrl ?? "",
+                                    inspectorNote: d.inspectorNote ?? "",
+                                    billOrMeterRef: d.billOrMeterRef ?? "",
+                                  });
+                                }}
+                              >
+                                Add Evidence
+                              </Button>
+                            )}
+                            {canManage && d.status === "accepted" && (
+                              <Button size="sm" variant="outline" onClick={() => handleRespond(d.id, "finalise")} disabled={respondingId === d.id}>
+                                Finalise
+                              </Button>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -360,7 +528,7 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setDeductions((d) => [...d, { description: "", amount: "", category: "DAMAGE", responsibility: "TENANT" }])}
+                onClick={() => setDeductions((d) => [...d, { ...emptyDeduction }])}
                 className="gap-1"
               >
                 <Plus className="h-3 w-3" /> Add
@@ -409,6 +577,37 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
                       {RESPONSIBILITY_OPTIONS.map((c) => <option key={c} value={c}>{c.replace("_", " ")}</option>)}
                     </select>
                   </div>
+
+                  {/* Evidence — required fields vary by category (spec: Evidence Requirements) */}
+                  {d.category === "DAMAGE" && (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <input className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        placeholder="Before photo URL *" value={d.beforePhotoUrl}
+                        onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, beforePhotoUrl: e.target.value } : x))} />
+                      <input className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        placeholder="After photo URL *" value={d.afterPhotoUrl}
+                        onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, afterPhotoUrl: e.target.value } : x))} />
+                      <input className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        placeholder="Repair quote URL (optional)" value={d.repairQuoteUrl}
+                        onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, repairQuoteUrl: e.target.value } : x))} />
+                      <input className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                        placeholder="Invoice URL (optional)" value={d.invoiceUrl}
+                        onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, invoiceUrl: e.target.value } : x))} />
+                    </div>
+                  )}
+                  {d.category === "UTILITY_BALANCE" && (
+                    <input className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      placeholder="Bill number / meter reading / invoice ref *" value={d.billOrMeterRef}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, billOrMeterRef: e.target.value } : x))} />
+                  )}
+                  {d.category === "CLEANING" && (
+                    <input className="mt-2 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none"
+                      placeholder="Inspector note *" value={d.inspectorNote}
+                      onChange={(e) => setDeductions((prev) => prev.map((x, j) => j === i ? { ...x, inspectorNote: e.target.value } : x))} />
+                  )}
+                  {missingEvidenceFor(d).length > 0 && d.description && (
+                    <p className="mt-1 text-[11px] text-red-500">Missing: {missingEvidenceFor(d).join(", ")}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -449,6 +648,42 @@ export default function VacatingDetailPage({ params }: { params: { id: string } 
             <Button variant="ghost" onClick={() => setPayOpen(false)} className="flex-1">Cancel</Button>
             <Button onClick={handlePayRefund} disabled={!voucherNum || saving} className="flex-1">
               {saving ? "Savingâ€¦" : "Confirm Payment"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add Evidence & Resubmit Modal — landlord response to a tenant dispute */}
+      <Modal open={!!evidenceEditId} onOpenChange={(open) => { if (!open) { setEvidenceEditId(null); setEvidenceForm({}); } }} title="Add Evidence & Resubmit">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            The tenant disputed this deduction. Add or update supporting evidence, then resubmit — the deduction
+            returns to &quot;proposed&quot; status for tenant review.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="Before photo URL" value={evidenceForm.beforePhotoUrl ?? ""}
+              onChange={(e) => setEvidenceForm((f) => ({ ...f, beforePhotoUrl: e.target.value }))} />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="After photo URL" value={evidenceForm.afterPhotoUrl ?? ""}
+              onChange={(e) => setEvidenceForm((f) => ({ ...f, afterPhotoUrl: e.target.value }))} />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="Repair quote URL" value={evidenceForm.repairQuoteUrl ?? ""}
+              onChange={(e) => setEvidenceForm((f) => ({ ...f, repairQuoteUrl: e.target.value }))} />
+            <input className="rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="Invoice URL" value={evidenceForm.invoiceUrl ?? ""}
+              onChange={(e) => setEvidenceForm((f) => ({ ...f, invoiceUrl: e.target.value }))} />
+          </div>
+          <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Bill / meter reading / invoice ref" value={evidenceForm.billOrMeterRef ?? ""}
+            onChange={(e) => setEvidenceForm((f) => ({ ...f, billOrMeterRef: e.target.value }))} />
+          <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            placeholder="Inspector note" value={evidenceForm.inspectorNote ?? ""}
+            onChange={(e) => setEvidenceForm((f) => ({ ...f, inspectorNote: e.target.value }))} />
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={() => { setEvidenceEditId(null); setEvidenceForm({}); }} className="flex-1">Cancel</Button>
+            <Button onClick={handleResubmitEvidence} disabled={saving} className="flex-1">
+              {saving ? "Savingâ€¦" : "Resubmit for Tenant Review"}
             </Button>
           </div>
         </div>

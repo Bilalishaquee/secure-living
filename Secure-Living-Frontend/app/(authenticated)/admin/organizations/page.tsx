@@ -92,6 +92,25 @@ export default function OrganizationsPage() {
     toast("Organization created", "success");
   };
 
+  const reviewOrg = async (orgId: string, decision: "approve" | "reject") => {
+    const res = await fetch(`/api/v1/organizations/${orgId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${user?.authToken ?? ""}`,
+      },
+      body: JSON.stringify({ decision }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      toast(j.error ?? "Failed to update organization", "error");
+      return;
+    }
+    const json = (await res.json()) as { data: OrgRow };
+    setOrgs((items) => items.map((o) => (o.id === orgId ? { ...o, status: json.data.status } : o)));
+    toast(decision === "approve" ? "Organization approved" : "Organization rejected", "success");
+  };
+
   const addBranch = async (orgId: string) => {
     const name = (branchDraft[orgId] ?? "").trim();
     if (!name) return;
@@ -210,10 +229,30 @@ export default function OrganizationsPage() {
                 </div>
                 <Badge variant="neutral">{org.branches.length} branches</Badge>
                 <Badge variant="neutral">{org.usersCount} users</Badge>
-                <Badge variant={org.status === "Active" ? "success" : "warning"}>
-                  {org.status}
+                <Badge
+                  variant={
+                    org.status === "pending_review" ? "warning" : org.status === "rejected" ? "error" : "success"
+                  }
+                >
+                  {org.status === "pending_review" ? "Pending Review" : org.status}
                 </Badge>
+                {org.status === "pending_review" && (
+                  <div className="flex shrink-0 gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button type="button" size="sm" onClick={() => reviewOrg(org.id, "approve")}>
+                      Approve
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => reviewOrg(org.id, "reject")}>
+                      Reject
+                    </Button>
+                  </div>
+                )}
               </button>
+              {org.status === "pending_review" && (
+                <p className="border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800">
+                  This {org.type.toLowerCase()} organization self-registered and is awaiting Super Admin compliance
+                  review before it can operate on the platform.
+                </p>
+              )}
               {expanded === org.id ? (
                 <div className="space-y-4 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

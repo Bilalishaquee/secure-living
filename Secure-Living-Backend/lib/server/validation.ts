@@ -264,6 +264,9 @@ export const createPropertySchema = z.object({
   category: z.enum(["residential", "commercial", "industrial", "mixed_use"]).default("residential"),
   managementMode: z.enum(["self_managed", "full_service"]).default("self_managed"),
   categoryAttributesJson: z.string().optional(),
+  biometricEnabled: z.boolean().optional(),
+  biometricProvider: z.string().optional(),
+  biometricDeviceId: z.string().optional(),
   status: z.enum(["active", "inactive", "draft", "archived"]).default("active"),
   propertyRoles: z.array(
     z.object({

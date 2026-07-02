@@ -33,6 +33,9 @@ type Lease = {
   paymentFrequency: string | null;
   signedAt: string | null;
   terminatedAt: string | null;
+  documentUrl: string | null;
+  documentFileName: string | null;
+  documentUploadedAt: string | null;
   createdAt: string;
 };
 
@@ -66,6 +69,34 @@ export default function LeaseDetailPage({ params }: PageProps) {
   const [renewForm, setRenewForm] = useState({ startDate: "", endDate: "", rentAmount: "", depositAmount: "", paymentFrequency: "" });
   const [topUpForm, setTopUpForm] = useState({ amount: "", reason: "" });
   const [saving, setSaving] = useState(false);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
+
+  async function handleUploadDocument(file: File) {
+    if (!lease) return;
+    setUploadingDoc(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/v1/leases/${lease.id}/document`, {
+        method: "POST",
+        headers: authHeader(),
+        body: form,
+      });
+      if (res.ok) {
+        toast("Lease document uploaded", "success");
+        const refreshed = await fetch(`/api/v1/leases/${lease.id}`, { headers: authHeader() });
+        if (refreshed.ok) {
+          const json = (await refreshed.json()) as { data: Lease };
+          setLease(json.data);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast(err.error ?? "Failed to upload lease document", "error");
+      }
+    } finally {
+      setUploadingDoc(false);
+    }
+  }
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
 
@@ -248,6 +279,22 @@ export default function LeaseDetailPage({ params }: PageProps) {
               Renew Lease
             </Button>
           )}
+          <label className="inline-flex">
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              className="hidden"
+              disabled={uploadingDoc}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleUploadDocument(file);
+                e.target.value = "";
+              }}
+            />
+            <span className="inline-flex cursor-pointer items-center rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              {uploadingDoc ? "Uploading…" : lease.documentUrl ? "Replace Lease Document" : "Upload Lease"}
+            </span>
+          </label>
         </div>
       </div>
 
@@ -266,6 +313,21 @@ export default function LeaseDetailPage({ params }: PageProps) {
             <Row label="End Date" value={new Date(lease.endDate).toLocaleDateString("en-GB")} />
             {lease.signedAt && <Row label="Signed" value={new Date(lease.signedAt).toLocaleDateString("en-GB")} />}
             {lease.terminatedAt && <Row label="Terminated" value={new Date(lease.terminatedAt).toLocaleDateString("en-GB")} />}
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Document</span>
+              {lease.documentUrl ? (
+                <a
+                  href={lease.documentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="max-w-[60%] truncate text-right text-blue-600 hover:underline"
+                >
+                  {lease.documentFileName ?? "View document"}
+                </a>
+              ) : (
+                <span className="text-slate-400">Not uploaded</span>
+              )}
+            </div>
           </CardContent>
         </Card>
 

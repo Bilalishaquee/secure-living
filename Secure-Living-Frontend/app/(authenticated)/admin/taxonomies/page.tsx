@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Tags, Settings2, RefreshCw, Plus, CheckCircle2 } from "lucide-react";
+import { Tags, Settings2, RefreshCw, Plus, CheckCircle2, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
@@ -51,6 +51,9 @@ export default function TaxonomiesPage() {
 
   // New custom field form
   const [showAddField, setShowAddField] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
+  const [presets, setPresets] = useState<{ key: string; name: string; description: string; fieldCount: number }[]>([]);
+  const [applyingPreset, setApplyingPreset] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState<string>("text");
   const [newOptions, setNewOptions] = useState("");
@@ -77,6 +80,39 @@ export default function TaxonomiesPage() {
     }
   }, [user?.authToken]);
 
+  const loadPresets = useCallback(async () => {
+    if (!user?.authToken) return;
+    const res = await fetch("/api/v1/applications/custom-fields/presets", {
+      headers: { Authorization: `Bearer ${user.authToken}` },
+    });
+    if (res.ok) {
+      const json = await res.json() as { data: { key: string; name: string; description: string; fieldCount: number }[] };
+      setPresets(json.data ?? []);
+    }
+  }, [user?.authToken]);
+
+  async function applyPreset(key: string) {
+    if (!user?.authToken) return;
+    setApplyingPreset(true);
+    try {
+      const res = await fetch("/api/v1/applications/custom-fields/presets", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: key, organizationId: user?.organizationId }),
+      });
+      if (res.ok) {
+        toast("Preset fields added — you can still edit or remove any of them", "success");
+        setShowPresets(false);
+        void loadFields();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toast((j as { error?: string }).error ?? "Failed to apply preset", "error");
+      }
+    } finally {
+      setApplyingPreset(false);
+    }
+  }
+
   const loadServiceTypes = useCallback(async () => {
     const res = await fetch("/api/v1/service-type-configs", {
       headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
@@ -97,6 +133,7 @@ export default function TaxonomiesPage() {
   }, [loadFields, loadServiceTypes]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void loadPresets(); }, [loadPresets]);
 
   async function addCustomField() {
     if (!user?.authToken || !newLabel.trim()) {
@@ -187,9 +224,14 @@ export default function TaxonomiesPage() {
             Refresh
           </Button>
           {tab === "custom-fields" && (
-            <Button size="sm" onClick={() => setShowAddField(true)}>
-              <Plus className="mr-1.5 h-4 w-4" /> Add Field
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => setShowPresets((s) => !s)}>
+                <Sparkles className="mr-1.5 h-4 w-4" /> Use Preset
+              </Button>
+              <Button size="sm" onClick={() => setShowAddField(true)}>
+                <Plus className="mr-1.5 h-4 w-4" /> Add Field
+              </Button>
+            </>
           )}
           {tab === "service-types" && (
             <Button size="sm" onClick={() => setShowAddService(true)}>
@@ -197,6 +239,26 @@ export default function TaxonomiesPage() {
             </Button>
           )}
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+        <p className="font-semibold">What is a &quot;taxonomy&quot; here?</p>
+        <p className="mt-1 text-sky-800">
+          A taxonomy is a category, type, or custom field you define once — it then shows up as an option
+          everywhere that kind of thing is used across the platform. This page has two independent sections:
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sky-800">
+          <li>
+            <strong>Application Custom Fields</strong> — extra questions/fields that appear on the tenant
+            rental application form (e.g. &quot;Pet breed&quot;, &quot;Employer name&quot;). Add, reorder, or
+            require them here; changes apply to every new application immediately.
+          </li>
+          <li>
+            <strong>Service Type Configs</strong> — the rules for each marketplace service category (e.g.
+            Plumbing, Electrical): whether a quote is required, whether a supervisor must approve it, and what
+            evidence a provider must upload to mark a job complete.
+          </li>
+        </ul>
       </div>
 
       {/* Tabs */}
@@ -227,6 +289,30 @@ export default function TaxonomiesPage() {
         </div>
       ) : tab === "custom-fields" ? (
         <div className="space-y-4">
+          {/* Preset picker — instantly seed a starter set of application fields for a
+              common rental type; fields remain fully editable afterwards. */}
+          {showPresets && (
+            <div className="rounded-2xl border border-purple-200 bg-purple-50 p-5 space-y-3">
+              <p className="text-sm font-semibold text-purple-900">Start From a Preset</p>
+              <p className="text-xs text-purple-700">
+                Instantly add a built-in set of application fields for a common rental type — you can still edit or remove any of them afterwards.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {presets.map((p) => (
+                  <div key={p.key} className="rounded-xl border border-purple-200 bg-white p-4 space-y-2">
+                    <p className="text-sm font-semibold text-slate-900">{p.name}</p>
+                    <p className="text-xs text-slate-500">{p.description}</p>
+                    <p className="text-xs text-slate-400">{p.fieldCount} fields</p>
+                    <Button size="sm" className="w-full" disabled={applyingPreset} onClick={() => void applyPreset(p.key)}>
+                      {applyingPreset ? "Applying…" : "Use This Preset"}
+                    </Button>
+                  </div>
+                ))}
+                {presets.length === 0 && <p className="text-sm text-slate-400">No presets available.</p>}
+              </div>
+            </div>
+          )}
+
           {/* Add field form */}
           {showAddField && (
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 space-y-4">

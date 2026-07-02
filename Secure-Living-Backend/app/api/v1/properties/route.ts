@@ -5,6 +5,23 @@ import { appendAudit } from "@/lib/server/audit";
 import { jsonError, parseBody, requireActor, requirePermission, requireScope , withErrorHandler } from "@/lib/server/http";
 import { createPropertySchema } from "@/lib/server/validation";
 
+// Property Code acts as the property's "number plate" — always assigned, never duplicated.
+// Auto-generates one when the caller doesn't supply it, retrying on the rare collision.
+async function resolvePropertyCode(requested: string | undefined): Promise<string> {
+  if (requested && requested.trim()) {
+    const trimmed = requested.trim().toUpperCase();
+    const existing = await prisma.property.findUnique({ where: { propertyCode: trimmed } });
+    if (existing) throw new Error(`DUPLICATE_PROPERTY_CODE:${trimmed}`);
+    return trimmed;
+  }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = `PROP-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+    const existing = await prisma.property.findUnique({ where: { propertyCode: candidate } });
+    if (!existing) return candidate;
+  }
+  throw new Error("Failed to generate a unique property code, please retry");
+}
+
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
@@ -39,6 +56,17 @@ export const POST = withErrorHandler(async (req: Request) => {
   const scoped = requireScope(actor, body.organizationId, body.branchId);
   if (scoped) return scoped;
 
+  let propertyCode: string;
+  try {
+    propertyCode = await resolvePropertyCode(body.propertyCode);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Invalid property code";
+    if (msg.startsWith("DUPLICATE_PROPERTY_CODE:")) {
+      return jsonError(409, `Property code "${msg.split(":")[1]}" is already in use — each property must have a unique code`);
+    }
+    return jsonError(500, msg);
+  }
+
   const row = await prisma.property.create({
     data: {
       id: randomUUID(),
@@ -47,7 +75,7 @@ export const POST = withErrorHandler(async (req: Request) => {
       ownerUserId: body.ownerUserId,
       managerUserId: body.managerUserId,
       name: body.name,
-      propertyCode: body.propertyCode,
+      propertyCode,
       propertyType: body.propertyType,
       ownershipType: body.ownershipType,
       addressLine1: body.addressLine1,

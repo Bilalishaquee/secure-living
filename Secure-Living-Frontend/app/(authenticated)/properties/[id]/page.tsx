@@ -59,6 +59,25 @@ type PropertyDetail = {
   totalParkingSpaces?: number;
   yearBuilt?: number;
   descriptionNotes?: string;
+  biometricEnabled?: boolean;
+  biometricProvider?: string;
+  biometricDeviceId?: string;
+};
+
+type PropertyStats = {
+  units: number;
+  activeTenants: number;
+  occupancyRate: number;
+  collectionRate: number;
+  monthlyRentKes: number;
+  totalDueKes: number;
+  arrearsKes: number;
+  openServiceRequests: number;
+  slaBreachCount: number;
+  depositFullyCovered: number;
+  depositAtRisk: number;
+  depositShortfall: number;
+  overdueInvoices: { id: string; unitId: string; balanceKes: number; dueDate: string; invoiceNumber: string | null }[];
 };
 
 type UnitRow = {
@@ -71,6 +90,7 @@ type UnitRow = {
   depositAmountKes: number | null;
   status: string;
   currentTenantId: string | null;
+  currentTenantName: string | null;
   isFurnished: boolean;
   bedrooms: number | null;
   bathrooms: number | null;
@@ -182,10 +202,15 @@ export default function PropertyDetailPage({ params }: Props) {
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [showEditProp, setShowEditProp] = useState(false);
-  const [editPropForm, setEditPropForm] = useState({ name: "", addressLine1: "", marketRentEstimateKes: "" });
+  const [editPropForm, setEditPropForm] = useState({
+    name: "", addressLine1: "", marketRentEstimateKes: "",
+    biometricEnabled: false, biometricProvider: "", biometricDeviceId: "",
+  });
   const [showSRModal, setShowSRModal] = useState<"inspection" | "repair" | null>(null);
   const [srTitle, setSrTitle] = useState("");
   const [srDesc, setSrDesc] = useState("");
+  const [inquiry, setInquiry] = useState<{ id: string; status: string } | null>(null);
+  const [propStats, setPropStats] = useState<PropertyStats | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -202,8 +227,28 @@ export default function PropertyDetailPage({ params }: Props) {
   useEffect(() => {
     if (!user?.id || !property) return;
     void loadUnits();
+    void loadInquiry();
+    void loadStats();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [property, user?.id]);
+
+  async function loadInquiry() {
+    const res = await fetch(`/api/v1/properties/${params.id}/management-inquiry`, {
+      headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
+    });
+    if (!res.ok) return;
+    const json = (await res.json()) as { data: { id: string; status: string } | null };
+    setInquiry(json.data);
+  }
+
+  async function loadStats() {
+    const res = await fetch(`/api/v1/properties/${params.id}/dashboard-stats`, {
+      headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
+    });
+    if (!res.ok) return;
+    const json = (await res.json()) as { data: PropertyStats };
+    setPropStats(json.data);
+  }
 
   async function loadUnits() {
     const res = await fetch(`/api/v1/properties/${params.id}/units`, {
@@ -310,6 +355,51 @@ export default function PropertyDetailPage({ params }: Props) {
     }
   }
 
+  async function handleRequestAssistance() {
+    if (!user?.id || !property) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/properties/${params.id}/management-inquiry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken ?? ""}` },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to submit inquiry", "error");
+        return;
+      }
+      const json = (await res.json()) as { data: { id: string; status: string } };
+      setInquiry(json.data);
+      toast("Inquiry sent — your local admin will follow up with an invitation.", "success");
+      setShowModeSwitch(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAcceptInvitation() {
+    if (!user?.id || !inquiry) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/management-inquiries/${inquiry.id}/accept`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken ?? ""}` },
+      });
+      if (!res.ok) {
+        const err = (await res.json()) as { error?: string };
+        toast(err.error ?? "Failed to accept invitation", "error");
+        return;
+      }
+      toast("Takeover confirmed — property is now Full Service", "success");
+      setShowModeSwitch(false);
+      setInquiry((i) => i ? { ...i, status: "COMPLETED" } : i);
+      setProperty((p) => p ? { ...p, managementMode: "full_service" } : p);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleModeSwitch(newMode: string) {
     if (!user?.id || !property) return;
     setSaving(true);
@@ -348,6 +438,9 @@ export default function PropertyDetailPage({ params }: Props) {
           name: editPropForm.name || undefined,
           addressLine1: editPropForm.addressLine1 || undefined,
           marketRentEstimateKes: editPropForm.marketRentEstimateKes ? parseFloat(editPropForm.marketRentEstimateKes) : undefined,
+          biometricEnabled: editPropForm.biometricEnabled,
+          biometricProvider: editPropForm.biometricProvider || undefined,
+          biometricDeviceId: editPropForm.biometricDeviceId || undefined,
         }),
       });
       if (!res.ok) {
@@ -455,7 +548,10 @@ export default function PropertyDetailPage({ params }: Props) {
 
           <div className="grid gap-2 sm:grid-cols-2">
             <Button type="button" variant="outline" className="justify-start"
-              onClick={() => { setEditPropForm({ name: property.name ?? "", addressLine1: property.addressLine1 ?? "", marketRentEstimateKes: property.marketRentEstimateKes?.toString() ?? "" }); setShowEditProp(true); }}>
+              onClick={() => { setEditPropForm({
+                name: property.name ?? "", addressLine1: property.addressLine1 ?? "", marketRentEstimateKes: property.marketRentEstimateKes?.toString() ?? "",
+                biometricEnabled: property.biometricEnabled ?? false, biometricProvider: property.biometricProvider ?? "", biometricDeviceId: property.biometricDeviceId ?? "",
+              }); setShowEditProp(true); }}>
               Edit details
             </Button>
             <Button type="button" variant="outline" className="justify-start" asChild>
@@ -490,6 +586,44 @@ export default function PropertyDetailPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Property Dashboard — mirrors the portfolio-level dashboard, scoped to this property */}
+      {propStats && (
+        <section>
+          <h2 className="font-display text-xl font-semibold text-brand-navy">Property Dashboard</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Occupancy</p>
+              <p className="text-2xl font-bold text-brand-navy">{propStats.occupancyRate}%</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{propStats.activeTenants}/{propStats.units} units leased</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Collected this month</p>
+              <p className="text-2xl font-bold text-brand-navy">{formatKes(propStats.monthlyRentKes)}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{propStats.collectionRate}% of {formatKes(propStats.totalDueKes)} due</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Arrears</p>
+              <p className="text-2xl font-bold text-red-600">{formatKes(propStats.arrearsKes)}</p>
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{propStats.overdueInvoices.length} overdue invoice(s)</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Open service requests</p>
+              <p className="text-2xl font-bold text-brand-navy">{propStats.openServiceRequests}</p>
+              {propStats.slaBreachCount > 0 && (
+                <p className="mt-0.5 text-xs font-medium text-amber-600">{propStats.slaBreachCount} past SLA deadline</p>
+              )}
+            </CardContent></Card>
+          </div>
+          {(propStats.depositAtRisk > 0 || propStats.depositShortfall > 0) && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Deposit health: {propStats.depositFullyCovered} fully covered
+              {propStats.depositAtRisk > 0 ? `, ${propStats.depositAtRisk} at risk` : ""}
+              {propStats.depositShortfall > 0 ? `, ${propStats.depositShortfall} shortfall` : ""}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Unit Overview — Gap 5 */}
       <section>
@@ -557,6 +691,11 @@ export default function PropertyDetailPage({ params }: Props) {
                 {unit.rentAmountKes ? (
                   <p className="mt-1 text-xs font-medium">{formatKes(unit.rentAmountKes)}/mo</p>
                 ) : null}
+                {unit.currentTenantName && (
+                  <p className="mt-1 truncate text-xs font-semibold opacity-90" title={unit.currentTenantName}>
+                    {unit.currentTenantName}
+                  </p>
+                )}
                 <p className="mt-1 capitalize text-[11px] font-semibold opacity-90">
                   {unit.status.replace(/_/g, " ")}
                 </p>
@@ -977,13 +1116,39 @@ export default function PropertyDetailPage({ params }: Props) {
                 <li>✓ Maintenance assignment & coordination</li>
                 <li>✓ Tenants notified of new manager</li>
               </ul>
-              <Button
-                className="mt-4 bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={() => { void handleModeSwitch("full_service"); }}
-                disabled={saving}
-              >
-                {saving ? "Switching..." : "Explore Management Options"}
-              </Button>
+
+              {!inquiry || inquiry.status === "DECLINED" ? (
+                <>
+                  <p className="mt-3 text-xs text-purple-600">
+                    Submitting sends an inquiry to your local Secure Living admin — they&apos;ll either invite you to
+                    confirm the takeover or activate it on your behalf. Nothing switches instantly.
+                  </p>
+                  <Button
+                    className="mt-2 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => { void handleRequestAssistance(); }}
+                    disabled={saving}
+                  >
+                    {saving ? "Submitting…" : "Explore Management Options"}
+                  </Button>
+                </>
+              ) : inquiry.status === "PENDING" ? (
+                <p className="mt-3 rounded-lg bg-purple-100 px-3 py-2 text-sm font-medium text-purple-800">
+                  Inquiry sent — awaiting your local admin&apos;s response.
+                </p>
+              ) : inquiry.status === "INVITED" ? (
+                <div className="mt-3 rounded-lg bg-purple-100 px-3 py-2">
+                  <p className="text-sm font-medium text-purple-800">
+                    Your admin has invited you to complete the takeover.
+                  </p>
+                  <Button
+                    className="mt-2 bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={() => { void handleAcceptInvitation(); }}
+                    disabled={saving}
+                  >
+                    {saving ? "Confirming…" : "Accept & Complete Takeover"}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
@@ -1054,6 +1219,42 @@ export default function PropertyDetailPage({ params }: Props) {
               placeholder="45000"
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
             />
+          </div>
+          <div className="rounded-lg border border-slate-200 p-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="biometric-enabled"
+                checked={editPropForm.biometricEnabled}
+                onChange={(e) => setEditPropForm((f) => ({ ...f, biometricEnabled: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-brand-blue focus:ring-brand-blue/40"
+              />
+              <label htmlFor="biometric-enabled" className="text-sm font-medium text-[var(--text-primary)]">
+                Door biometric access adopted at this property
+              </label>
+            </div>
+            {editPropForm.biometricEnabled && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Biometric Provider</label>
+                  <input
+                    value={editPropForm.biometricProvider}
+                    onChange={(e) => setEditPropForm((f) => ({ ...f, biometricProvider: e.target.value }))}
+                    placeholder="e.g. ZKTeco, Suprema"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Door Device ID</label>
+                  <input
+                    value={editPropForm.biometricDeviceId}
+                    onChange={(e) => setEditPropForm((f) => ({ ...f, biometricDeviceId: e.target.value }))}
+                    placeholder="Device / controller ID"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => setShowEditProp(false)}>Cancel</Button>

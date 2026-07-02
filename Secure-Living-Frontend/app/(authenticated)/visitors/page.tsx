@@ -16,6 +16,7 @@ type Visitor = {
   phone: string | null;
   unitId: string | null;
   organizationId: string;
+  vehicleNumber: string | null;
   isBlacklisted: boolean;
   notes: string | null;
 };
@@ -47,7 +48,7 @@ export default function VisitorsPage() {
   const [logs, setLogs] = useState<VisitLog[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [unitSearch, setUnitSearch] = useState("");
-  const [form, setForm] = useState({ name: "", phone: "", unitId: "" });
+  const [form, setForm] = useState({ name: "", phone: "", unitId: "", vehicleNumber: "" });
   const [saving, setSaving] = useState(false);
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
@@ -131,12 +132,13 @@ export default function VisitorsPage() {
           name: form.name,
           phone: form.phone,
           unitId: form.unitId || undefined,
+          vehicleNumber: form.vehicleNumber || undefined,
         }),
       });
       if (res.ok) {
         toast("Visitor added.", "success");
         setShowAdd(false);
-        setForm({ name: "", phone: "", unitId: "" });
+        setForm({ name: "", phone: "", unitId: "", vehicleNumber: "" });
         await loadVisitors();
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
@@ -149,10 +151,16 @@ export default function VisitorsPage() {
 
   async function setVisitorBlacklist(visitorId: string, isBlacklisted: boolean) {
     if (!user) return;
+    let blacklistReason: string | undefined;
+    if (isBlacklisted) {
+      const reason = window.prompt("Reason for blacklisting this visitor?");
+      if (reason === null) return; // cancelled
+      blacklistReason = reason;
+    }
     const res = await fetch(`/api/v1/visitors/${visitorId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...authHeader() },
-      body: JSON.stringify({ isBlacklisted }),
+      body: JSON.stringify({ isBlacklisted, ...(blacklistReason !== undefined && { blacklistReason }) }),
     });
     if (res.ok) {
       toast(isBlacklisted ? "Visitor blacklisted." : "Visitor whitelisted.", "success");
@@ -162,6 +170,8 @@ export default function VisitorsPage() {
       toast(err.error ?? "Failed to update visitor.", "error");
     }
   }
+
+  const canRemoveBlacklist = !!user?.permissions?.includes("visitor:blacklist:remove") || !!user?.permissions?.includes("*");
 
   const filteredUnits = units.filter((unit) => {
     const q = unitSearch.trim().toLowerCase();
@@ -173,6 +183,7 @@ export default function VisitorsPage() {
     { key: "name", header: "Name", sortable: true },
     { key: "phone", header: "Phone", render: (r) => r.phone ?? "--" },
     { key: "unitId", header: "Unit", render: (r) => r.unitId ?? "--" },
+    { key: "vehicleNumber", header: "Plate No.", render: (r) => r.vehicleNumber ?? "--" },
     {
       key: "isBlacklisted",
       header: "Status",
@@ -187,8 +198,14 @@ export default function VisitorsPage() {
             <Eye className="h-4 w-4" />
           </Button>
           {r.isBlacklisted ? (
-            <Button variant="ghost" size="sm" onClick={() => { void setVisitorBlacklist(r.id, false); }} title="Whitelist visitor">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!canRemoveBlacklist}
+              onClick={() => { void setVisitorBlacklist(r.id, false); }}
+              title={canRemoveBlacklist ? "Whitelist visitor" : "Only a Super Admin can remove a blacklist"}
+            >
+              <ShieldCheck className={`h-4 w-4 ${canRemoveBlacklist ? "text-emerald-600" : "text-slate-300"}`} />
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={() => { void setVisitorBlacklist(r.id, true); }} title="Blacklist visitor">
@@ -258,6 +275,15 @@ export default function VisitorsPage() {
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Phone *</label>
             <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Car / Motorbike Plate No.</label>
+            <input
+              value={form.vehicleNumber}
+              onChange={(e) => setForm((f) => ({ ...f, vehicleNumber: e.target.value }))}
+              placeholder="e.g. KDA 123B"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Unit</label>

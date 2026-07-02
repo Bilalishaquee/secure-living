@@ -21,6 +21,7 @@ import {
   Receipt,
   Settings,
   Shield,
+  ShieldCheck,
   Upload,
   Users,
   X,
@@ -66,6 +67,7 @@ import { useState, useRef, useEffect, type ComponentType } from "react";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { useFeatureFlags } from "@/lib/feature-flags";
 import type { UserRole } from "@/types/auth";
 import { LogoShield } from "@/components/brand/LogoShield";
 import { Avatar } from "@/components/ui/Avatar";
@@ -167,6 +169,7 @@ const superAdminGroups: NavGroup[] = [
     label: "Core Operations",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/admin/dashboard", label: "Super Admin Dashboard", icon: Shield },
       { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties", icon: Building2 },
@@ -194,6 +197,7 @@ const superAdminGroups: NavGroup[] = [
     label: "Trust & Compliance",
     items: [
       { href: "/kyc", label: "KYC", icon: Upload },
+      { href: "/admin/kyc", label: "KYC Review Queue", icon: ShieldCheck },
       { href: "/screening", label: "Screening", icon: FileSearch },
       { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
       { href: "/screening/rent-score", label: "Rent Score", icon: Award },
@@ -230,9 +234,9 @@ const superAdminGroups: NavGroup[] = [
     label: "Organisation & Users",
     items: [
       { href: "/admin/organizations", label: "Organisations", icon: Globe },
+      { href: "/admin/management-inquiries", label: "Management Inquiries", icon: Building2 },
       { href: "/admin/rbac", label: "Roles & Permissions", icon: Shield },
       { href: "/admin/service-categories", label: "Service Categories", icon: Tags },
-      { href: "/admin/service-enquiries", label: "Service Enquiries", icon: Ticket },
       { href: "/team", label: "Team Invitations", icon: UserPlus },
       { href: "/commercial-readiness", label: "Commercial Readiness", icon: Ticket },
     ],
@@ -282,6 +286,7 @@ const adminGroups: NavGroup[] = [
     label: "Trust & Compliance",
     items: [
       { href: "/kyc", label: "KYC", icon: Upload },
+      { href: "/admin/kyc", label: "KYC Review Queue", icon: ShieldCheck },
       { href: "/screening", label: "Screening", icon: FileSearch },
       { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
       { href: "/screening/rent-score", label: "Rent Score", icon: Award },
@@ -584,14 +589,30 @@ function SidebarNav({ groups, collapsed, pathname, onNavigate }: SidebarNavProps
   );
 }
 
+// Nav items masked by an admin feature flag (UPDATE.md: "Allow masking (hiding) of
+// features"). Flag defaults to enabled when unset, so nothing hides until an admin
+// explicitly deactivates it from /admin/feature-flags.
+const NAV_FEATURE_FLAGS: Record<string, string> = {
+  "/qr/applications": "qr_access_module",
+  "/qr/access-logs": "qr_access_module",
+  "/short-stay": "short_stay_module",
+  "/short-stay/charges": "short_stay_module",
+};
+
 export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { isEnabled } = useFeatureFlags();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const role = (user?.role ?? "landlord") as UserRole;
-  const groups = getGroups(role);
+  const groups = getGroups(role)
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => isEnabled(NAV_FEATURE_FLAGS[item.href] ?? item.href, true)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const userBlock = (
     <div
