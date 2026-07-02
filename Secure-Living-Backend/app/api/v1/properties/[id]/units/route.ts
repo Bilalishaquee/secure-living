@@ -21,7 +21,21 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
     where: { propertyId: params.id },
     orderBy: [{ floor: "asc" }, { unitNumber: "asc" }],
   });
-  return Response.json({ data: units });
+
+  // Unit.currentTenantId is a plain string (no FK relation), so resolve tenant names
+  // in one batched lookup — the unit list should show who's leasing each unit, not just an ID.
+  const tenantIds = Array.from(new Set(units.map((u) => u.currentTenantId).filter((id): id is string => !!id)));
+  const tenants = tenantIds.length > 0
+    ? await prisma.appUser.findMany({ where: { id: { in: tenantIds } }, select: { id: true, fullName: true } })
+    : [];
+  const tenantNameById = new Map(tenants.map((t) => [t.id, t.fullName]));
+
+  const withTenantNames = units.map((u) => ({
+    ...u,
+    currentTenantName: u.currentTenantId ? tenantNameById.get(u.currentTenantId) ?? null : null,
+  }));
+
+  return Response.json({ data: withTenantNames });
 })
 
 export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {

@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
-import { parseBody, requireActor, withErrorHandler } from "@/lib/server/http";
+import { hasPermission, canAccessOrg } from "@/lib/server/authz";
+import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
 
 const createSchema = z.object({
   organizationId: z.string().min(1),
@@ -19,11 +20,15 @@ const createSchema = z.object({
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+  if (!hasPermission(actor, "visitor:view") && !hasPermission(actor, "visitor:manage")) {
+    return jsonError(403, "Forbidden");
+  }
 
   const url = new URL(req.url);
   const organizationId = url.searchParams.get("organizationId") || actor.orgIds?.[0];
   const propertyId = url.searchParams.get("propertyId");
   const unitId = url.searchParams.get("unitId");
+  if (organizationId && !canAccessOrg(actor, organizationId)) return jsonError(403, "Out of scope");
 
   const where: Record<string, unknown> = {};
   if (organizationId) where.organizationId = organizationId;
@@ -41,10 +46,12 @@ export const GET = withErrorHandler(async (req: Request) => {
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+  if (!hasPermission(actor, "visitor:manage")) return jsonError(403, "Forbidden");
 
   const parsed = await parseBody(req, createSchema);
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
+  if (!canAccessOrg(actor, body.organizationId)) return jsonError(403, "Out of scope");
 
   if (body.phone) {
     const existing = await prisma.visitor.findFirst({

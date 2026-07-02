@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
+import { useFeatureFlag } from "@/lib/feature-flags";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
@@ -359,6 +360,7 @@ function ActionTextModal({
 export default function ProvidersPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const providerOnboardingEnabled = useFeatureFlag("provider_onboarding", true);
 
   const [rows, setRows] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -450,7 +452,11 @@ export default function ProvidersPage() {
           <h1 className="app-page-title">Service Providers</h1>
           <p className="app-page-lead">Manage your vetted and marketplace service providers</p>
         </div>
-        <Button onClick={() => setShowAdd(true)}>
+        <Button
+          onClick={() => setShowAdd(true)}
+          disabled={!providerOnboardingEnabled}
+          title={providerOnboardingEnabled ? undefined : "Provider onboarding has been temporarily disabled by an administrator"}
+        >
           <Plus className="mr-1.5 h-4 w-4" /> Add Provider
         </Button>
       </div>

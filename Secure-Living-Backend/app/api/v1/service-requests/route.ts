@@ -6,6 +6,7 @@ import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
 import { SR_EVENT_MAP } from "@/lib/server/service-fsm";
+import { isServiceTypeBlocked } from "@/lib/server/service-access";
 
 // ── Schema ─────────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,14 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   const scoped = requireScope(actor, body.organizationId, body.branchId);
   if (scoped) return scoped;
+
+  const restriction = await isServiceTypeBlocked(body.serviceType, {
+    userId: actor.userId,
+    organizationId: body.organizationId,
+  });
+  if (restriction.blocked) {
+    return jsonError(403, restriction.reason ?? `Access to "${body.serviceType}" service requests has been restricted by an administrator.`);
+  }
 
   // Phase 3: CUSTOM type must reference a specific registered CustomTypeDefinition
   if (body.serviceType === ServiceRequestType.CUSTOM) {

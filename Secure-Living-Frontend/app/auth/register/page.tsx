@@ -32,6 +32,16 @@ const roles: {
     ],
   },
   {
+    id: "agency",
+    label: "Agency",
+    icon: ShieldCheck,
+    lines: [
+      "Manage multiple landlords' portfolios from one org.",
+      "Onboard property managers and field staff.",
+      "Get an agency compliance number once verified.",
+    ],
+  },
+  {
     id: "tenant",
     label: "Tenant",
     icon: KeyRound,
@@ -74,7 +84,7 @@ export default function RegisterPage() {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
     const requestedRole = searchParams.get("role");
-    if (requestedRole === "landlord" || requestedRole === "tenant" || requestedRole === "staff") {
+    if (requestedRole === "landlord" || requestedRole === "agency" || requestedRole === "tenant" || requestedRole === "staff") {
       setRole(requestedRole);
     }
     const requestedNext = searchParams.get("next");

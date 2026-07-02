@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Modal } from "@/components/ui/Modal";
 
 
 const STEPS = [
@@ -16,6 +17,13 @@ const STEPS = [
   { key: "DEPOSIT_PROCESSING",   label: "Deposit Processing" },
   { key: "COMPLETED",            label: "Completed" },
 ];
+
+const DEDUCTION_STATUS_BADGE: Record<string, string> = {
+  proposed: "bg-amber-100 text-amber-700",
+  accepted: "bg-green-100 text-green-700",
+  disputed: "bg-red-100 text-red-700",
+  finalised: "bg-blue-100 text-blue-700",
+};
 
 type VacatingNotice = {
   id: string;
@@ -28,7 +36,10 @@ type VacatingNotice = {
     scheduledDate: string;
     status: string;
     notes: string | null;
-    deductions: Array<{ id: string; description: string; amount: number; photoUrl: string | null }>;
+    deductions: Array<{
+      id: string; description: string; amount: number; photoUrl: string | null; status: string;
+      beforePhotoUrl: string | null; afterPhotoUrl: string | null; inspectorNote: string | null; billOrMeterRef: string | null;
+    }>;
   } | null;
   depositRefund: {
     depositAmount: number;
@@ -49,6 +60,9 @@ export default function TenantVacatePage() {
   const [intendedDate, setIntendedDate] = useState("");
   const [tenantNote, setTenantNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [disputeId, setDisputeId] = useState<string | null>(null);
+  const [disputeNote, setDisputeNote] = useState("");
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -93,6 +107,28 @@ export default function TenantVacatePage() {
       }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRespond(deductionId: string, action: "accept" | "dispute", note?: string) {
+    setRespondingId(deductionId);
+    try {
+      const res = await fetch(`/api/v1/deductions/${deductionId}/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
+        body: JSON.stringify({ action, note }),
+      });
+      if (res.ok) {
+        toast(action === "accept" ? "Deduction accepted" : "Deduction disputed — landlord has been notified", "success");
+        setDisputeId(null);
+        setDisputeNote("");
+        load();
+      } else {
+        const j = await res.json().catch(() => ({}));
+        toast(j.error ?? "Failed", "error");
+      }
+    } finally {
+      setRespondingId(null);
     }
   }
 
@@ -197,10 +233,37 @@ export default function TenantVacatePage() {
                   <div>
                     <p className="mb-2 font-medium text-sm">Deductions:</p>
                     <table className="w-full text-sm">
-                      <thead><tr><th className="text-left py-1 text-xs text-slate-500">Item</th><th className="text-right py-1 text-xs text-slate-500">Amount</th></tr></thead>
-                      <tbody>
+                      <thead>
+                        <tr>
+                          <th className="text-left py-1 text-xs text-slate-500">Item</th>
+                          <th className="text-left py-1 text-xs text-slate-500">Status</th>
+                          <th className="text-right py-1 text-xs text-slate-500">Amount</th>
+                          <th className="py-1" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
                         {notice.inspection.deductions.map((d) => (
-                          <tr key={d.id}><td className="py-1 text-slate-700">{d.description}</td><td className="py-1 text-right text-red-600">KES {d.amount.toLocaleString()}</td></tr>
+                          <tr key={d.id}>
+                            <td className="py-2 text-slate-700 align-top">{d.description}</td>
+                            <td className="py-2 align-top">
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${DEDUCTION_STATUS_BADGE[d.status] ?? "bg-slate-100 text-slate-600"}`}>
+                                {d.status}
+                              </span>
+                            </td>
+                            <td className="py-2 text-right text-red-600 align-top">KES {d.amount.toLocaleString()}</td>
+                            <td className="py-2 text-right align-top">
+                              {d.status === "proposed" && (
+                                <div className="flex justify-end gap-1.5">
+                                  <Button size="sm" onClick={() => handleRespond(d.id, "accept")} disabled={respondingId === d.id}>
+                                    Accept
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={() => setDisputeId(d.id)} disabled={respondingId === d.id}>
+                                    Dispute
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
                         ))}
                       </tbody>
                     </table>
@@ -232,6 +295,35 @@ export default function TenantVacatePage() {
           )}
         </>
       )}
+
+      {/* Dispute Deduction Modal */}
+      <Modal open={!!disputeId} onOpenChange={(open) => { if (!open) { setDisputeId(null); setDisputeNote(""); } }} title="Dispute Deduction">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">
+            Tell your landlord why you disagree with this charge. They can add more evidence and resubmit it for your review.
+          </p>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Reason</label>
+            <textarea
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              rows={3}
+              value={disputeNote}
+              onChange={(e) => setDisputeNote(e.target.value)}
+              placeholder="e.g. This damage was already present at move-in…"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button variant="ghost" onClick={() => { setDisputeId(null); setDisputeNote(""); }} className="flex-1">Cancel</Button>
+            <Button
+              onClick={() => disputeId && handleRespond(disputeId, "dispute", disputeNote || undefined)}
+              disabled={!disputeId || respondingId === disputeId}
+              className="flex-1"
+            >
+              {respondingId === disputeId ? "Submitting…" : "Submit Dispute"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

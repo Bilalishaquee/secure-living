@@ -9,15 +9,31 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
 
 type TemplateItem = { id?: string; area: string; item: string; qty: number };
+type CustomColumn = { key: string; label: string; type: "text" | "number" | "photo" | "file" | "checkbox" };
 type Template = {
   id: string;
   name: string;
   category: string | null;
   description: string | null;
+  customColumns?: CustomColumn[] | null;
   _count?: { items: number };
   items?: { id?: string; section: string; item: string; defaultQty?: number; order: number }[];
 };
 type Preset = { key: string; name: string; category: string; description: string; itemCount: number };
+
+const CUSTOM_COLUMN_PRESETS: { label: string; type: CustomColumn["type"] }[] = [
+  { label: "Photo Evidence", type: "photo" },
+  { label: "Responsible Party", type: "text" },
+  { label: "Replacement Cost", type: "number" },
+  { label: "Tenant Initials", type: "text" },
+  { label: "Inspector Notes", type: "text" },
+  { label: "Contractor Quote", type: "file" },
+  { label: "Invoice Upload", type: "file" },
+];
+
+function slugifyColumnKey(label: string) {
+  return label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "field";
+}
 
 const CATEGORIES = [
   { value: "RESIDENTIAL", label: "Residential" },
@@ -47,6 +63,7 @@ export default function ChecklistsPage() {
   const [creating, setCreating] = useState(false);
   const [tplForm, setTplForm] = useState(emptyTemplate);
   const [items, setItems] = useState<TemplateItem[]>([{ ...emptyItem }]);
+  const [customColumns, setCustomColumns] = useState<CustomColumn[]>([]);
   const [saving, setSaving] = useState(false);
   const [presets, setPresets] = useState<Preset[]>([]);
   const [showPresets, setShowPresets] = useState(false);
@@ -90,6 +107,7 @@ export default function ChecklistsPage() {
           : [{ ...emptyItem }],
       );
       setTplForm({ name: tpl.name, category: tpl.category ?? "CUSTOM", description: tpl.description ?? "" });
+      setCustomColumns(tpl.customColumns ?? []);
     }
   }
 
@@ -106,6 +124,34 @@ export default function ChecklistsPage() {
     setCreating(true);
     setTplForm(emptyTemplate);
     setItems([{ ...emptyItem }]);
+    setCustomColumns([]);
+  }
+
+  function addCustomColumnPreset(preset: { label: string; type: CustomColumn["type"] }) {
+    setCustomColumns((prev) => {
+      const key = slugifyColumnKey(preset.label);
+      if (prev.some((c) => c.key === key)) return prev;
+      return [...prev, { key, label: preset.label, type: preset.type }];
+    });
+  }
+
+  function addCustomColumn() {
+    setCustomColumns((prev) => [...prev, { key: `field_${prev.length + 1}`, label: "", type: "text" }]);
+  }
+
+  function updateCustomColumn(idx: number, field: keyof CustomColumn, value: string) {
+    setCustomColumns((prev) =>
+      prev.map((c, i) => {
+        if (i !== idx) return c;
+        const next = { ...c, [field]: value } as CustomColumn;
+        if (field === "label") next.key = slugifyColumnKey(value);
+        return next;
+      }),
+    );
+  }
+
+  function removeCustomColumn(idx: number) {
+    setCustomColumns((prev) => prev.filter((_, i) => i !== idx));
   }
 
   async function applyPreset(key: string) {
@@ -131,7 +177,14 @@ export default function ChecklistsPage() {
         .filter((i) => i.item.trim())
         .map((i, idx) => ({ section: i.area.trim() || "General", item: i.item.trim(), defaultQty: i.qty || 1, order: idx }));
 
-      const body = JSON.stringify({ name: tplForm.name, category: tplForm.category, description: tplForm.description, items: validItems });
+      const validColumns = customColumns.filter((c) => c.label.trim());
+      const body = JSON.stringify({
+        name: tplForm.name,
+        category: tplForm.category,
+        description: tplForm.description,
+        items: validItems,
+        customColumns: validColumns,
+      });
 
       if (selected) {
         const res = await fetch(`/api/v1/checklist-templates/${selected.id}`, {
@@ -273,6 +326,69 @@ export default function ChecklistsPage() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Custom Columns</CardTitle>
+              <Button size="sm" variant="ghost" onClick={addCustomColumn} className="gap-1">
+                <Plus className="h-3 w-3" /> Add Column
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Add landlord-defined fields captured per checklist row (e.g. Photo Evidence, Responsible Party,
+              Replacement Cost, Tenant Initials, Inspector Notes, Contractor Quote, Invoice Upload). No restrictions.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {CUSTOM_COLUMN_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => addCustomColumnPreset(p)}
+                  disabled={customColumns.some((c) => c.key === slugifyColumnKey(p.label))}
+                  className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-blue-400 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  + {p.label}
+                </button>
+              ))}
+            </div>
+            {customColumns.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <div className="hidden gap-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-400 sm:flex">
+                  <span className="flex-1">Column Label</span>
+                  <span className="w-32">Field Type</span>
+                  <span className="w-6" />
+                </div>
+                {customColumns.map((c, idx) => (
+                  <div key={idx} className="flex items-start gap-2">
+                    <input
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      placeholder="Column label (e.g. Tenant Initials)"
+                      value={c.label}
+                      onChange={(e) => updateCustomColumn(idx, "label", e.target.value)}
+                    />
+                    <select
+                      className="w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                      value={c.type}
+                      onChange={(e) => updateCustomColumn(idx, "type", e.target.value)}
+                    >
+                      <option value="text">Text</option>
+                      <option value="number">Number</option>
+                      <option value="photo">Photo</option>
+                      <option value="file">File</option>
+                      <option value="checkbox">Checkbox</option>
+                    </select>
+                    <button type="button" onClick={() => removeCustomColumn(idx)} className="mt-2.5 text-slate-400 hover:text-red-500">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="flex gap-3">
           <Button variant="ghost" onClick={() => { setSelected(null); setCreating(false); }} className="flex-1">Cancel</Button>
           <Button
@@ -343,7 +459,10 @@ export default function ChecklistsPage() {
                   </button>
                 </div>
                 {t.description && <p className="mt-2 text-sm text-slate-500 line-clamp-2">{t.description}</p>}
-                <p className="mt-3 text-xs text-slate-400">{t._count?.items ?? 0} items</p>
+                <p className="mt-3 text-xs text-slate-400">
+                  {t._count?.items ?? 0} items
+                  {t.customColumns && t.customColumns.length > 0 ? ` • ${t.customColumns.length} custom columns` : ""}
+                </p>
               </CardContent>
             </Card>
           ))}

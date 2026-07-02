@@ -5,10 +5,17 @@ import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler
 
 type Ctx = { params: { id: string } };
 
+const customColumnSchema = z.object({
+  key: z.string().min(1).max(60),
+  label: z.string().min(1).max(100),
+  type: z.enum(["text", "number", "photo", "file", "checkbox"]).default("text"),
+});
+
 const updateSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   category: z.enum(["RESIDENTIAL", "FURNISHED", "COMMERCIAL", "SHORT_STAY", "CUSTOM"]).optional(),
   description: z.string().max(500).optional(),
+  customColumns: z.array(customColumnSchema).optional(),
   items: z.array(z.object({
     section: z.string().default("General"),
     item: z.string().min(1),
@@ -50,6 +57,7 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
       ...(b.name !== undefined && { name: b.name }),
       ...(b.category !== undefined && { category: b.category }),
       ...(b.description !== undefined && { description: b.description }),
+      ...(b.customColumns !== undefined && { customColumns: b.customColumns }),
     },
   });
 

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { isServiceTypeBlocked } from "@/lib/server/service-access";
 
 type Ctx = { params: { id: string } };
 
@@ -40,10 +41,21 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
+  let allowedSpecializations = body.specializations;
+  if (body.specializations !== undefined) {
+    const checks = await Promise.all(
+      body.specializations.map(async (s) => ({
+        s,
+        ...(await isServiceTypeBlocked(s, { userId: existing.userId, organizationId: existing.organizationId })),
+      })),
+    );
+    allowedSpecializations = checks.filter((c) => !c.blocked).map((c) => c.s);
+  }
+
   const updated = await prisma.serviceProvider.update({
     where: { id: params.id },
     data: {
-      ...(body.specializations !== undefined && { specializations: body.specializations }),
+      ...(allowedSpecializations !== undefined && { specializations: allowedSpecializations }),
       ...(body.coverageAreas !== undefined && { coverageAreas: body.coverageAreas }),
       ...(body.bio !== undefined && { bio: body.bio }),
       ...(body.verificationLevel !== undefined && { verificationLevel: body.verificationLevel }),

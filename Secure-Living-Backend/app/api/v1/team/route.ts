@@ -8,7 +8,10 @@ const inviteSchema = z.object({
   organizationId: z.string().min(1),
   branchId: z.string().min(1),
   inviteeEmail: z.string().email(),
-  roleSlug: z.enum(["caretaker", "property_manager", "accountant", "full_delegate"]),
+  roleSlug: z.enum([
+    "caretaker", "property_manager", "accountant", "full_delegate",
+    "short_stay_attendant", "security_gate_officer",
+  ]),
   propertyIdsCsv: z.string().optional(),
 });
 

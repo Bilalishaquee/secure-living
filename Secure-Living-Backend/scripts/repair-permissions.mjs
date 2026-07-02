@@ -39,7 +39,7 @@ const PERMISSION_CODES = [
   "maintenance:view", "maintenance:create", "maintenance:update",
   "maintenance:assign", "maintenance:approve", "maintenance:escalate",
   "finance:view", "finance:approve",
-  "org:manage", "rbac:manage", "audit:view", "kyc:upload",
+  "org:manage", "rbac:manage", "audit:view", "kyc:upload", "kyc:review",
   "leases:view", "leases:manage", "lease:view", "lease:create", "lease:edit",
   "screening:view", "screening:review",
   "rent:collect", "rent_collection:manage",
@@ -67,6 +67,21 @@ const PERMISSION_CODES = [
   "service-request:evidence:upload",
   "provider:view",
   "provider:manage",
+  // Phase 4 — Dynamic Inspection & Deposit Deduction System
+  "inspection:view", "inspection:manage",
+  "deduction:respond",
+  // Platform admin controls (Super-Admin-only surfaces)
+  "platform:service-modes:manage",
+  "platform:service-restrictions:manage",
+  "platform:feature-flags:manage",
+  "platform:stats:view",
+  // Visitor management — ban/blacklist workflow
+  "visitor:view", "visitor:manage", "visitor:blacklist:remove",
+  // Dispute Management — first-line landlord response vs final admin decision
+  "dispute:respond", "dispute:resolve",
+  // Support Module Restructure — Support Tickets / Contact Requests (tenants use
+  // service-request:* / "My Requests" instead, per spec, so no tenant grant here)
+  "support:view", "support:manage",
   "*",
 ];
 
@@ -75,7 +90,7 @@ const ROLES = [
   {
     slug: "admin", displayName: "Admin",
     perms: [
-      "org:manage", "rbac:manage", "audit:view", "kyc:upload",
+      "org:manage", "rbac:manage", "audit:view", "kyc:upload", "kyc:review",
       "properties:view", "property:view", "property:create", "property:edit",
       "unit:view", "unit:create",
       "maintenance:view", "maintenance:create", "maintenance:update",
@@ -90,6 +105,7 @@ const ROLES = [
       "container:view", "container:create", "container:edit", "container:delete",
       "vacating:view", "vacating:manage",
       "checklist:view", "checklist:create", "checklist:manage",
+      "inspection:view", "inspection:manage",
       "listing:view", "listing:create", "listing:edit", "listing:publish",
       "accounting:view", "accounting:manage",
       "short-stay:view", "short-stay:manage",
@@ -99,6 +115,9 @@ const ROLES = [
       "service-request:view", "service-request:create", "service-request:manage",
       "service-request:execute", "service-request:dispute", "service-request:evidence:upload",
       "provider:view", "provider:manage",
+      "visitor:view", "visitor:manage", "visitor:blacklist:remove",
+      "dispute:respond", "dispute:resolve",
+      "support:view", "support:manage",
     ],
   },
   {
@@ -116,6 +135,7 @@ const ROLES = [
       "container:view", "container:create", "container:edit", "container:delete",
       "vacating:view", "vacating:manage",
       "checklist:view", "checklist:create", "checklist:manage",
+      "inspection:view", "inspection:manage",
       "listing:view", "listing:create", "listing:edit", "listing:publish",
       "accounting:view", "accounting:manage",
       "short-stay:view", "short-stay:manage",
@@ -126,6 +146,43 @@ const ROLES = [
       "service-request:view", "service-request:create", "service-request:manage",
       "service-request:dispute",
       "provider:view", "provider:manage",
+      "visitor:view", "visitor:manage",
+      "dispute:respond",
+      "support:view", "support:manage",
+    ],
+  },
+  {
+    // Agency: manages other landlords' portfolios under one org — same day-to-day
+    // permission set as landlord, plus team invites (they onboard property managers/
+    // field staff themselves rather than relying on a single owner).
+    slug: "agency", displayName: "Agency",
+    perms: [
+      "properties:view", "property:view", "property:create", "property:edit",
+      "unit:view", "unit:create",
+      "maintenance:view", "maintenance:create", "maintenance:update", "maintenance:approve",
+      "kyc:upload", "finance:view",
+      "leases:view", "leases:manage", "lease:view", "lease:create", "lease:edit",
+      "screening:view", "screening:review",
+      "rent:collect", "rent_collection:manage",
+      "services:view", "tenant:view", "tenant:create",
+      "job-assignments:manage",
+      "container:view", "container:create", "container:edit", "container:delete",
+      "vacating:view", "vacating:manage",
+      "checklist:view", "checklist:create", "checklist:manage",
+      "inspection:view", "inspection:manage",
+      "listing:view", "listing:create", "listing:edit", "listing:publish",
+      "accounting:view", "accounting:manage",
+      "short-stay:view", "short-stay:manage",
+      "service-enquiry:view",
+      "service-category:view",
+      "unit-history:view", "tenant-lifecycle:view",
+      "role-context:switch",
+      "service-request:view", "service-request:create", "service-request:manage",
+      "service-request:dispute",
+      "provider:view", "provider:manage",
+      "visitor:view", "visitor:manage",
+      "rbac:manage",
+      "support:view", "support:manage",
     ],
   },
   {
@@ -142,6 +199,7 @@ const ROLES = [
       "container:view",
       "vacating:view", "vacating:manage",
       "checklist:view", "checklist:create",
+      "inspection:view", "inspection:manage",
       "listing:view",
       "accounting:view",
       "short-stay:view", "short-stay:manage",
@@ -149,6 +207,9 @@ const ROLES = [
       "service-request:view", "service-request:create", "service-request:execute",
       "service-request:evidence:upload",
       "provider:view",
+      "visitor:view", "visitor:manage",
+      "dispute:respond",
+      "support:view",
     ],
   },
   {
@@ -161,8 +222,24 @@ const ROLES = [
       "tenants:view_own",
       "vacating:create", "vacating:view",
       "checklist:view",
+      "inspection:view",
+      "deduction:respond",
       "role-context:switch",
       "service-request:view", "service-request:create", "service-request:dispute",
+    ],
+  },
+  {
+    slug: "short_stay_attendant", displayName: "Short Stay Attendant",
+    perms: [
+      "visitor:view", "visitor:manage",
+      "short-stay:view",
+      "unit:view",
+    ],
+  },
+  {
+    slug: "security_gate_officer", displayName: "Security / Gate Officer",
+    perms: [
+      "visitor:view", "visitor:manage",
     ],
   },
 ];

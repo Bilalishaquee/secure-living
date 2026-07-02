@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FilePlus, FileText, Home, Calendar, DollarSign } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FilePlus, FileText, Home, Calendar, DollarSign, Search } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { formatKes } from "@/lib/utils";
@@ -47,10 +48,13 @@ const PAYMENT_FREQS = ["monthly", "quarterly"] as const;
 export default function LeasingPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showUploadPicker, setShowUploadPicker] = useState(false);
+  const [uploadSearch, setUploadSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [properties, setProperties] = useState<Array<{ id: string; name: string; propertyCode?: string | null }>>([]);
   const [units, setUnits] = useState<Array<{ id: string; unitNumber: string; status: string }>>([]);
@@ -162,6 +166,14 @@ export default function LeasingPage() {
     return diff >= 0 && diff <= 30 && l.status === "active";
   }).length;
 
+  const filteredUploadLeases = useMemo(() => {
+    const q = uploadSearch.trim().toLowerCase();
+    const list = q
+      ? leases.filter((l) => [l.id, l.unitId, l.tenantUserId].some((v) => v.toLowerCase().includes(q)))
+      : leases;
+    return list.slice(0, 20);
+  }, [leases, uploadSearch]);
+
   const columns: Column<Lease>[] = [
     {
       key: "unitId",
@@ -269,10 +281,8 @@ export default function LeasingPage() {
               <FileText className="mr-1.5 h-4 w-4" /> Templates
             </Link>
           </Button>
-          <Button variant="outline" asChild>
-            <Link href="/leasing/templates">
-              <FilePlus className="mr-1.5 h-4 w-4" /> Upload Lease
-            </Link>
+          <Button variant="outline" onClick={() => { setUploadSearch(""); setShowUploadPicker(true); }}>
+            <FilePlus className="mr-1.5 h-4 w-4" /> Upload Lease
           </Button>
           <Button onClick={() => { setShowCreate(true); void loadProperties(); }}>
             <FilePlus className="mr-1.5 h-4 w-4" /> New Lease
@@ -478,6 +488,42 @@ export default function LeasingPage() {
             >
               {saving ? "Creating…" : "Create Lease"}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Upload Lease Modal — pick a lease, then upload its signed document on its detail page */}
+      <Modal open={showUploadPicker} onOpenChange={setShowUploadPicker} title="Upload Lease Document">
+        <div className="space-y-3">
+          <p className="text-sm text-slate-500">Select the lease you want to attach a signed document to.</p>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={uploadSearch}
+              onChange={(e) => setUploadSearch(e.target.value)}
+              placeholder="Search by lease ID, unit, or tenant…"
+              className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm"
+            />
+          </div>
+          <div className="max-h-72 space-y-1 overflow-y-auto">
+            {filteredUploadLeases.length === 0 ? (
+              <p className="px-1 py-4 text-center text-sm text-slate-400">No leases found.</p>
+            ) : (
+              filteredUploadLeases.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => { setShowUploadPicker(false); router.push(`/leasing/${l.id}`); }}
+                  className="flex w-full items-center justify-between rounded-lg border border-slate-100 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                >
+                  <span className="truncate">
+                    <span className="font-medium text-slate-800">{l.unitId}</span>
+                    <span className="ml-2 font-mono text-xs text-slate-400">{l.id}</span>
+                  </span>
+                  <Badge variant={STATUS_VARIANT[l.status] ?? "neutral"}>{l.status}</Badge>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </Modal>

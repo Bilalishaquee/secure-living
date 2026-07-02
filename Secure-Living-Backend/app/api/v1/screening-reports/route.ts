@@ -9,7 +9,11 @@ export const GET = withErrorHandler(async (req: Request) => {
   if (actor instanceof Response) return actor;
   const denied = requirePermission(actor, "screening:view");
   if (denied) return denied;
-  const rows = await prisma.tenantScreeningReport.findMany({ orderBy: { createdAt: "desc" } });
+  const applicationId = new URL(req.url).searchParams.get("applicationId");
+  const rows = await prisma.tenantScreeningReport.findMany({
+    where: applicationId ? { applicationId } : undefined,
+    orderBy: { createdAt: "desc" },
+  });
   return Response.json({ data: rows });
 })
 

@@ -1,16 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { DEDUCTION_CATEGORIES, missingEvidence, hasSignedChecklistPair } from "@/lib/server/evidence";
+import { appendAudit } from "@/lib/server/audit";
 
 type Ctx = { params: { id: string } };
-
-const DEDUCTION_CATEGORIES = [
-  "DAMAGE",
-  "MISSING_ITEM",
-  "CLEANING",
-  "UTILITY_BALANCE",
-  "LEASE_VIOLATION",
-] as const;
 
 const deductionSchema = z.object({
   description: z.string().min(1),
@@ -18,6 +12,12 @@ const deductionSchema = z.object({
   category: z.enum(DEDUCTION_CATEGORIES).optional(),
   responsibility: z.string().optional(),
   photoUrl: z.string().optional(),
+  beforePhotoUrl: z.string().optional(),
+  afterPhotoUrl: z.string().optional(),
+  repairQuoteUrl: z.string().optional(),
+  invoiceUrl: z.string().optional(),
+  inspectorNote: z.string().optional(),
+  billOrMeterRef: z.string().optional(),
 });
 
 const completeSchema = z.object({
@@ -44,6 +44,23 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const parsed = await parseBody(req, completeSchema);
   if (!parsed.ok) return parsed.response;
 
+  const evidenceErrors: { description: string; missing: string[] }[] = [];
+  const hasMissingItemDeduction = parsed.data.deductions.some((d) => d.category === "MISSING_ITEM");
+  const checklistPairOk = hasMissingItemDeduction ? await hasSignedChecklistPair(prisma, notice.leaseId) : true;
+  for (const d of parsed.data.deductions) {
+    const missing = missingEvidence(d);
+    if (d.category === "MISSING_ITEM" && !checklistPairOk) {
+      missing.push("A signed move-in checklist and signed move-out checklist are required for missing-item deductions");
+    }
+    if (missing.length > 0) evidenceErrors.push({ description: d.description, missing });
+  }
+  if (evidenceErrors.length > 0) {
+    return Response.json(
+      { error: "Missing required evidence for one or more deductions", details: evidenceErrors },
+      { status: 400 },
+    );
+  }
+
   const inspection = await prisma.moveOutInspection.update({
     where: { id: notice.inspection.id },
     data: {
@@ -57,6 +74,12 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
           category: d.category,
           responsibility: d.responsibility,
           photoUrl: d.photoUrl,
+          beforePhotoUrl: d.beforePhotoUrl,
+          afterPhotoUrl: d.afterPhotoUrl,
+          repairQuoteUrl: d.repairQuoteUrl,
+          invoiceUrl: d.invoiceUrl,
+          inspectorNote: d.inspectorNote,
+          billOrMeterRef: d.billOrMeterRef,
         })),
       },
     },
@@ -66,6 +89,16 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   await prisma.vacatingNotice.update({
     where: { id: params.id },
     data: { status: "INSPECTION_DONE" },
+  });
+
+  await appendAudit({
+    userId: actor.userId,
+    role: actor.role,
+    action: "INSPECTION_COMPLETED",
+    resourceType: "MoveOutInspection",
+    resourceId: inspection.id,
+    orgId: notice.organizationId,
+    afterJson: { deductionCount: inspection.deductions.length, totalAmount: inspection.deductions.reduce((s, d) => s + d.amount, 0) },
   });
 
   return Response.json({ data: inspection });

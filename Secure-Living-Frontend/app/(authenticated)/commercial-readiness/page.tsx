@@ -94,6 +94,11 @@ export default function CommercialReadinessPage() {
   const [creatingCode, setCreatingCode] = useState(false);
   const [newReferral, setNewReferral] = useState({ code: "", name: "", email: "" });
 
+  const [showAddPlan, setShowAddPlan] = useState(false);
+  const [newPlan, setNewPlan] = useState({ name: "", tier: "CUSTOM", listingSlots: "5", monthlyPriceKes: "" });
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
+
   const isAdmin = user?.role === "super_admin" || user?.role === "admin";
   const headers = useMemo(() => ({
     "Content-Type": "application/json",
@@ -125,6 +130,49 @@ export default function CommercialReadinessPage() {
   }
 
   useEffect(() => { void load(); }, [user?.authToken, isAdmin]);
+
+  async function createPlan() {
+    if (!newPlan.name.trim() || !newPlan.monthlyPriceKes) {
+      toast("Plan name and monthly price are required", "error");
+      return;
+    }
+    const res = await fetch("/api/v1/commercial/subscription-plans", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        name: newPlan.name.trim(),
+        tier: newPlan.tier,
+        listingSlots: Number(newPlan.listingSlots) || 0,
+        monthlyPriceKes: Number(newPlan.monthlyPriceKes),
+      }),
+    });
+    if (res.ok) {
+      toast("Plan created", "success");
+      setShowAddPlan(false);
+      setNewPlan({ name: "", tier: "CUSTOM", listingSlots: "5", monthlyPriceKes: "" });
+      await load();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      toast((j as { error?: string }).error ?? "Failed to create plan", "error");
+    }
+  }
+
+  async function savePlanPrice(planId: string) {
+    if (!priceDraft) return;
+    const res = await fetch(`/api/v1/commercial/subscription-plans/${planId}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ monthlyPriceKes: Number(priceDraft) }),
+    });
+    if (res.ok) {
+      toast("Price updated", "success");
+      setEditingPriceId(null);
+      await load();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      toast((j as { error?: string }).error ?? "Failed to update price", "error");
+    }
+  }
 
   async function createReferralCode() {
     setCreatingCode(true);
@@ -219,8 +267,37 @@ export default function CommercialReadinessPage() {
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Subscription Plans</CardTitle></CardHeader>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Subscription Plans</CardTitle>
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={() => setShowAddPlan((s) => !s)}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Plan
+                </Button>
+              )}
+            </div>
+          </CardHeader>
           <CardContent className="space-y-3">
+            {isAdmin && showAddPlan && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                <input className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Plan name"
+                  value={newPlan.name} onChange={(e) => setNewPlan((p) => ({ ...p, name: e.target.value }))} />
+                <div className="grid grid-cols-2 gap-2">
+                  <select className="rounded-lg border border-slate-200 px-3 py-2 text-sm" value={newPlan.tier}
+                    onChange={(e) => setNewPlan((p) => ({ ...p, tier: e.target.value }))}>
+                    {["FREE", "LISTING_ONLY", "STARTER", "PROFESSIONAL", "BUSINESS", "ENTERPRISE", "CUSTOM"].map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <input type="number" className="rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Listing slots"
+                    value={newPlan.listingSlots} onChange={(e) => setNewPlan((p) => ({ ...p, listingSlots: e.target.value }))} />
+                </div>
+                <input type="number" className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" placeholder="Monthly price (KES)"
+                  value={newPlan.monthlyPriceKes} onChange={(e) => setNewPlan((p) => ({ ...p, monthlyPriceKes: e.target.value }))} />
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddPlan(false)} className="flex-1">Cancel</Button>
+                  <Button size="sm" onClick={() => void createPlan()} className="flex-1">Create</Button>
+                </div>
+              </div>
+            )}
             {plans.map((plan) => (
               <div key={plan.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex items-start justify-between gap-3">
@@ -228,7 +305,23 @@ export default function CommercialReadinessPage() {
                     <p className="font-semibold text-slate-900">{plan.name}</p>
                     <p className="text-xs text-slate-500">{plan.tier} · {plan.listingSlots} listing slots · {plan.hasServiceRequests ? "Service requests enabled" : "No service requests"}</p>
                   </div>
-                  <p className="font-semibold text-blue-700">{formatKes(Number(plan.monthlyPriceKes))}/mo</p>
+                  {isAdmin && editingPriceId === plan.id ? (
+                    <div className="flex items-center gap-1">
+                      <input type="number" autoFocus className="w-24 rounded-lg border border-slate-200 px-2 py-1 text-sm"
+                        value={priceDraft} onChange={(e) => setPriceDraft(e.target.value)} />
+                      <Button size="sm" onClick={() => void savePlanPrice(plan.id)}>Save</Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!isAdmin}
+                      title={isAdmin ? "Click to edit price — no price is permanent" : undefined}
+                      onClick={() => { if (isAdmin) { setEditingPriceId(plan.id); setPriceDraft(String(plan.monthlyPriceKes)); } }}
+                      className={`font-semibold text-blue-700 ${isAdmin ? "hover:underline" : ""}`}
+                    >
+                      {formatKes(Number(plan.monthlyPriceKes))}/mo
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

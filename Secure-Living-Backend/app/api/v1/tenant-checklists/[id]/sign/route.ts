@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/server/db";
 import { requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { appendAudit } from "@/lib/server/audit";
 
 type Ctx = { params: { id: string } };
 
@@ -11,7 +12,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const checklist = await prisma.tenantChecklist.findUnique({
     where: { id: params.id },
-    include: { template: { include: { items: true } }, entries: true },
+    include: { template: { include: { items: true } }, entries: true, lease: { select: { organizationId: true } } },
   });
   if (!checklist) return jsonError(404, "Checklist not found");
   if (checklist.status === "SIGNED") return jsonError(400, "Already signed");
@@ -23,6 +24,16 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const updated = await prisma.tenantChecklist.update({
     where: { id: params.id },
     data: { status: "SIGNED", signedAt: new Date() },
+  });
+
+  await appendAudit({
+    userId: actor.userId,
+    role: actor.role,
+    action: "CHECKLIST_SIGNED",
+    resourceType: "TenantChecklist",
+    resourceId: updated.id,
+    orgId: checklist.lease.organizationId,
+    afterJson: { type: checklist.type, entryCount: checklist.entries.length },
   });
 
   return Response.json({ data: updated });

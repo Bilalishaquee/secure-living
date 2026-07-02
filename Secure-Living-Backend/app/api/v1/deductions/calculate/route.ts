@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { isEvidenceComplete, missingEvidence } from "@/lib/server/evidence";
 
 const schema = z.object({ leaseId: z.string().min(1) });
 
@@ -38,7 +39,14 @@ export const POST = withErrorHandler(async (req: Request) => {
         itemName: d.description,
         amount: d.amount,
         category: d.category,
-        evidenceUrls: d.photoUrl ? [d.photoUrl] : [],
+        responsibility: d.responsibility,
+        evidenceUrls: [d.photoUrl, d.beforePhotoUrl, d.afterPhotoUrl, d.repairQuoteUrl, d.invoiceUrl].filter(
+          (u): u is string => !!u,
+        ),
+        inspectorNote: d.inspectorNote,
+        billOrMeterRef: d.billOrMeterRef,
+        evidenceComplete: isEvidenceComplete(d),
+        missingEvidence: missingEvidence(d),
         status: d.status,
       })),
       totalDeductions,
