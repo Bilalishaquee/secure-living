@@ -11,16 +11,19 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { useAuth } from "@/lib/auth-context";
 
-type LeaseRow = {
-  id: string;
-  propertyId: string;
-  unitId: string;
+type TenantRow = {
   tenantUserId: string;
-  tenantName: string | null;
-  tenantEmail: string | null;
-  rentAmount: number;
-  status: string;
-  endDate: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  leaseId: string | null;
+  leaseStatus: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  propertyName: string | null;
+  unitNumber: string | null;
+  rentAmount: number | null;
+  leaseEndDate: string | null;
   arrearsKes: number;
 };
 
@@ -29,18 +32,19 @@ type Row = {
   tenantUserId: string;
   name: string;
   property: string;
-  propertyId: string;
-  unitId: string;
-  rent: number;
-  status: "Current" | "Arrears" | "Notice";
+  propertyId: string | null;
+  unitId: string | null;
+  rent: number | null;
+  status: "Current" | "Arrears" | "Notice" | "No Lease";
   email: string | null;
-  leaseEnd: string;
+  leaseEnd: string | null;
   arrearsKes: number;
 };
 
-function statusVariant(s: Row["status"]): "success" | "error" | "warning" {
+function statusVariant(s: Row["status"]): "success" | "error" | "warning" | "neutral" {
   if (s === "Current") return "success";
   if (s === "Arrears") return "error";
+  if (s === "No Lease") return "neutral";
   return "warning";
 }
 
@@ -54,27 +58,35 @@ export default function TenantsPage() {
   useEffect(() => {
     if (!user) return;
     void (async () => {
-      const res = await fetch("/api/v1/leases", {
+      const res = await fetch("/api/v1/tenants", {
         headers: { Authorization: `Bearer ${user.authToken ?? ""}` },
       });
       if (!res.ok) {
-        setError("Unable to load tenant lease records.");
+        setError("Unable to load tenants.");
         setRows([]);
         return;
       }
-      const json = (await res.json()) as { data: LeaseRow[] };
-      const mapped = json.data.map((l) => ({
-        id: l.id,
-        tenantUserId: l.tenantUserId,
-        name: l.tenantName ?? `Tenant …${l.tenantUserId.slice(-6)}`,
-        property: `${l.propertyId.slice(0, 8)}… / ${l.unitId.slice(0, 8)}…`,
-        propertyId: l.propertyId,
-        unitId: l.unitId,
-        rent: l.rentAmount,
-        status: (l.arrearsKes > 0 ? "Arrears" : l.status === "terminated" ? "Notice" : "Current") as Row["status"],
-        email: l.tenantEmail ?? null,
-        leaseEnd: new Date(l.endDate).toISOString().slice(0, 10),
-        arrearsKes: l.arrearsKes ?? 0,
+      const json = (await res.json()) as { data: TenantRow[] };
+      const mapped = json.data.map((t) => ({
+        id: t.tenantUserId,
+        tenantUserId: t.tenantUserId,
+        name: t.name ?? `Tenant …${t.tenantUserId.slice(-6)}`,
+        property: t.leaseId
+          ? `${t.propertyName ?? "Property"} / ${t.unitNumber ?? "Unit"}`
+          : "Not yet leased",
+        propertyId: t.propertyId,
+        unitId: t.unitId,
+        rent: t.rentAmount,
+        status: (!t.leaseId
+          ? "No Lease"
+          : t.arrearsKes > 0
+            ? "Arrears"
+            : t.leaseStatus === "terminated"
+              ? "Notice"
+              : "Current") as Row["status"],
+        email: t.email ?? null,
+        leaseEnd: t.leaseEndDate ? new Date(t.leaseEndDate).toISOString().slice(0, 10) : null,
+        arrearsKes: t.arrearsKes ?? 0,
       }));
       setRows(mapped);
       setError(null);
@@ -111,7 +123,7 @@ export default function TenantsPage() {
     downloadCsv(
       `tenant-report-${r.name.replace(/\s+/g, "-").toLowerCase()}.csv`,
       ["Tenant", "Email", "Property/Unit", "Rent (KES)", "Status", "Arrears (KES)", "Lease End"],
-      [[r.name, r.email ?? "—", r.property, r.rent, r.status, r.arrearsKes, r.leaseEnd]],
+      [[r.name, r.email ?? "—", r.property, r.rent ?? "—", r.status, r.arrearsKes, r.leaseEnd ?? "—"]],
     );
     toast(`Report generated for ${r.name}`, "success");
   }
@@ -120,7 +132,7 @@ export default function TenantsPage() {
     downloadCsv(
       "tenants-report.csv",
       ["Tenant", "Email", "Property/Unit", "Rent (KES)", "Status", "Arrears (KES)", "Lease End"],
-      filteredRows.map((r) => [r.name, r.email ?? "—", r.property, r.rent, r.status, r.arrearsKes, r.leaseEnd]),
+      filteredRows.map((r) => [r.name, r.email ?? "—", r.property, r.rent ?? "—", r.status, r.arrearsKes, r.leaseEnd ?? "—"]),
     );
     toast(`Report generated for ${filteredRows.length} tenants`, "success");
   }
@@ -131,12 +143,16 @@ export default function TenantsPage() {
       key: "property",
       header: "Property / unit",
       render: (r) => (
-        <Link
-          href={`/properties/${r.propertyId}/units/${r.unitId}`}
-          className="font-medium text-brand-blue hover:underline"
-        >
-          {r.property}
-        </Link>
+        r.propertyId && r.unitId ? (
+          <Link
+            href={`/properties/${r.propertyId}/units/${r.unitId}`}
+            className="font-medium text-brand-blue hover:underline"
+          >
+            {r.property}
+          </Link>
+        ) : (
+          <span className="text-[var(--text-muted)]">{r.property}</span>
+        )
       ),
     },
     {
@@ -145,7 +161,7 @@ export default function TenantsPage() {
       sortable: true,
       render: (r) => (
         <span className="font-mono-data text-[var(--text-primary)]">
-          {formatKes(r.rent)}
+          {r.rent != null ? formatKes(r.rent) : "—"}
         </span>
       ),
     },
@@ -153,7 +169,7 @@ export default function TenantsPage() {
       key: "leaseEnd",
       header: "Lease ends",
       render: (r) => (
-        <span className="font-mono-data text-xs text-[var(--text-secondary)]">{r.leaseEnd}</span>
+        <span className="font-mono-data text-xs text-[var(--text-secondary)]">{r.leaseEnd ?? "—"}</span>
       ),
     },
     {
@@ -194,9 +210,15 @@ export default function TenantsPage() {
           <Button type="button" variant="outline" size="sm" className="h-8" asChild>
             <Link href={`/tenants/${r.tenantUserId}`}>Full Profile</Link>
           </Button>
-          <Button type="button" variant="outline" size="sm" className="h-8" asChild>
-            <Link href={`/properties/${r.propertyId}/units/${r.unitId}`}>Unit</Link>
-          </Button>
+          {r.propertyId && r.unitId ? (
+            <Button type="button" variant="outline" size="sm" className="h-8" asChild>
+              <Link href={`/properties/${r.propertyId}/units/${r.unitId}`}>Unit</Link>
+            </Button>
+          ) : (
+            <Button type="button" size="sm" className="h-8" asChild>
+              <Link href="/leasing">Create Lease</Link>
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -224,9 +246,9 @@ export default function TenantsPage() {
         row.name,
         row.email ?? "",
         row.property,
-        row.propertyId,
+        row.propertyId ?? "",
         row.status,
-        row.leaseEnd,
+        row.leaseEnd ?? "",
       ].some((value) => value.toLowerCase().includes(q))
     );
   }, [rows, search]);
