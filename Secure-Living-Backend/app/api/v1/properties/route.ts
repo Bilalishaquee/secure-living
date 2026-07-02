@@ -40,7 +40,26 @@ export const GET = withErrorHandler(async (req: Request) => {
       ? { organizationId: { in: actor.orgIds } }
       : { id: { in: [] as string[] } };
   const rows = await prisma.property.findMany({ where, orderBy: { createdAt: "desc" } });
-  return Response.json({ data: rows });
+
+  // Real unit/occupancy counts (not the manually-entered totalUnits field) so the
+  // properties list can show accurate stats, same as the tenants list does.
+  const propertyIds = rows.map((p) => p.id);
+  const [unitCounts, occupiedCounts] = propertyIds.length
+    ? await Promise.all([
+        prisma.unit.groupBy({ by: ["propertyId"], where: { propertyId: { in: propertyIds } }, _count: { id: true } }),
+        prisma.lease.groupBy({ by: ["propertyId"], where: { propertyId: { in: propertyIds }, status: "active" }, _count: { id: true } }),
+      ])
+    : [[], []];
+  const unitCountMap = new Map(unitCounts.map((u) => [u.propertyId, u._count.id]));
+  const occupiedCountMap = new Map(occupiedCounts.map((o) => [o.propertyId, o._count.id]));
+
+  const enriched = rows.map((p) => ({
+    ...p,
+    unitCount: unitCountMap.get(p.id) ?? 0,
+    occupiedUnitCount: occupiedCountMap.get(p.id) ?? 0,
+  }));
+
+  return Response.json({ data: enriched });
 })
 
 export const POST = withErrorHandler(async (req: Request) => {

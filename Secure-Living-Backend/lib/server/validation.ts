@@ -36,7 +36,7 @@ export const createLeaseSchema = z.object({
 });
 
 export const updateLeaseSchema = z.object({
-  status: z.enum(["draft", "active", "terminated", "expired"]).optional(),
+  status: z.enum(["draft", "offered", "active", "declined", "terminated", "expired"]).optional(),
   signedAt: z.string().datetime().optional(),
   terminatedAt: z.string().datetime().optional(),
 });
