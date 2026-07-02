@@ -29,9 +29,13 @@ export const POST = withErrorHandler(async (req: Request) => {
       data: {
         id: randomUUID(),
         name: body.orgName.trim(),
-        type: "Independent Manager",
+        type: body.role === "agency" ? "Agency" : "Independent Manager",
         country: "Kenya",
         email: `${slug}@secureliving.app`,
+        // Agencies manage other landlords' portfolios, so their org is held for a quick
+        // Super Admin compliance review before going live (see organizations/[id]/route.ts
+        // PATCH). Self-managing landlords keep instant self-service org creation.
+        status: body.role === "agency" ? "pending_review" : "active",
       },
     });
     const newBranch = await prisma.branch.create({
@@ -64,7 +68,7 @@ export const POST = withErrorHandler(async (req: Request) => {
     },
   });
 
-  const allowedRoles = ["landlord", "tenant", "staff"];
+  const allowedRoles = ["landlord", "agency", "tenant", "staff"];
   const roleSlug = allowedRoles.includes(body.role ?? "") ? body.role! : "landlord";
   const assignedRole = await prisma.role.findUnique({ where: { slug: roleSlug } });
   if (!assignedRole) {

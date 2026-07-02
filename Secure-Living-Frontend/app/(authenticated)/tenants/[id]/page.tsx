@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { Card, CardContent } from "@/components/ui/Card";
+import { VerificationBadge } from "@/components/ui/VerificationBadge";
 import { formatKes } from "@/lib/utils";
 
 type LifecycleEvent = {
@@ -128,6 +129,9 @@ export default function TenantDetailPage() {
                 {profile.phoneNumber && (
                   <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {profile.phoneNumber}</span>
                 )}
+              </div>
+              <div className="mt-2">
+                <VerificationBadge userId={profile.id} subjectType="TENANT" />
               </div>
             </div>
           </div>

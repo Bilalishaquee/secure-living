@@ -6,7 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 
-type EnquiryStatus = "NEW" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+// Service Enquiry workflow (UPDATE.md): Received -> Assigned -> Quotation Sent -> Accepted
+// -> In Progress -> Completed -> Closed. NEW/CANCELLED kept for legacy rows.
+type EnquiryStatus = "NEW" | "RECEIVED" | "ASSIGNED" | "QUOTATION_SENT" | "ACCEPTED" | "IN_PROGRESS" | "COMPLETED" | "CLOSED" | "CANCELLED";
 
 type Enquiry = {
   id: string;
@@ -16,6 +18,7 @@ type Enquiry = {
   message: string;
   status: EnquiryStatus;
   assignedTo: string | null;
+  quotationAmount: number | null;
   createdAt: string;
   resolvedAt: string | null;
   serviceCategory: { name: string; slug: string } | null;
@@ -33,6 +36,7 @@ type SupportItem = {
   category?: string;
   priority?: string;
   status: string;
+  assignedTo?: string | null;
   createdAt: string;
   leadType?: string;
   pipeline?: string;
@@ -40,17 +44,51 @@ type SupportItem = {
 };
 
 const STATUS_CONFIG: Record<EnquiryStatus, { label: string; color: string }> = {
-  NEW:         { label: "New",         color: "bg-blue-100 text-blue-700" },
-  IN_PROGRESS: { label: "In Progress", color: "bg-amber-100 text-amber-700" },
-  COMPLETED:   { label: "Completed",   color: "bg-emerald-100 text-emerald-700" },
-  CANCELLED:   { label: "Cancelled",   color: "bg-slate-100 text-slate-500" },
+  NEW:            { label: "New (legacy)", color: "bg-blue-100 text-blue-700" },
+  RECEIVED:       { label: "Received",       color: "bg-blue-100 text-blue-700" },
+  ASSIGNED:       { label: "Assigned",       color: "bg-indigo-100 text-indigo-700" },
+  QUOTATION_SENT: { label: "Quotation Sent", color: "bg-purple-100 text-purple-700" },
+  ACCEPTED:       { label: "Accepted",       color: "bg-teal-100 text-teal-700" },
+  IN_PROGRESS:    { label: "In Progress",    color: "bg-amber-100 text-amber-700" },
+  COMPLETED:      { label: "Completed",      color: "bg-emerald-100 text-emerald-700" },
+  CLOSED:         { label: "Closed",         color: "bg-slate-200 text-slate-600" },
+  CANCELLED:      { label: "Cancelled",      color: "bg-slate-100 text-slate-500" },
 };
 
 const STATUS_TRANSITIONS: Record<EnquiryStatus, EnquiryStatus[]> = {
-  NEW:         ["IN_PROGRESS", "CANCELLED"],
-  IN_PROGRESS: ["COMPLETED", "CANCELLED"],
-  COMPLETED:   [],
-  CANCELLED:   [],
+  NEW:            ["ASSIGNED", "CANCELLED"],
+  RECEIVED:       ["ASSIGNED", "CANCELLED"],
+  ASSIGNED:       ["QUOTATION_SENT", "CANCELLED"],
+  QUOTATION_SENT: ["ACCEPTED", "CANCELLED"],
+  ACCEPTED:       ["IN_PROGRESS", "CANCELLED"],
+  IN_PROGRESS:    ["COMPLETED", "CANCELLED"],
+  COMPLETED:      ["CLOSED"],
+  CLOSED:         [],
+  CANCELLED:      [],
+};
+
+// Support Ticket workflow: New -> Assigned -> In Progress -> Awaiting User -> Resolved -> Closed.
+const TICKET_TRANSITIONS: Record<string, string[]> = {
+  NEW:            ["ASSIGNED"],
+  ASSIGNED:       ["IN_PROGRESS"],
+  IN_PROGRESS:    ["AWAITING_USER", "RESOLVED"],
+  AWAITING_USER:  ["IN_PROGRESS", "RESOLVED"],
+  RESOLVED:       ["CLOSED"],
+  CLOSED:         [],
+};
+
+// Contact Request workflow: New -> Assigned -> Contacted -> Qualified -> Closed.
+const CONTACT_TRANSITIONS: Record<string, string[]> = {
+  NEW:        ["ASSIGNED"],
+  ASSIGNED:   ["CONTACTED"],
+  CONTACTED:  ["QUALIFIED", "CLOSED"],
+  QUALIFIED:  ["CLOSED"],
+  CLOSED:     [],
+};
+
+const SUPPORT_ITEM_LABELS: Record<string, string> = {
+  NEW: "New", ASSIGNED: "Assigned", IN_PROGRESS: "In Progress", AWAITING_USER: "Awaiting User",
+  RESOLVED: "Resolved", CLOSED: "Closed", CONTACTED: "Contacted", QUALIFIED: "Qualified",
 };
 
 export default function SupportPage() {
@@ -102,6 +140,13 @@ export default function SupportPage() {
 
   async function updateStatus(id: string, status: EnquiryStatus) {
     if (!user?.authToken) return;
+    let quotationAmount: number | undefined;
+    if (status === "QUOTATION_SENT") {
+      const raw = window.prompt("Quotation amount (KES):");
+      if (raw === null) return;
+      quotationAmount = Number(raw);
+      if (!raw || Number.isNaN(quotationAmount)) { toast("Enter a valid quotation amount", "error"); return; }
+    }
     setUpdatingId(id);
     try {
       const res = await fetch(`/api/v1/service-enquiries/${id}`, {
@@ -110,7 +155,7 @@ export default function SupportPage() {
           Authorization: `Bearer ${user.authToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(quotationAmount !== undefined && { quotationAmount }) }),
       });
       if (res.ok) {
         toast("Status updated", "success");
@@ -123,6 +168,22 @@ export default function SupportPage() {
           toast(`Failed to update (${res.status})`, "error");
         }
       }
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function updateSupportItem(id: string, status: string) {
+    if (!user?.authToken || module === "enquiries" || module === "leads") return;
+    setUpdatingId(id);
+    try {
+      const res = await fetch(`/api/v1/support/${module}/${id}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${user.authToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) { toast("Status updated", "success"); void loadSupportModule(); }
+      else { const j = await res.json().catch(() => ({} as { error?: string })); toast(j.error ?? "Failed to update", "error"); }
     } finally {
       setUpdatingId(null);
     }
@@ -190,7 +251,11 @@ export default function SupportPage() {
             </div>
           ) : (
             <div className="mt-4 space-y-3">
-              {supportItems.map((item) => (
+              {supportItems.map((item) => {
+                const transitions = module === "tickets" ? TICKET_TRANSITIONS[item.status] ?? []
+                  : module === "contacts" ? CONTACT_TRANSITIONS[item.status] ?? []
+                  : [];
+                return (
                 <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -200,7 +265,7 @@ export default function SupportPage() {
                       </p>
                     </div>
                     <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
-                      {item.status}
+                      {SUPPORT_ITEM_LABELS[item.status] ?? item.status}
                     </span>
                   </div>
                   <p className="mt-3 text-sm text-slate-700">{item.message}</p>
@@ -211,8 +276,24 @@ export default function SupportPage() {
                     {item.pipeline ? ` · ${item.pipeline}` : ""}
                     {item.priority ? ` · ${item.priority}` : ""}
                   </p>
+                  {transitions.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {transitions.map((t) => (
+                        <Button
+                          key={t}
+                          size="sm"
+                          variant={t === "CLOSED" ? "outline" : "secondary"}
+                          disabled={updatingId === item.id}
+                          onClick={() => void updateSupportItem(item.id, t)}
+                        >
+                          {SUPPORT_ITEM_LABELS[t] ?? t}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -221,7 +302,7 @@ export default function SupportPage() {
 
       {/* Filter tabs */}
       <div className="flex flex-wrap gap-2">
-        {(["ALL", "NEW", "IN_PROGRESS", "COMPLETED", "CANCELLED"] as const).map((f) => (
+        {(["ALL", "RECEIVED", "ASSIGNED", "QUOTATION_SENT", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "CLOSED", "CANCELLED"] as const).map((f) => (
           <button
             key={f}
             type="button"
@@ -277,6 +358,10 @@ export default function SupportPage() {
                   {e.message}
                 </div>
 
+                {e.quotationAmount != null && (
+                  <p className="text-sm font-medium text-slate-700">Quotation: KES {e.quotationAmount.toLocaleString()}</p>
+                )}
+
                 {transitions.length > 0 && (
                   <div className="flex gap-2">
                     {transitions.map((t) => (
@@ -287,7 +372,7 @@ export default function SupportPage() {
                         disabled={updatingId === e.id}
                         onClick={() => void updateStatus(e.id, t)}
                       >
-                        {t === "IN_PROGRESS" ? "Start" : t === "COMPLETED" ? "Mark Complete" : "Cancel"}
+                        {STATUS_CONFIG[t].label}
                       </Button>
                     ))}
                   </div>

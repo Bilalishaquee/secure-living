@@ -58,6 +58,7 @@ enum DisputeStatus {
   ESCALATED
   RESOLVED_ACCEPTED
   RESOLVED_REJECTED
+  RESOLVED_OTHER
 }
 
 enum DepositTransferStatus {
@@ -154,10 +155,19 @@ enum ApplicationStatus {
   ACCEPTED
 }
 
+// Service Enquiry workflow (UPDATE.md — "Support Module Restructure Specification"):
+// Received -> Assigned -> Quotation Sent -> Accepted -> In Progress -> Completed -> Closed.
+// NEW/CANCELLED are kept for backward compatibility with existing rows (NEW ~= RECEIVED);
+// new records use RECEIVED going forward.
 enum EnquiryStatus {
   NEW
+  RECEIVED
+  ASSIGNED
+  QUOTATION_SENT
+  ACCEPTED
   IN_PROGRESS
   COMPLETED
+  CLOSED
   CANCELLED
 }
 
@@ -362,9 +372,18 @@ model InspectionDeduction {
   amount         Float
   category       String? // DAMAGE, MISSING_ITEM, CLEANING, UTILITY_BALANCE, LEASE_VIOLATION
   responsibility String? // TENANT, LANDLORD, WEAR_TEAR, CONTRACTOR, UNKNOWN
-  status         String   @default("proposed")
+  status         String   @default("proposed") // proposed, accepted, disputed, finalised
   photoUrl       String?
+  // Structured evidence — requirements vary by category, see lib/server/evidence.ts
+  beforePhotoUrl String? // DAMAGE: condition before damage occurred (move-in photo)
+  afterPhotoUrl  String? // DAMAGE: condition at move-out
+  repairQuoteUrl String? // DAMAGE: optional contractor quote
+  invoiceUrl     String? // DAMAGE/CLEANING: optional paid invoice
+  inspectorNote  String? // CLEANING: required inspector note
+  billOrMeterRef String? // UTILITY_BALANCE: bill number, meter reading, or invoice reference
+  disputeNote    String? // tenant's reason when disputing
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt @default(now())
 
   inspection MoveOutInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
 
@@ -457,6 +476,9 @@ model ChecklistTemplate {
   name           String
   description    String?
   category       String? // RESIDENTIAL, FURNISHED, COMMERCIAL, SHORT_STAY, CUSTOM
+  // Landlord-defined extra columns, e.g. [{ key: "tenantInitials", label: "Tenant Initials", type: "text" }]
+  // Values are captured per-row in TenantChecklistEntry.customFields, keyed by `key`. No restrictions on count/type.
+  customColumns  Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -548,6 +570,12 @@ model Listing {
   petFriendly    Boolean       @default(false)
   features       String[]
   photos         String[]
+  // Landlord-defined extra property attributes beyond pets/furniture, e.g.
+  // [{ key: "parking_spaces", label: "Parking Spaces", value: "2" }]. No restrictions.
+  customAttributes Json?
+  // Per-listing override for the platform's contact-unlock fee; falls back to the
+  // platform default (KES 50) when unset. Admin/landlord-editable, not hardcoded.
+  contactUnlockFeeKes Float?
   status         ListingStatus @default(DRAFT)
   depositModel   String        @default("LANDLORD_RESERVE")
   escrowBadge    Boolean       @default(false)
@@ -559,8 +587,27 @@ model Listing {
   unit           Unit                @relation(fields: [unitId], references: [id])
   applications   RentalApplication[]
   qrApplications QrApplication[]
+  contactUnlocks ListingContactUnlock[]
 
   @@index([organizationId, status])
+}
+
+// Records that a user has paid to reveal a listing's exact address + agent/landlord
+// contact details. Payment collection (M-Pesa/gateway) is intentionally out of scope
+// here — this records the unlock grant itself; wire a real charge before `paidAt` is
+// set from a live payment flow.
+model ListingContactUnlock {
+  id              String   @id @default(cuid())
+  listingId       String
+  unlockedByUserId String
+  amountKes       Float
+  paidAt          DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, unlockedByUserId])
+  @@index([listingId])
+  @@index([unlockedByUserId])
 }
 
 model RentalApplication {
@@ -649,13 +696,16 @@ model ServiceEnquiry {
   organizationId    String?
   userId            String?
   serviceCategoryId String
+  propertyId        String? // which property this marketplace service enquiry relates to
   name              String
   email             String
   phone             String?
   message           String
-  status            EnquiryStatus @default(NEW)
+  status            EnquiryStatus @default(RECEIVED)
   assignedTo        String?
   assignedAt        DateTime?
+  quotationAmount   Float? // set when status moves to QUOTATION_SENT
+  completionDate    DateTime? // set when status moves to COMPLETED
   resolvedAt        DateTime?
   internalNotes     String?
   createdAt         DateTime      @default(now())
@@ -669,6 +719,7 @@ model ServiceEnquiry {
   @@index([userId])
   @@index([assignedTo])
   @@index([organizationId, status])
+  @@index([propertyId])
 }
 
 // â”€â”€â”€ Airbnb / Short-Stay Module â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -948,6 +999,9 @@ model Lease {
   status           String
   signedAt         DateTime?
   terminatedAt     DateTime?
+  documentUrl        String?
+  documentFileName    String?
+  documentUploadedAt  DateTime?
   createdBy        String
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -1280,6 +1334,9 @@ model Property {
   category                  String    @default("residential")
   managementMode            String    @default("self_managed")
   categoryAttributesJson    String?
+  biometricEnabled          Boolean   @default(false)
+  biometricProvider         String? // e.g. ZKTeco, Suprema, Hikvision
+  biometricDeviceId         String? // provider's door-controller / device identifier for this property
   status                    String
   createdBy                 String?
   createdAt                 DateTime  @default(now())
@@ -1298,6 +1355,29 @@ model Property {
   @@index([managerUserId])
   @@index([createdBy])
   @@index([organizationId, status])
+}
+
+// Management Assistance inquiry: a self-managed landlord requesting professional
+// management raises an inquiry instead of switching mode instantly. The admin for the
+// property's branch/region either sends an invitation (landlord must accept to complete
+// the takeover) or activates the takeover directly themselves.
+model ManagementInquiry {
+  id             String    @id @default(cuid())
+  organizationId String
+  branchId       String
+  propertyId     String
+  landlordId     String
+  status         String    @default("PENDING") // PENDING, INVITED, ACCEPTED, DECLINED, COMPLETED
+  message        String?
+  respondedBy    String?
+  respondedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, status])
+  @@index([branchId, status])
+  @@index([propertyId])
+  @@index([landlordId])
 }
 
 model Organization {
@@ -1837,6 +1917,47 @@ model ServiceTypeConfig {
   updatedAt                  DateTime @updatedAt
 }
 
+// Admin-managed allow/block list for which service types a user or organization
+// may offer (providers) or access (tenants/landlords). Rows with userId set are
+// user-scoped; rows with only organizationId set are org-wide; rows with neither
+// are platform-wide. UPDATE.md: "The admin should be able to restrict which
+// services users can offer or access."
+model ServiceAccessRestriction {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  serviceType    String
+  mode           String // ALLOWED | BLOCKED
+  reason         String?
+  createdBy      String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, userId, serviceType])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([serviceType])
+}
+
+// Admin-managed feature masking/deactivation (UPDATE.md: "Allow masking (hiding) of
+// features. Allow deactivation of features."). GLOBAL rows apply platform-wide;
+// ORGANIZATION rows override the global default for one org.
+model FeatureFlag {
+  id             String   @id @default(cuid())
+  key            String
+  label          String
+  description    String?
+  scope          String   @default("GLOBAL") // GLOBAL | ORGANIZATION
+  organizationId String?
+  isEnabled      Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([key, organizationId])
+  @@index([key])
+  @@index([organizationId])
+}
+
 // â”€â”€â”€ Subscription Package â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model Package {
@@ -2279,6 +2400,12 @@ model PastRentRecord {
   notes          String?
   importJobId    String?
   isMigrated     Boolean   @default(true)
+  // Post-migration linking: `tenantId`/`unitId` above are raw legacy identifiers from the
+  // imported file and may not match real AppUser/Unit ids. The landlord manually links each
+  // distinct legacy unitId to a real Unit (and optionally a real tenant) after import.
+  linkStatus         String   @default("unlinked") // unlinked, linked
+  linkedUnitId       String?
+  linkedTenantUserId String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -2287,6 +2414,7 @@ model PastRentRecord {
   @@index([tenantId, periodYear, periodMonth])
   @@index([unitId])
   @@index([propertyId])
+  @@index([organizationId, linkStatus])
 }
 
 // â”€â”€â”€ 5. Rent Receipts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2466,7 +2594,12 @@ model RentScoreRecord {
 model ComplianceNumber {
   id             String    @id @default(cuid())
   organizationId String
-  tenantId       String
+  tenantId       String? // legacy tenant-only field — kept for back-compat, mirrors subjectId when subjectType = TENANT
+  // Generic profile reference so properties/agents/general users can hold a compliance
+  // number too, not just tenants (spec: "Properties/agents/users... should be given a
+  // compliance number... One profile one compliance number").
+  subjectType    String    @default("TENANT") // TENANT, PROPERTY, AGENT, USER
+  subjectId      String? // AppUser.id (TENANT/AGENT/USER) or Property.id (PROPERTY)
   propertyId     String?
   unitId         String?
   complianceId   String    @unique // e.g. SLC-NAI-004821
@@ -2482,6 +2615,7 @@ model ComplianceNumber {
 
   @@index([organizationId])
   @@index([tenantId])
+  @@index([subjectType, subjectId])
   @@index([status])
   @@index([complianceId])
   @@index([unitId])
@@ -2576,7 +2710,10 @@ model Visitor {
   idNumber       String?
   vehicleNumber  String?
   photoUrl       String?
-  isBlacklisted  Boolean  @default(false)
+  isBlacklisted   Boolean   @default(false)
+  blacklistReason String?
+  blacklistedAt   DateTime?
+  blacklistedBy   String? // set by landlord/staff; only Super Admin can clear a blacklist
   notes          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -206,7 +206,7 @@ export default function ServiceSlugPage() {
                 {/* Extra bullets */}
                 {extra?.bullets && (
                   <div>
-                    <h2 className="mb-4 text-xl font-bold text-slate-900">What's included</h2>
+                    <h2 className="mb-4 text-xl font-bold text-slate-900">What&apos;s included</h2>
                     <ul className="space-y-2.5">
                       {extra.bullets.map((b) => (
                         <li key={b} className="flex items-start gap-3">

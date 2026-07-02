@@ -73,7 +73,7 @@ export const POST = withErrorHandler(async (req: Request) => {
           email: parsed.data.email,
           phone: parsed.data.phone,
           message: parsed.data.message,
-          status: "NEW",
+          status: "RECEIVED",
         },
       });
       return Response.json({ data: { route: decision.route, id: row.id } }, { status: 201 });

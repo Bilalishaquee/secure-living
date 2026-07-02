@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/db";
 import { requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 import { ensureDepositEscrowForLease } from "@/lib/server/deposit";
+import { appendAudit } from "@/lib/server/audit";
 
 type Ctx = { params: { id: string } };
 
@@ -54,6 +55,16 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   await prisma.vacatingNotice.update({
     where: { id: params.id },
     data: { status: "DEPOSIT_PROCESSING" },
+  });
+
+  await appendAudit({
+    userId: actor.userId,
+    role: actor.role,
+    action: "DEPOSIT_REFUND_CALCULATED",
+    resourceType: "DepositRefund",
+    resourceId: refund.id,
+    orgId: notice.organizationId,
+    afterJson: { depositAmount, totalDeductions, refundAmount },
   });
 
   return Response.json({ data: refund }, { status: 201 });
