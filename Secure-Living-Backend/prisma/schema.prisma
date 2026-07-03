@@ -59,6 +59,10 @@ enum DisputeStatus {
   RESOLVED_ACCEPTED
   RESOLVED_REJECTED
   RESOLVED_OTHER
+  // Rectification Process (UPDATE.md): "Dispute Declined -> Appeal -> Review" — the
+  // party who raised the dispute can appeal a RESOLVED_REJECTED decision once, which
+  // reopens it for a fresh admin decision instead of leaving them with no recourse.
+  UNDER_APPEAL
 }
 
 enum DepositTransferStatus {
@@ -1400,7 +1404,14 @@ model ManagementInquiry {
   branchId       String
   propertyId     String
   landlordId     String
-  status         String    @default("PENDING") // PENDING, INVITED, ACCEPTED, DECLINED, COMPLETED
+  // SUBMITTED -> UNDER_REVIEW -> ASSIGNED -> INVITATION_SENT -> ACCEPTED|DECLINED -> CLOSED
+  status              String    @default("SUBMITTED")
+  region              String? // derived from property county/city, e.g. "NAI" — same convention as ComplianceNumber
+  assignedAdminId     String? // regional admin currently handling this inquiry
+  escalatedToSuperAdmin Boolean @default(false)
+  escalatedAt         DateTime?
+  escalationReason    String?
+  declineReason       String?
   message        String?
   respondedBy    String?
   respondedAt    DateTime?
@@ -1411,6 +1422,8 @@ model ManagementInquiry {
   @@index([branchId, status])
   @@index([propertyId])
   @@index([landlordId])
+  @@index([assignedAdminId])
+  @@index([region])
 }
 
 model Organization {
@@ -1424,6 +1437,14 @@ model Organization {
   bankPayoutAccount     String? // bank account details for owner payouts
   preferredReportingDate Int?   // preferred day of month (1–31) for financial reports
   status                String   @default("active")
+  // Agency approval workflow (Update.md "Agency Approval Workflow")
+  reviewChecklist       Json?    // e.g. { businessRegistrationVerified, contactDetailsConfirmed, kycDocumentsReviewed }
+  rejectionReason       String?
+  reapplicationCount    Int      @default(0)
+  // Org lifecycle: Super Admin activate/deactivate (independent of approval review)
+  deactivatedAt         DateTime?
+  deactivationReason    String?
+  deactivatedBy         String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -2289,6 +2310,8 @@ model UtilityDispute {
   adminDecidedAt      DateTime?
   adminDecidedBy      String?
   resolvedAt          DateTime?
+  appealReason        String?
+  appealedAt          DateTime?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -2748,6 +2771,10 @@ model Visitor {
   blacklistedAt   DateTime?
   blacklistedBy   String? // set by landlord/staff; only Super Admin can clear a blacklist
   notes          String?
+  // Set when a tenant self-registers a visitor for their own unit (visitor:create,
+  // scoped) rather than staff/landlord adding one org-wide (visitor:manage). Used to
+  // scope a tenant's own view to visitors they registered.
+  createdByUserId String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -2757,6 +2784,7 @@ model Visitor {
   @@index([propertyId])
   @@index([unitId])
   @@index([phone])
+  @@index([createdByUserId])
   @@unique([organizationId, phone])
 }
 
@@ -2812,3 +2840,31 @@ model DepositTransfer {
   @@index([propertyId])
   @@index([leaseId])
 }
+
+// ─── Notifications ─────────────────────────────────────────────────────────
+// Real, persisted, per-recipient notifications — fanned out at the moment an event
+// happens (see lib/server/notify.ts), not derived/re-queried live counts. Every
+// significant platform action notifies Super Admin + the relevant org's Admins by
+// default, plus whatever specific roles/users are relevant to that event.
+
+model Notification {
+  id             String    @id @default(cuid())
+  recipientId    String
+  organizationId String?
+  branchId       String?
+  type           String
+  severity       String    @default("info") // info, warning, critical
+  title          String
+  message        String
+  resourceType   String?
+  resourceId     String?
+  link           String?
+  isRead         Boolean   @default(false)
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([recipientId, isRead, createdAt])
+  @@index([recipientId, createdAt])
+  @@index([organizationId, createdAt])
+}
+

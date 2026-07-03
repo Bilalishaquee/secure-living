@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 const createSchema = z.object({ message: z.string().max(500).optional() });
 
@@ -26,9 +27,15 @@ export const POST = withErrorHandler(async (req: Request, { params }: { params: 
   }
 
   const existing = await prisma.managementInquiry.findFirst({
-    where: { propertyId: params.id, status: { in: ["PENDING", "INVITED"] } },
+    where: { propertyId: params.id, status: { in: ["SUBMITTED", "UNDER_REVIEW", "ASSIGNED", "INVITATION_SENT"] } },
   });
   if (existing) return Response.json({ data: existing }, { status: 200 });
+
+  // Same region-derivation convention as ComplianceNumber — routes the inquiry to
+  // whichever admin covers that geographic area.
+  const regionSource = property.county || property.city || "";
+  const regionLetters = regionSource.replace(/[^a-zA-Z]/g, "").toUpperCase();
+  const region = regionLetters.length >= 3 ? regionLetters.slice(0, 3) : "GEN";
 
   const inquiry = await prisma.managementInquiry.create({
     data: {
@@ -37,6 +44,7 @@ export const POST = withErrorHandler(async (req: Request, { params }: { params: 
       branchId: property.branchId,
       propertyId: property.id,
       landlordId: actor.userId,
+      region,
       message: parsed.data.message ?? null,
     },
   });
@@ -50,6 +58,20 @@ export const POST = withErrorHandler(async (req: Request, { params }: { params: 
     orgId: property.organizationId,
     branchId: property.branchId,
     afterJson: { propertyId: property.id },
+  });
+
+  await notify({
+    organizationId: property.organizationId,
+    branchId: property.branchId,
+    roles: ["super_admin", "admin"],
+    excludeUserId: actor.userId,
+    type: "management_inquiry.submitted",
+    severity: "info",
+    title: "New management assistance request",
+    message: `${property.name} has requested management assistance and needs review.`,
+    resourceType: "ManagementInquiry",
+    resourceId: inquiry.id,
+    link: "/admin/management-inquiries",
   });
 
   return Response.json({ data: inquiry }, { status: 201 });

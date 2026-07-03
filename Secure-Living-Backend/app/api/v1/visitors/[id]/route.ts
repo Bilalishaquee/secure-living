@@ -3,6 +3,7 @@ import { prisma } from "@/lib/server/db";
 import { hasPermission, canAccessOrg } from "@/lib/server/authz";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -85,6 +86,21 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
       orgId: existing.organizationId,
       beforeJson: { isBlacklisted: existing.isBlacklisted },
       afterJson: { isBlacklisted: updated.isBlacklisted, reason: parsed.data.blacklistReason ?? null },
+    });
+
+    await notify({
+      organizationId: existing.organizationId,
+      roles: wantsToBlacklist ? ["super_admin", "admin"] : ["admin"],
+      excludeUserId: actor.userId,
+      type: wantsToBlacklist ? "visitor.blacklisted" : "visitor.whitelisted",
+      severity: wantsToBlacklist ? "warning" : "info",
+      title: wantsToBlacklist ? "Visitor blacklisted" : "Visitor whitelisted",
+      message: wantsToBlacklist
+        ? `${updated.name} was blacklisted${parsed.data.blacklistReason ? `: ${parsed.data.blacklistReason}` : ""}.`
+        : `${updated.name} was removed from the blacklist by a Super Admin.`,
+      resourceType: "Visitor",
+      resourceId: existing.id,
+      link: "/visitors",
     });
   }
 

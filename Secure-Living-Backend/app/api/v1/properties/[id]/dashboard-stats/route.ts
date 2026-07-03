@@ -34,6 +34,7 @@ export const GET = withErrorHandler(async (req: Request, { params }: { params: {
     unitAggregate,
     activeLeases,
     openServiceRequests,
+    blockedServiceRequests,
     slaBreachCount,
     monthlyRentInvoices,
     allMonthInvoices,
@@ -41,10 +42,13 @@ export const GET = withErrorHandler(async (req: Request, { params }: { params: {
     depositFullyCovered,
     depositAtRisk,
     depositShortfall,
+    escrowAccounts,
+    propertyTenantLeases,
   ] = await Promise.all([
     prisma.unit.aggregate({ where: { propertyId: params.id }, _count: { id: true } }),
     prisma.lease.count({ where: { propertyId: params.id, status: "active" } }),
     prisma.serviceRequest.count({ where: { propertyId: params.id, srStatus: { in: ACTIVE_SR_STATUSES } } }),
+    prisma.serviceRequest.count({ where: { propertyId: params.id, srStatus: SrStatus.BLOCKED } }),
     prisma.serviceRequest.count({
       where: { propertyId: params.id, srStatus: { in: [SrStatus.IN_PROGRESS, SrStatus.ASSIGNED, SrStatus.SCHEDULING_PENDING] }, dueAt: { lt: now } },
     }),
@@ -65,12 +69,35 @@ export const GET = withErrorHandler(async (req: Request, { params }: { params: {
     prisma.depositEscrow.count({ where: { propertyId: params.id, healthStatus: "fully_covered", status: { in: ["active", "captured"] } } }),
     prisma.depositEscrow.count({ where: { propertyId: params.id, healthStatus: "at_risk", status: { in: ["active", "captured"] } } }),
     prisma.depositEscrow.count({ where: { propertyId: params.id, healthStatus: "shortfall", status: { in: ["active", "captured"] } } }),
+    // Same source as the global dashboard's totalEscrowKes, scoped to this property.
+    prisma.escrowAccount.findMany({ where: { propertyId: params.id, status: { in: ["HELD", "held"] } }, select: { amountKes: true } }),
+    // Tenants currently leasing a unit here, so pendingKyc can be scoped without a
+    // direct propertyId column on KycDocument.
+    prisma.lease.findMany({ where: { propertyId: params.id, status: "active" }, select: { tenantUserId: true } }),
   ]);
 
   const units = unitAggregate._count.id;
   const monthlyRentKes = monthlyRentInvoices.reduce((s, i) => s + i.amountPaidKes, 0);
   const totalDueKes = allMonthInvoices.reduce((s, i) => s + i.totalDueKes, 0);
   const arrearsKes = overdueInvoices.reduce((s, inv) => s + inv.balanceKes, 0);
+  const totalEscrowKes = escrowAccounts.reduce((s, e) => s + e.amountKes, 0);
+
+  const tenantIds = Array.from(new Set(propertyTenantLeases.map((l) => l.tenantUserId)));
+  const pendingKyc = tenantIds.length
+    ? await prisma.kycDocument.count({ where: { userId: { in: tenantIds }, status: "pending" } })
+    : 0;
+
+  // UtilityDispute has no propertyId column — it hangs off reading -> meter -> unit,
+  // so resolve this property's meters first, same join path the utility routes use.
+  const propertyUnitIds = (await prisma.unit.findMany({ where: { propertyId: params.id }, select: { id: true } })).map((u) => u.id);
+  const propertyMeterIds = propertyUnitIds.length
+    ? (await prisma.utilityMeter.findMany({ where: { unitId: { in: propertyUnitIds } }, select: { id: true } })).map((m) => m.id)
+    : [];
+  const activeDisputes = propertyMeterIds.length
+    ? await prisma.utilityDispute.count({
+        where: { status: { in: ["OPEN", "LANDLORD_RESPONDED", "ESCALATED"] }, reading: { meterId: { in: propertyMeterIds } } },
+      })
+    : 0;
 
   return Response.json({
     data: {
@@ -81,7 +108,11 @@ export const GET = withErrorHandler(async (req: Request, { params }: { params: {
       monthlyRentKes,
       totalDueKes,
       arrearsKes,
+      totalEscrowKes,
+      pendingKyc,
+      activeDisputes,
       openServiceRequests,
+      blockedServiceRequests,
       slaBreachCount,
       depositFullyCovered,
       depositAtRisk,

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { SrStatus } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
-import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { canSrTransition, SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
 
@@ -24,8 +24,11 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const scoped = requireScope(actor, existing.organizationId, existing.branchId);
   if (scoped) return scoped;
 
-  const parsed = await parseBody(req, approveSchema);
-  if (!parsed.ok) return parsed.response;
+  const rawBody = await req.json().catch(() => ({}));
+  const parsed = approveSchema.safeParse(rawBody ?? {});
+  if (!parsed.success) {
+    return jsonError(400, parsed.error.issues[0]?.message ?? "Invalid body");
+  }
 
   const targetStatus = parsed.data.initiateQuote ? SrStatus.QUOTING : SrStatus.APPROVED;
 

@@ -50,7 +50,7 @@ export default function HelpIndexPage() {
           <BookOpen className="h-5 w-5" aria-hidden />
         </span>
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-brand-navy">
+          <h1 className="font-display text-3xl font-semibold text-brand-navy">
             Help &amp; user manuals
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
@@ -67,7 +67,7 @@ export default function HelpIndexPage() {
             <li key={m.href}>
               <Link
                 href={m.href}
-                className="group flex gap-4 rounded-2xl border border-[var(--surface-border)] bg-surface-gray/20 p-5 transition hover:border-brand-blue/25 hover:bg-white hover:shadow-[var(--card-shadow)]"
+                className="group flex gap-4 rounded-lg border border-slate-200 bg-white/90 p-5 transition hover:border-brand-blue/25 hover:bg-white hover:shadow-[var(--card-shadow)]"
               >
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-navy/10 to-brand-blue/10 text-brand-navy">
                   <Icon className="h-6 w-6" aria-hidden />

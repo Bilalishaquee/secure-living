@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, ChevronRight, AlertTriangle, XCircle, Info, CheckCircle2, Search, X } from "lucide-react";
+import { Bell, ChevronRight, AlertTriangle, XCircle, Info, CheckCircle2, Search, X, Check } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -73,9 +73,12 @@ const labels: Record<string, string> = {
 type NotifItem = {
   id: string;
   type: string;
-  severity: "high" | "medium" | "low";
+  severity: "info" | "warning" | "critical";
+  title: string;
   message: string;
-  href: string;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
 };
 
 type SearchResult = {
@@ -87,16 +90,27 @@ type SearchResult = {
 };
 
 const SEVERITY_ICON: Record<string, React.ReactNode> = {
-  high:   <XCircle className="h-4 w-4 shrink-0 text-red-500" />,
-  medium: <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />,
-  low:    <Info className="h-4 w-4 shrink-0 text-sky-500" />,
+  critical: <XCircle className="h-4 w-4 shrink-0 text-red-500" />,
+  warning:  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />,
+  info:     <Info className="h-4 w-4 shrink-0 text-sky-500" />,
 };
 
-const SEVERITY_ROW: Record<string, string> = {
-  high:   "border-red-100 bg-red-50 text-red-800",
-  medium: "border-amber-100 bg-amber-50 text-amber-800",
-  low:    "border-sky-100 bg-sky-50 text-sky-800",
+const SEVERITY_BORDER: Record<string, string> = {
+  critical: "border-l-red-400",
+  warning:  "border-l-amber-400",
+  info:     "border-l-sky-400",
 };
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export function TopBar() {
   const pathname = usePathname();
@@ -129,8 +143,8 @@ export function TopBar() {
         headers: { Authorization: `Bearer ${user.authToken}` },
       });
       if (res.ok) {
-        const json = await res.json() as { data: { count: number; items: NotifItem[] } };
-        setNotifCount(json.data.count ?? 0);
+        const json = await res.json() as { data: { unreadCount: number; items: NotifItem[] } };
+        setNotifCount(json.data.unreadCount ?? 0);
         setNotifItems(json.data.items ?? []);
       }
     } catch {
@@ -140,9 +154,36 @@ export function TopBar() {
 
   useEffect(() => {
     void fetchNotifications();
-    const interval = setInterval(() => void fetchNotifications(), 60_000);
+    const interval = setInterval(() => void fetchNotifications(), 20_000);
     return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  async function handleNotificationClick(n: NotifItem) {
+    setPanelOpen(false);
+    if (!n.isRead && user?.authToken) {
+      setNotifItems((prev) => prev.map((i) => (i.id === n.id ? { ...i, isRead: true } : i)));
+      setNotifCount((c) => Math.max(0, c - 1));
+      fetch(`/api/v1/notifications/${n.id}/read`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      }).catch(() => undefined);
+    }
+    if (n.link) router.push(n.link);
+  }
+
+  async function handleMarkAllRead() {
+    if (!user?.authToken) return;
+    setNotifItems((prev) => prev.map((i) => ({ ...i, isRead: true })));
+    setNotifCount(0);
+    try {
+      await fetch("/api/v1/notifications/mark-all-read", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+    } catch {
+      // ignore — next poll will resync
+    }
+  }
 
   // Close panel on outside click
   useEffect(() => {
@@ -268,43 +309,58 @@ export function TopBar() {
             </Button>
 
             {panelOpen && (
-              <div className="absolute right-0 top-11 z-50 w-80 rounded-xl border border-slate-200 bg-white shadow-xl">
+              <div className="absolute right-0 top-11 z-50 w-96 rounded-xl border border-slate-200 bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <p className="text-sm font-semibold text-slate-900">
-                    Notifications {notifCount > 0 && <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-700">{notifCount}</span>}
+                    Notifications {notifCount > 0 && <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-700">{notifCount} new</span>}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setPanelOpen(false)}
-                    className="text-slate-400 hover:text-slate-600"
-                    aria-label="Close"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {notifCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { void handleMarkAllRead(); }}
+                        className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                      >
+                        <Check className="h-3 w-3" /> Mark all read
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setPanelOpen(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                      aria-label="Close"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="max-h-80 overflow-y-auto [scrollbar-width:thin] divide-y divide-slate-50">
+                <div className="max-h-96 overflow-y-auto [scrollbar-width:thin] divide-y divide-slate-50">
                   {notifItems.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                       <CheckCircle2 className="h-8 w-8 text-emerald-400" />
                       <p className="text-sm font-medium text-slate-700">All clear</p>
-                      <p className="text-xs text-slate-400">No active alerts right now</p>
+                      <p className="text-xs text-slate-400">No notifications yet</p>
                     </div>
                   ) : (
                     notifItems.map((n) => (
                       <button
                         key={n.id}
                         type="button"
-                        onClick={() => {
-                          setPanelOpen(false);
-                          router.push(n.href);
-                        }}
-                        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 border-l-4 ${
-                          n.severity === "high" ? "border-l-red-400" : n.severity === "medium" ? "border-l-amber-400" : "border-l-sky-400"
+                        onClick={() => { void handleNotificationClick(n); }}
+                        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50 border-l-4 ${SEVERITY_BORDER[n.severity]} ${
+                          n.isRead ? "opacity-60" : "bg-slate-50/60"
                         }`}
                       >
                         {SEVERITY_ICON[n.severity]}
-                        <span className="text-xs leading-snug text-slate-700">{n.message}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-xs font-semibold text-slate-900">{n.title}</span>
+                            {!n.isRead && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />}
+                          </span>
+                          <span className="mt-0.5 block text-xs leading-snug text-slate-600">{n.message}</span>
+                          <span className="mt-1 block text-[11px] text-slate-400">{timeAgo(n.createdAt)}</span>
+                        </span>
                       </button>
                     ))
                   )}
@@ -312,13 +368,13 @@ export function TopBar() {
 
                 {notifItems.length > 0 && (
                   <div className="border-t border-slate-100 px-4 py-2 text-right">
-                    <button
-                      type="button"
-                      onClick={() => { setPanelOpen(false); router.push("/admin/disputes"); }}
+                    <Link
+                      href="/notifications"
+                      onClick={() => setPanelOpen(false)}
                       className="text-xs text-blue-600 hover:underline"
                     >
-                      View all alerts →
-                    </button>
+                      View all notifications →
+                    </Link>
                   </div>
                 )}
               </div>

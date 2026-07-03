@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { FileText, Mail, MessageSquare, Phone, Search, Users } from "lucide-react";
+import { FileText, Mail, MessageSquare, Phone, Search, UserPlus, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/lib/toast-context";
 import { formatKes } from "@/lib/utils";
@@ -274,6 +274,12 @@ export default function TenantsPage() {
             onClick={() => { void bulkRemind(); }}
           >
             Remind arrears
+          </Button>
+          <Button type="button" size="sm" asChild>
+            <Link href="/tenants/new">
+              <UserPlus className="h-3.5 w-3.5" aria-hidden />
+              Add Tenant
+            </Link>
           </Button>
         </div>
       </div>

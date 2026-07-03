@@ -86,6 +86,7 @@ interface ServiceRequest {
   createdAt: string;
   dueAt?: string;
   metadata?: Record<string, unknown>;
+  escalations?: { id: string; resolvedAt?: string | null }[];
 }
 
 interface Property {
@@ -118,7 +119,7 @@ interface CreateSRPayload {
 function statusBadge(status: SRStatus) {
   const map: Record<SRStatus, { label: string; className: string }> = {
     DRAFT: { label: "Draft", className: "bg-slate-100 text-slate-600 border-slate-200" },
-    SUBMITTED: { label: "Submitted", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    SUBMITTED: { label: "Pending", className: "bg-blue-100 text-blue-700 border-blue-200" },
     APPROVED: { label: "Approved", className: "bg-indigo-100 text-indigo-700 border-indigo-200" },
     REJECTED: { label: "Rejected", className: "bg-red-100 text-red-700 border-red-200" },
     QUOTING: { label: "Quoting", className: "bg-purple-100 text-purple-700 border-purple-200" },
@@ -129,7 +130,7 @@ function statusBadge(status: SRStatus) {
     IN_PROGRESS: { label: "In Progress", className: "bg-blue-100 text-blue-700 border-blue-200" },
     BLOCKED: { label: "Blocked", className: "bg-red-100 text-red-700 border-red-200" },
     COMPLETED: { label: "Completed", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    CANCELLED: { label: "Cancelled", className: "bg-slate-100 text-slate-500 border-slate-200" },
+    CANCELLED: { label: "Closed", className: "bg-slate-100 text-slate-500 border-slate-200" },
     DISPUTED: { label: "Disputed", className: "bg-red-100 text-red-700 border-red-200" },
   };
   const s = map[status] ?? { label: status, className: "bg-slate-100 text-slate-600 border-slate-200" };
@@ -144,6 +145,43 @@ function statusBadge(status: SRStatus) {
       {s.label}
     </span>
   );
+}
+
+function escalationBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+      Escalated
+    </span>
+  );
+}
+
+const STATUS_FILTER_OPTIONS: { value: SRStatus; label: string }[] = [
+  { value: "DRAFT", label: "Draft" },
+  { value: "SUBMITTED", label: "Pending" },
+  { value: "APPROVED", label: "Approved" },
+  { value: "REJECTED", label: "Rejected" },
+  { value: "QUOTING", label: "Quoting" },
+  { value: "AWAITING_FUNDING", label: "Awaiting Funding" },
+  { value: "FUNDED", label: "Funded" },
+  { value: "ASSIGNED", label: "Assigned" },
+  { value: "SCHEDULING_PENDING", label: "Scheduling" },
+  { value: "IN_PROGRESS", label: "In Progress" },
+  { value: "BLOCKED", label: "Blocked" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Closed" },
+  { value: "DISPUTED", label: "Disputed" },
+];
+
+function hasUserPermission(
+  user: { permissions?: string[]; role?: string } | null | undefined,
+  permission: string
+) {
+  if (!user) return false;
+  if (user.permissions?.includes("*") || user.permissions?.includes(permission)) return true;
+
+  // Backward compatibility for older demo sessions that predate permission refresh.
+  if (permission === "service-request:create") return user.role === "tenant" || user.role === "landlord";
+  return false;
 }
 
 function priorityBadge(priority: SRPriority) {
@@ -394,15 +432,15 @@ function CreateRequestModal({
       });
 
       if (!createRes.ok) {
-        const err = (await createRes.json()) as { message?: string };
-        toast(err.message ?? "Failed to create request", "error");
+        const err = (await createRes.json().catch(() => ({}))) as { error?: string; message?: string };
+        toast(err.error ?? err.message ?? "Failed to create request", "error");
         return;
       }
 
       const created = (await createRes.json()) as { data: { id: string } };
       const srId = created.data.id;
 
-      await fetch(`/api/v1/service-requests/${srId}/submit`, {
+      const submitRes = await fetch(`/api/v1/service-requests/${srId}/submit`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${user.authToken}`,
@@ -410,6 +448,11 @@ function CreateRequestModal({
         },
         body: JSON.stringify({}),
       });
+      if (!submitRes.ok) {
+        const err = (await submitRes.json().catch(() => ({}))) as { error?: string; message?: string };
+        toast(err.error ?? err.message ?? "Request was created but could not be submitted", "error");
+        return;
+      }
 
       toast("Service request created and submitted", "success");
       onCreated();
@@ -845,6 +888,7 @@ export default function ServiceRequestsPage() {
 
   const srLimitReached = gating !== null && gating.srLimit !== null && gating.srUsed >= gating.srLimit;
   const srCreateBlocked = gating !== null && (gating.isBlocked || srLimitReached);
+  const canCreate = hasUserPermission(user, "service-request:create");
 
   return (
     <div className="w-full space-y-6">
@@ -854,13 +898,15 @@ export default function ServiceRequestsPage() {
           <h1 className="app-page-title">Service Requests</h1>
           <p className="app-page-lead">Manage all service requests across your portfolio</p>
         </div>
-        <Button
-          onClick={() => { if (!srCreateBlocked) setShowCreate(true); }}
-          disabled={srCreateBlocked}
-          title={srCreateBlocked ? (gating?.isListingOnly ? "Your plan does not include service requests" : `You have used all ${gating?.srLimit ?? 0} free requests this month`) : undefined}
-        >
-          <Plus className="mr-1.5 h-4 w-4" /> New Request
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={() => { if (!srCreateBlocked) setShowCreate(true); }}
+            disabled={srCreateBlocked}
+            title={srCreateBlocked ? (gating?.isListingOnly ? "Your plan does not include service requests" : `You have used all ${gating?.srLimit ?? 0} free requests this month`) : undefined}
+          >
+            <Plus className="mr-1.5 h-4 w-4" /> New Request
+          </Button>
+        )}
       </div>
 
       {/* SR gating banner */}
@@ -936,8 +982,8 @@ export default function ServiceRequestsPage() {
           onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
         >
           <option value="">All Statuses</option>
-          {(["DRAFT","SUBMITTED","APPROVED","REJECTED","QUOTING","AWAITING_FUNDING","FUNDED","ASSIGNED","SCHEDULING_PENDING","IN_PROGRESS","BLOCKED","COMPLETED","CANCELLED","DISPUTED"] as SRStatus[]).map((s) => (
-            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+          {STATUS_FILTER_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
         <select
@@ -1008,10 +1054,14 @@ export default function ServiceRequestsPage() {
               <Wrench className="h-7 w-7 text-slate-400" />
             </div>
             <p className="text-base font-semibold text-slate-700">No service requests found</p>
-            <p className="text-sm text-slate-500">Adjust your filters or create a new request</p>
-            <Button onClick={() => setShowCreate(true)}>
-              <Plus className="mr-1.5 h-4 w-4" /> New Request
-            </Button>
+            <p className="text-sm text-slate-500">
+              {canCreate ? "Adjust your filters or create a new request" : "Adjust your filters to find a request"}
+            </p>
+            {canCreate && (
+              <Button onClick={() => { if (!srCreateBlocked) setShowCreate(true); }} disabled={srCreateBlocked}>
+                <Plus className="mr-1.5 h-4 w-4" /> New Request
+              </Button>
+            )}
           </div>
         ) : (
           <table className="min-w-full divide-y divide-slate-200">
@@ -1038,7 +1088,12 @@ export default function ServiceRequestsPage() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{typeBadge(r.serviceType)}</td>
                   <td className="whitespace-nowrap px-4 py-3">{priorityBadge(r.srPriority)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">{statusBadge(r.srStatus)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {statusBadge(r.srStatus)}
+                      {r.escalations?.some((e) => !e.resolvedAt) ? escalationBadge() : null}
+                    </div>
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
                     {r.propertyId ? <span className="font-mono">{r.propertyId.slice(0, 6)}</span> : "—"}
                     {r.unitId ? <span className="ml-1 text-slate-400">/ {r.unitId.slice(0, 6)}</span> : ""}
@@ -1086,11 +1141,13 @@ export default function ServiceRequestsPage() {
         )}
       </div>
 
-      <CreateRequestModal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        onCreated={() => void load()}
-      />
+      {canCreate && (
+        <CreateRequestModal
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => void load()}
+        />
+      )}
     </div>
   );
 }

@@ -1,25 +1,67 @@
+import type { Metadata } from "next";
+import { Cookie } from "lucide-react";
+import { PageShell } from "@/components/marketing/PageShell";
+import { PageHero } from "@/components/marketing/PageHero";
+import { DocLayout, DocSectionBlock } from "@/components/marketing/DocLayout";
+import { CtaPanel } from "@/components/marketing/InfoCard";
+import { getSiteUrl, SITE_NAME } from "@/lib/site-config";
+
+export const metadata: Metadata = {
+  title: `Cookie Policy — ${SITE_NAME}`,
+  description: "How Secure Living uses cookies and similar storage.",
+  alternates: { canonical: `${getSiteUrl()}/cookies` },
+};
+
+const sections = [
+  {
+    id: "essential-cookies",
+    label: "Essential Cookies",
+    title: "Essential Cookies",
+    body: "Secure Living uses essential storage and cookies to keep you signed in, protect your session, remember your active role (landlord, tenant, agency, staff, admin), and support platform security. These cannot be disabled without affecting core functionality.",
+  },
+  {
+    id: "preference-storage",
+    label: "Preference Storage",
+    title: "Preference Storage",
+    body: "Some display preferences (such as your last-used dashboard view) may be stored locally in your browser to make the platform more convenient to use across visits.",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    title: "Analytics",
+    body: "Secure Living may use privacy-conscious analytics to understand which features are used and where the platform can be improved. Analytics data is aggregated and is not used to sell your information to third parties.",
+  },
+  {
+    id: "managing-cookies",
+    label: "Managing Cookies",
+    title: "Managing Cookies",
+    body: "You can control or clear cookies through your browser settings at any time. Disabling essential cookies will prevent you from staying signed in to the platform.",
+  },
+];
+
 export default function CookiesPage() {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-16 text-slate-800">
-      <div className="mx-auto max-w-3xl rounded-lg border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-brand-blue">Secure Living</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-950">Cookie Policy</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-600">
-          Placeholder cookie policy for usability testing. Replace with final cookie disclosure
-          before production launch.
-        </p>
-        <section className="mt-8 space-y-4 text-sm leading-6">
-          <h2 className="text-lg font-semibold text-slate-900">Essential Cookies</h2>
-          <p>
-            Secure Living may use essential storage and cookies to keep users signed in, protect
-            sessions, remember role context, and support platform security.
-          </p>
-          <h2 className="text-lg font-semibold text-slate-900">Analytics and Preferences</h2>
-          <p>
-            Optional analytics or preference tools should be documented here before production use.
-          </p>
-        </section>
-      </div>
-    </main>
+    <PageShell>
+      <PageHero
+        eyebrow="Legal"
+        icon={Cookie}
+        title="Cookie Policy"
+        subtitle="What we store in your browser, and why."
+      />
+
+      <DocLayout sections={sections.map((s) => ({ id: s.id, label: s.label }))}>
+        {sections.map((s) => (
+          <DocSectionBlock key={s.id} id={s.id} title={s.title}>
+            <p>{s.body}</p>
+          </DocSectionBlock>
+        ))}
+
+        <CtaPanel
+          title="Want the full picture?"
+          subtitle="See our Privacy Policy for how information is used across the platform."
+          primary={{ label: "Read Privacy Policy", href: "/privacy" }}
+        />
+      </DocLayout>
+    </PageShell>
   );
 }

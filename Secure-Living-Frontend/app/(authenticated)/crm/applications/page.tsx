@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -8,7 +8,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { Modal } from "@/components/ui/Modal";
-import { Eye } from "lucide-react";
+import { RectificationBanner } from "@/components/rectification/RectificationBanner";
+import { RectificationStatusBadge } from "@/components/rectification/RectificationStatusBadge";
+import { Eye, RotateCcw } from "lucide-react";
 
 type Application = {
   id: string;
@@ -20,6 +22,7 @@ type Application = {
   submittedAt: string;
   evidences: { id: string; filePath: string; fileName: string; mimeType: string | null; evidenceType: string | null }[];
   customFieldValues: { id: string; field: { fieldLabel: string }; value: string | null; fileUrl: string | null }[];
+  rectification?: { id: string; status: string; deadline: string } | null;
 };
 
 const STATUS_COLORS: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -35,6 +38,7 @@ export default function ApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>("ALL");
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [rectIds, setRectIds] = useState<Record<string, string>>({});
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
 
@@ -55,6 +59,11 @@ export default function ApplicationsPage() {
 
   const filtered = filterStatus === "ALL" ? applications : applications.filter((a) => a.status === filterStatus);
 
+  const handleRectificationStarted = useCallback((appId: string, rectificationId: string) => {
+    setRectIds((prev) => ({ ...prev, [appId]: rectificationId }));
+    loadApps();
+  }, []);
+
   const columns: Column<Application>[] = [
     { key: "applicantId", header: "Applicant ID", render: (r) => r.applicantId.slice(0, 8), sortable: true },
     { key: "listingId", header: "Listing", render: (r) => r.listing?.title ?? r.listingId.slice(0, 8) },
@@ -62,6 +71,11 @@ export default function ApplicationsPage() {
       key: "status",
       header: "Status",
       render: (row) => <Badge variant={STATUS_COLORS[row.status] ?? "neutral"}>{row.status}</Badge>,
+    },
+    {
+      key: "rectification",
+      header: "Rectification",
+      render: (row) => row.rectification ? <RectificationStatusBadge status={row.rectification.status} /> : <span className="text-xs text-gray-400">—</span>,
     },
     {
       key: "submittedAt",
@@ -87,6 +101,10 @@ export default function ApplicationsPage() {
           <p className="app-page-lead">Review and manage rental applications.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={loadApps}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" />
+            Refresh
+          </Button>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Filter by status" />
@@ -108,6 +126,17 @@ export default function ApplicationsPage() {
       <Modal open={!!selectedApp} onOpenChange={(o) => { if (!o) setSelectedApp(null); }} title="Application Details">
         {selectedApp && (
           <div className="space-y-4">
+            {(selectedApp.status === "REJECTED" || selectedApp.status === "rejected") && (
+              <RectificationBanner
+                module="application"
+                resourceId={selectedApp.id}
+                originalStatus={selectedApp.status}
+                rejectionReason={selectedApp.message ?? undefined}
+                activeRectification={selectedApp.rectification ?? (rectIds[selectedApp.id] ? { id: rectIds[selectedApp.id], status: "initiated", deadline: new Date(Date.now() + 7 * 86400000).toISOString() } : null)}
+                onRectificationStarted={(id) => handleRectificationStarted(selectedApp.id, id)}
+              />
+            )}
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <p className="text-xs text-[var(--text-secondary)]">Applicant ID</p>
@@ -115,7 +144,10 @@ export default function ApplicationsPage() {
               </div>
               <div>
                 <p className="text-xs text-[var(--text-secondary)]">Status</p>
-                <Badge variant={STATUS_COLORS[selectedApp.status] ?? "neutral"}>{selectedApp.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={STATUS_COLORS[selectedApp.status] ?? "neutral"}>{selectedApp.status}</Badge>
+                  {selectedApp.rectification && <RectificationStatusBadge status={selectedApp.rectification.status} />}
+                </div>
               </div>
               <div>
                 <p className="text-xs text-[var(--text-secondary)]">Listing</p>

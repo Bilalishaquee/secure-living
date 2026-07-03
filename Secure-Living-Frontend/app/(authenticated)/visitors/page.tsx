@@ -52,6 +52,7 @@ export default function VisitorsPage() {
   const [saving, setSaving] = useState(false);
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
+  const canManageVisitors = !!user?.permissions?.includes("visitor:manage") || !!user?.permissions?.includes("*");
 
   async function loadVisitors() {
     if (!user) return;
@@ -65,7 +66,7 @@ export default function VisitorsPage() {
   }
 
   async function loadUnits() {
-    if (!user) return;
+    if (!user || !canManageVisitors) return;
     const res = await fetch("/api/v1/units", { headers: authHeader() });
     if (res.ok) {
       const json = (await res.json()) as { data: UnitOption[] };
@@ -76,6 +77,7 @@ export default function VisitorsPage() {
   useEffect(() => {
     void loadVisitors();
     void loadUnits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function fetchLogs(visitorId: string) {
@@ -128,10 +130,9 @@ export default function VisitorsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader() },
         body: JSON.stringify({
-          organizationId: user.organizationId,
+          ...(canManageVisitors && { organizationId: user.organizationId, unitId: form.unitId || undefined }),
           name: form.name,
           phone: form.phone,
-          unitId: form.unitId || undefined,
           vehicleNumber: form.vehicleNumber || undefined,
         }),
       });
@@ -182,13 +183,13 @@ export default function VisitorsPage() {
   const columns: Column<Visitor>[] = [
     { key: "name", header: "Name", sortable: true },
     { key: "phone", header: "Phone", render: (r) => r.phone ?? "--" },
-    { key: "unitId", header: "Unit", render: (r) => r.unitId ?? "--" },
+    ...(canManageVisitors ? [{ key: "unitId", header: "Unit", render: (r: Visitor) => r.unitId ?? "--" } as Column<Visitor>] : []),
     { key: "vehicleNumber", header: "Plate No.", render: (r) => r.vehicleNumber ?? "--" },
-    {
+    ...(canManageVisitors ? [{
       key: "isBlacklisted",
       header: "Status",
-      render: (r) => r.isBlacklisted ? <Badge variant="error">Blacklisted</Badge> : <Badge variant="success">Active</Badge>,
-    },
+      render: (r: Visitor) => r.isBlacklisted ? <Badge variant="error">Blacklisted</Badge> : <Badge variant="success">Active</Badge>,
+    } as Column<Visitor>] : []),
     {
       key: "id",
       header: "",
@@ -197,20 +198,22 @@ export default function VisitorsPage() {
           <Button variant="ghost" size="sm" onClick={() => { void fetchLogs(r.id); }}>
             <Eye className="h-4 w-4" />
           </Button>
-          {r.isBlacklisted ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!canRemoveBlacklist}
-              onClick={() => { void setVisitorBlacklist(r.id, false); }}
-              title={canRemoveBlacklist ? "Whitelist visitor" : "Only a Super Admin can remove a blacklist"}
-            >
-              <ShieldCheck className={`h-4 w-4 ${canRemoveBlacklist ? "text-emerald-600" : "text-slate-300"}`} />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={() => { void setVisitorBlacklist(r.id, true); }} title="Blacklist visitor">
-              <Ban className="h-4 w-4 text-red-600" />
-            </Button>
+          {canManageVisitors && (
+            r.isBlacklisted ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!canRemoveBlacklist}
+                onClick={() => { void setVisitorBlacklist(r.id, false); }}
+                title={canRemoveBlacklist ? "Whitelist visitor" : "Only a Super Admin can remove a blacklist"}
+              >
+                <ShieldCheck className={`h-4 w-4 ${canRemoveBlacklist ? "text-emerald-600" : "text-slate-300"}`} />
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" onClick={() => { void setVisitorBlacklist(r.id, true); }} title="Blacklist visitor">
+                <Ban className="h-4 w-4 text-red-600" />
+              </Button>
+            )
           )}
         </div>
       ),
@@ -257,14 +260,25 @@ export default function VisitorsPage() {
       <div className="app-page-toolbar">
         <div>
           <h1 className="app-page-title">Visitors</h1>
-          <p className="app-page-lead">Manage visitors, check-ins, and access approvals.</p>
+          <p className="app-page-lead">
+            {canManageVisitors ? "Manage visitors, check-ins, and access approvals." : "Register an expected visitor for your unit so security knows to let them in."}
+          </p>
         </div>
         <Button onClick={() => setShowAdd(true)}>
           <Plus className="mr-1.5 h-4 w-4" /> Add Visitor
         </Button>
       </div>
 
-      <DataTable data={visitors} columns={columns} rowKey={(r) => r.id} />
+      {visitors.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 py-12 text-center">
+          <p className="text-sm font-medium text-[var(--text-secondary)]">No visitors yet.</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {canManageVisitors ? "Add a visitor to get started." : "Register an expected guest and they'll show up here."}
+          </p>
+        </div>
+      ) : (
+        <DataTable data={visitors} columns={columns} rowKey={(r) => r.id} />
+      )}
 
       <Modal open={showAdd} onOpenChange={setShowAdd} title="Add Visitor">
         <div className="space-y-4">
@@ -285,6 +299,7 @@ export default function VisitorsPage() {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </div>
+          {canManageVisitors && (
           <div>
             <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Unit</label>
             <input
@@ -312,6 +327,7 @@ export default function VisitorsPage() {
               ))}
             </div>
           </div>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
             <Button onClick={() => { void handleAdd(); }} disabled={!form.name || !form.phone || saving}>

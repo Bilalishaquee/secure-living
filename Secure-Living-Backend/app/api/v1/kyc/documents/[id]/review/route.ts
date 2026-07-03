@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 import { appendAudit } from "@/lib/server/audit";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -51,6 +52,22 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orgId: doc.organizationId ?? undefined,
     beforeJson: { status: doc.status },
     afterJson: { status: updated.status, reason: parsed.data.rejectionReason ?? null },
+  });
+
+  await notify({
+    organizationId: doc.organizationId,
+    roles: [],
+    userIds: [doc.userId],
+    excludeUserId: actor.userId,
+    type: parsed.data.decision === "approve" ? "kyc.approved" : "kyc.rejected",
+    severity: parsed.data.decision === "approve" ? "info" : "warning",
+    title: parsed.data.decision === "approve" ? "Your KYC document was approved" : "Your KYC document was rejected",
+    message: parsed.data.decision === "approve"
+      ? `Your ${doc.documentType} has been verified.`
+      : `Your ${doc.documentType} was rejected: ${parsed.data.rejectionReason}. Upload a corrected document to resubmit.`,
+    resourceType: "KycDocument",
+    resourceId: doc.id,
+    link: "/kyc",
   });
 
   return Response.json({ data: updated });

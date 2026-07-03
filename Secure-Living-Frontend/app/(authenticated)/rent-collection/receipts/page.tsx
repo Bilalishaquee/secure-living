@@ -30,6 +30,10 @@ type RentReceipt = {
   notes: string | null;
 };
 
+type TenantOption = { tenantUserId: string; name: string; email: string; propertyName: string | null; unitNumber: string | null };
+type PropertyOption = { id: string; name: string; propertyCode: string };
+type UnitOption = { id: string; unitNumber: string; propertyId: string };
+
 const PAYMENT_METHODS = [
   { value: "M_PESA", label: "M-Pesa" },
   { value: "BANK_TRANSFER", label: "Bank Transfer" },
@@ -44,6 +48,10 @@ const DELIVERY_CHANNELS = [
   { value: "pdf", label: "PDF" },
   { value: "print", label: "Print" },
 ];
+
+function hasPermission(user: ReturnType<typeof useAuth>["user"], permission: string) {
+  return user?.permissions?.includes("*") || user?.permissions?.includes(permission);
+}
 
 export default function RentReceiptsPage() {
   const { user } = useAuth();
@@ -64,6 +72,12 @@ export default function RentReceiptsPage() {
     deliveryChannel: "email",
   });
   const [saving, setSaving] = useState(false);
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
+  const [properties, setProperties] = useState<PropertyOption[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const isTenant = user?.role === "tenant";
+  const canGenerateReceipt = !isTenant && hasPermission(user, "rent_collection:manage");
 
   const authHeader = () => ({ Authorization: `Bearer ${user?.authToken ?? ""}` });
 
@@ -80,6 +94,25 @@ export default function RentReceiptsPage() {
       setReceipts([]);
     }
   }
+
+  async function loadFormOptions() {
+    if (!user) return;
+    setLoadingOptions(true);
+    try {
+      const [tenantsRes, propertiesRes, unitsRes] = await Promise.all([
+        fetch("/api/v1/tenants", { headers: authHeader() }),
+        fetch("/api/v1/properties", { headers: authHeader() }),
+        fetch("/api/v1/units", { headers: authHeader() }),
+      ]);
+      if (tenantsRes.ok) { const d = (await tenantsRes.json()) as { data: TenantOption[] }; setTenants(d.data ?? []); }
+      if (propertiesRes.ok) { const d = (await propertiesRes.json()) as { data: PropertyOption[] }; setProperties(d.data ?? []); }
+      if (unitsRes.ok) { const d = (await unitsRes.json()) as { data: UnitOption[] }; setUnits(d.data ?? []); }
+    } finally { setLoadingOptions(false); }
+  }
+
+  useEffect(() => {
+    if (showGenerate) void loadFormOptions();
+  }, [showGenerate]);
 
   useEffect(() => {
     void loadReceipts();
@@ -144,11 +177,15 @@ export default function RentReceiptsPage() {
       <div className="app-page-toolbar">
         <div>
           <h1 className="app-page-title">Rent Receipts</h1>
-          <p className="app-page-lead">View and generate rent payment receipts.</p>
+          <p className="app-page-lead">
+            {isTenant ? "View receipts issued for your rent payments." : "View and generate rent payment receipts."}
+          </p>
         </div>
-        <Button onClick={() => setShowGenerate(true)}>
-          <Plus className="mr-1.5 h-4 w-4" /> Generate Receipt
-        </Button>
+        {canGenerateReceipt ? (
+          <Button onClick={() => setShowGenerate(true)}>
+            <Plus className="mr-1.5 h-4 w-4" /> Generate Receipt
+          </Button>
+        ) : null}
       </div>
 
       <Card>
@@ -162,12 +199,14 @@ export default function RentReceiptsPage() {
                 onChange={(e) => setFilterInvoice(e.target.value)}
                 className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
               />
-              <input
-                placeholder="Filter by tenant ID"
-                value={filterTenant}
-                onChange={(e) => setFilterTenant(e.target.value)}
-                className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
-              />
+              {!isTenant ? (
+                <input
+                  placeholder="Filter by tenant ID"
+                  value={filterTenant}
+                  onChange={(e) => setFilterTenant(e.target.value)}
+                  className="w-48 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                />
+              ) : null}
             </div>
           </div>
         </CardHeader>
@@ -185,15 +224,107 @@ export default function RentReceiptsPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Tenant ID *</label>
-              <input value={genForm.tenantId} onChange={(e) => setGenForm((f) => ({ ...f, tenantId: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <input
+                  value={genForm.tenantId}
+                  onChange={(e) => setGenForm((f) => ({ ...f, tenantId: e.target.value }))}
+                  placeholder="Type tenant ID"
+                  className="w-1/2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+                <Select
+                  value={genForm.tenantId}
+                  onValueChange={(v) => setGenForm((f) => ({ ...f, tenantId: v }))}
+                >
+                  <SelectTrigger className="w-1/2">
+                    <SelectValue placeholder="Select tenant..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingOptions ? (
+                      <SelectItem value="__loading" disabled>Loading...</SelectItem>
+                    ) : tenants.length === 0 ? (
+                      <SelectItem value="__empty" disabled>No tenants found</SelectItem>
+                    ) : (
+                      tenants.map((t) => (
+                        <SelectItem key={t.tenantUserId} value={t.tenantUserId}>
+                          {t.name}{t.email ? ` — ${t.email}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Property ID *</label>
-              <input value={genForm.propertyId} onChange={(e) => setGenForm((f) => ({ ...f, propertyId: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <input
+                  value={genForm.propertyId}
+                  onChange={(e) => setGenForm((f) => ({ ...f, propertyId: e.target.value, unitId: f.propertyId !== e.target.value ? "" : f.unitId }))}
+                  placeholder="Type property ID"
+                  className="w-1/2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+                <Select
+                  value={genForm.propertyId}
+                  onValueChange={(v) => setGenForm((f) => ({ ...f, propertyId: v, unitId: "" }))}
+                >
+                  <SelectTrigger className="w-1/2">
+                    <SelectValue placeholder="Select property..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingOptions ? (
+                      <SelectItem value="__loading" disabled>Loading...</SelectItem>
+                    ) : properties.length === 0 ? (
+                      <SelectItem value="__empty" disabled>No properties found</SelectItem>
+                    ) : (
+                      properties.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}{p.propertyCode ? ` (${p.propertyCode})` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Unit ID *</label>
-              <input value={genForm.unitId} onChange={(e) => setGenForm((f) => ({ ...f, unitId: e.target.value }))} className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <input
+                  value={genForm.unitId}
+                  onChange={(e) => setGenForm((f) => ({ ...f, unitId: e.target.value }))}
+                  placeholder="Type unit ID"
+                  className="w-1/2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+                <Select
+                  value={genForm.unitId}
+                  onValueChange={(v) => setGenForm((f) => ({ ...f, unitId: v }))}
+                >
+                  <SelectTrigger className="w-1/2">
+                    <SelectValue placeholder="Select unit..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {loadingOptions ? (
+                      <SelectItem value="__loading" disabled>Loading...</SelectItem>
+                    ) : (
+                      (genForm.propertyId
+                        ? units.filter((u) => u.propertyId === genForm.propertyId)
+                        : units
+                      ).length === 0 ? (
+                        <SelectItem value="__empty" disabled>No units found</SelectItem>
+                      ) : (
+                        (genForm.propertyId
+                          ? units.filter((u) => u.propertyId === genForm.propertyId)
+                          : units
+                        ).map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.unitNumber ? `${u.unitNumber} (${u.id.slice(0, 8)})` : u.id.slice(0, 12)}
+                          </SelectItem>
+                        ))
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-[var(--text-secondary)]">Amount (KES) *</label>

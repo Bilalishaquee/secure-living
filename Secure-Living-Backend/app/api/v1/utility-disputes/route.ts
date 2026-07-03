@@ -1,6 +1,20 @@
 import { prisma } from "@/lib/server/db";
 import { requireActor, requirePermission, jsonError, withErrorHandler, parseBody } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 import { z } from "zod";
+
+// UtilityDispute has no direct organizationId — trace reading -> meter -> unit for
+// scoping notifications (and for the raiser's userId, already on the dispute itself).
+// UtilityMeter has no Prisma relation to Unit (only a scalar unitId), so this is a
+// 3-step lookup rather than a single nested include.
+async function resolveDisputeOrg(readingId: string): Promise<string | null> {
+  const reading = await prisma.utilityReading.findUnique({ where: { id: readingId } });
+  if (!reading) return null;
+  const meter = await prisma.utilityMeter.findUnique({ where: { id: reading.meterId } });
+  if (!meter) return null;
+  const unit = await prisma.unit.findUnique({ where: { id: meter.unitId } });
+  return unit?.organizationId ?? null;
+}
 
 const raiseSchema = z.object({
   readingId: z.string().min(1),
@@ -84,16 +98,68 @@ export const POST = withErrorHandler(async (req: Request) => {
     data: { isDisputed: true, disputeStatus: "OPEN" },
   });
 
+  const orgId = await resolveDisputeOrg(readingId);
+  await notify({
+    organizationId: orgId,
+    excludeUserId: actor.userId,
+    type: "dispute.raised",
+    severity: "warning",
+    title: "New utility dispute raised",
+    message: `A tenant disputed a utility reading (${reason.replace(/_/g, " ")}).`,
+    resourceType: "UtilityDispute",
+    resourceId: dispute.id,
+    link: "/admin/disputes",
+  });
+
   return Response.json({ data: dispute }, { status: 201 });
 });
 
-// PATCH — landlord responds, or admin decides
+const appealSchema = z.object({
+  disputeId: z.string().min(1),
+  appealReason: z.string().min(1),
+});
+
+// PATCH — landlord responds, admin decides, or the raiser appeals a decline
 export const PATCH = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
 
   const url = new URL(req.url);
   const isAdmin = url.searchParams.get("admin") === "true";
+  const isAppeal = url.searchParams.get("appeal") === "true";
+
+  // Rectification Process (UPDATE.md): "Dispute Declined -> Appeal -> Review" — only the
+  // person who originally raised the dispute can appeal, and only once (a dispute already
+  // under appeal or resolved another way can't be appealed again).
+  if (isAppeal) {
+    const parsed = await parseBody(req, appealSchema);
+    if (!parsed.ok) return parsed.response;
+
+    const dispute = await prisma.utilityDispute.findUnique({ where: { id: parsed.data.disputeId } });
+    if (!dispute) return jsonError(404, "Dispute not found");
+    if (dispute.raisedByUserId !== actor.userId) return jsonError(403, "Only the person who raised this dispute can appeal it");
+    if (dispute.status !== "RESOLVED_REJECTED") return jsonError(400, "Only a declined dispute can be appealed");
+
+    const updated = await prisma.utilityDispute.update({
+      where: { id: parsed.data.disputeId },
+      data: { status: "UNDER_APPEAL", appealReason: parsed.data.appealReason, appealedAt: new Date() },
+    });
+
+    const orgId = await resolveDisputeOrg(dispute.readingId);
+    await notify({
+      organizationId: orgId,
+      excludeUserId: actor.userId,
+      type: "dispute.appealed",
+      severity: "warning",
+      title: "Dispute resolution appealed",
+      message: "A tenant appealed a declined utility dispute decision.",
+      resourceType: "UtilityDispute",
+      resourceId: updated.id,
+      link: "/admin/disputes",
+    });
+
+    return Response.json({ data: updated });
+  }
 
   if (isAdmin) {
     const denied = requirePermission(actor, "dispute:resolve");
@@ -139,6 +205,19 @@ export const PATCH = withErrorHandler(async (req: Request) => {
         });
       }
     }
+
+    await notify({
+      roles: [],
+      userIds: [dispute.raisedByUserId],
+      excludeUserId: actor.userId,
+      type: "dispute.resolved",
+      severity: outcome === "decline" ? "warning" : "info",
+      title: outcome === "approve" ? "Your dispute was approved" : outcome === "decline" ? "Your dispute was declined" : "Your dispute was resolved",
+      message: decision,
+      resourceType: "UtilityDispute",
+      resourceId: disputeId,
+      link: "/utilities",
+    });
 
     return Response.json({ data: { message: `Dispute resolved: ${outcome}` } });
   }
@@ -186,6 +265,34 @@ export const PATCH = withErrorHandler(async (req: Request) => {
         },
       });
     }
+  }
+
+  if (action === "escalate") {
+    const orgId = await resolveDisputeOrg(dispute.readingId);
+    await notify({
+      organizationId: orgId,
+      excludeUserId: actor.userId,
+      type: "dispute.escalated",
+      severity: "warning",
+      title: "Utility dispute escalated",
+      message: "A landlord escalated a utility dispute for admin decision.",
+      resourceType: "UtilityDispute",
+      resourceId: disputeId,
+      link: "/admin/disputes",
+    });
+  } else {
+    await notify({
+      roles: [],
+      userIds: [dispute.raisedByUserId],
+      excludeUserId: actor.userId,
+      type: "dispute.landlord_responded",
+      severity: action === "reject" ? "warning" : "info",
+      title: action === "accept" ? "Your dispute was accepted" : "Your dispute was rejected by the landlord",
+      message: responseReason,
+      resourceType: "UtilityDispute",
+      resourceId: disputeId,
+      link: "/utilities",
+    });
   }
 
   return Response.json({ data: { disputeId, action, status: newStatus } });

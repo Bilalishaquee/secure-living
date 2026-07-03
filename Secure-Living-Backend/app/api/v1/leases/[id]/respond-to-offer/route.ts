@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
 import { appendAudit } from "@/lib/server/audit";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -41,6 +42,20 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orgId: lease.organizationId,
     branchId: lease.branchId,
     afterJson: { status: updated.status, reason: parsed.data.reason ?? null },
+  });
+
+  await notify({
+    organizationId: lease.organizationId,
+    excludeUserId: actor.userId,
+    type: parsed.data.action === "accept" ? "lease.offer_accepted" : "lease.offer_declined",
+    severity: parsed.data.action === "accept" ? "info" : "warning",
+    title: parsed.data.action === "accept" ? "Lease offer accepted & signed" : "Lease offer declined",
+    message: parsed.data.action === "accept"
+      ? "The tenant accepted and signed the lease offer — it is now active."
+      : `The tenant declined the lease offer${parsed.data.reason ? `: ${parsed.data.reason}` : "."}`,
+    resourceType: "Lease",
+    resourceId: lease.id,
+    link: `/leasing/${lease.id}`,
   });
 
   return Response.json({ data: updated });
