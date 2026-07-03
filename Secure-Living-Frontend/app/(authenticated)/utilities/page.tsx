@@ -55,6 +55,8 @@ interface Dispute {
   readingId: string;
   reason: string;
   status: string;
+  adminDecision: string | null;
+  appealReason: string | null;
   createdAt: string;
 }
 
@@ -187,6 +189,28 @@ export default function UtilitiesPage() {
     } else {
       const err = (await res.json()) as { error: string };
       toast(err.error ?? "Failed to raise dispute.", "error");
+    }
+  }
+
+  const [appealingId, setAppealingId] = useState<string | null>(null);
+  const [appealReasonDraft, setAppealReasonDraft] = useState("");
+
+  // Rectification Process: "Dispute Declined -> Appeal -> Review".
+  async function submitAppeal(disputeId: string) {
+    if (!appealReasonDraft.trim()) { toast("Please explain why you're appealing.", "error"); return; }
+    const res = await fetch("/api/v1/utility-disputes?appeal=true", {
+      method: "PATCH",
+      headers: authHeader(),
+      body: JSON.stringify({ disputeId, appealReason: appealReasonDraft.trim() }),
+    });
+    if (res.ok) {
+      toast("Appeal submitted for review.", "success");
+      setAppealingId(null);
+      setAppealReasonDraft("");
+      if (selectedMeter) await fetchReadings(selectedMeter);
+    } else {
+      const err = (await res.json().catch(() => ({}))) as { error?: string };
+      toast(err.error ?? "Failed to submit appeal.", "error");
     }
   }
 
@@ -458,12 +482,42 @@ export default function UtilitiesPage() {
           <CardContent>
             <div className="space-y-2">
               {disputes.map((d) => (
-                <div key={d.id} className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm">
-                  <div>
-                    <p className="font-medium text-amber-900">{d.reason.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-amber-600">{new Date(d.createdAt).toLocaleDateString()}</p>
+                <div key={d.id} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-amber-900">{d.reason.replace(/_/g, " ")}</p>
+                      <p className="text-xs text-amber-600">{new Date(d.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <Badge variant={d.status === "RESOLVED_REJECTED" ? "error" : "warning"} className="text-[10px]">
+                      {d.status.replace(/_/g, " ")}
+                    </Badge>
                   </div>
-                  <Badge variant="warning" className="text-[10px]">{d.status.replace(/_/g, " ")}</Badge>
+                  {d.status === "RESOLVED_REJECTED" && (
+                    <div className="mt-2 border-t border-amber-200 pt-2">
+                      {d.adminDecision && <p className="text-xs text-amber-700">Decision: {d.adminDecision}</p>}
+                      {appealingId === d.id ? (
+                        <div className="mt-1 space-y-2">
+                          <textarea
+                            className="w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                            placeholder="Why should this be reviewed again?"
+                            value={appealReasonDraft}
+                            onChange={(e) => setAppealReasonDraft(e.target.value)}
+                          />
+                          <div className="flex gap-2">
+                            <Button type="button" size="sm" onClick={() => { void submitAppeal(d.id); }}>Submit Appeal</Button>
+                            <Button type="button" size="sm" variant="ghost" onClick={() => { setAppealingId(null); setAppealReasonDraft(""); }}>Cancel</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button type="button" size="sm" variant="outline" className="mt-1" onClick={() => setAppealingId(d.id)}>
+                          Appeal This Decision
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  {d.status === "UNDER_APPEAL" && d.appealReason && (
+                    <p className="mt-2 border-t border-amber-200 pt-2 text-xs text-amber-700">Your appeal: {d.appealReason}</p>
+                  )}
                 </div>
               ))}
             </div>

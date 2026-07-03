@@ -72,7 +72,11 @@ type PropertyStats = {
   monthlyRentKes: number;
   totalDueKes: number;
   arrearsKes: number;
+  totalEscrowKes: number;
+  pendingKyc: number;
+  activeDisputes: number;
   openServiceRequests: number;
+  blockedServiceRequests: number;
   slaBreachCount: number;
   depositFullyCovered: number;
   depositAtRisk: number;
@@ -393,7 +397,7 @@ export default function PropertyDetailPage({ params }: Props) {
       }
       toast("Takeover confirmed — property is now Full Service", "success");
       setShowModeSwitch(false);
-      setInquiry((i) => i ? { ...i, status: "COMPLETED" } : i);
+      setInquiry((i) => i ? { ...i, status: "ACCEPTED" } : i);
       setProperty((p) => p ? { ...p, managementMode: "full_service" } : p);
     } finally {
       setSaving(false);
@@ -595,7 +599,13 @@ export default function PropertyDetailPage({ params }: Props) {
             <Card><CardContent className="p-4">
               <p className="text-xs text-[var(--text-secondary)]">Occupancy</p>
               <p className="text-2xl font-bold text-brand-navy">{propStats.occupancyRate}%</p>
-              <p className="mt-0.5 text-xs text-[var(--text-muted)]">{propStats.activeTenants}/{propStats.units} units leased</p>
+              <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-emerald-400 transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, propStats.occupancyRate))}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-[var(--text-muted)]">{propStats.activeTenants}/{propStats.units} units leased</p>
             </CardContent></Card>
             <Card><CardContent className="p-4">
               <p className="text-xs text-[var(--text-secondary)]">Collected this month</p>
@@ -613,6 +623,22 @@ export default function PropertyDetailPage({ params }: Props) {
               {propStats.slaBreachCount > 0 && (
                 <p className="mt-0.5 text-xs font-medium text-amber-600">{propStats.slaBreachCount} past SLA deadline</p>
               )}
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Escrow held</p>
+              <p className="text-2xl font-bold text-brand-navy">{formatKes(propStats.totalEscrowKes)}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Pending KYC</p>
+              <p className="text-2xl font-bold text-brand-navy">{propStats.pendingKyc}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Active disputes</p>
+              <p className="text-2xl font-bold text-brand-navy">{propStats.activeDisputes}</p>
+            </CardContent></Card>
+            <Card><CardContent className="p-4">
+              <p className="text-xs text-[var(--text-secondary)]">Blocked service requests</p>
+              <p className="text-2xl font-bold text-brand-navy">{propStats.blockedServiceRequests}</p>
             </CardContent></Card>
           </div>
           {(propStats.depositAtRisk > 0 || propStats.depositShortfall > 0) && (
@@ -1117,7 +1143,7 @@ export default function PropertyDetailPage({ params }: Props) {
                 <li>✓ Tenants notified of new manager</li>
               </ul>
 
-              {!inquiry || inquiry.status === "DECLINED" ? (
+              {!inquiry || inquiry.status === "DECLINED" || inquiry.status === "CLOSED" ? (
                 <>
                   <p className="mt-3 text-xs text-purple-600">
                     Submitting sends an inquiry to your local Secure Living admin — they&apos;ll either invite you to
@@ -1131,11 +1157,15 @@ export default function PropertyDetailPage({ params }: Props) {
                     {saving ? "Submitting…" : "Explore Management Options"}
                   </Button>
                 </>
-              ) : inquiry.status === "PENDING" ? (
+              ) : inquiry.status === "SUBMITTED" ? (
                 <p className="mt-3 rounded-lg bg-purple-100 px-3 py-2 text-sm font-medium text-purple-800">
-                  Inquiry sent — awaiting your local admin&apos;s response.
+                  Inquiry submitted — awaiting your local admin&apos;s review.
                 </p>
-              ) : inquiry.status === "INVITED" ? (
+              ) : inquiry.status === "UNDER_REVIEW" || inquiry.status === "ASSIGNED" ? (
+                <p className="mt-3 rounded-lg bg-purple-100 px-3 py-2 text-sm font-medium text-purple-800">
+                  Your local admin is reviewing this request.
+                </p>
+              ) : inquiry.status === "INVITATION_SENT" ? (
                 <div className="mt-3 rounded-lg bg-purple-100 px-3 py-2">
                   <p className="text-sm font-medium text-purple-800">
                     Your admin has invited you to complete the takeover.

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { DEPOSIT_MODEL_B2, ensureDepositEscrowForLease } from "@/lib/server/deposit";
+import { notify } from "@/lib/server/notify";
 
 const schema = z.object({
   leaseId: z.string().min(1),
@@ -37,6 +38,21 @@ export const POST = withErrorHandler(async (req: Request) => {
       reason: parsed.data.reason,
       status: "pending",
     },
+  });
+
+  const requestedByTenant = (parsed.data.requestedBy ?? (actor.role === "tenant" ? "tenant" : "landlord")) === "tenant";
+  await notify({
+    roles: requestedByTenant ? ["super_admin", "admin"] : [],
+    userIds: requestedByTenant ? [] : [lease.tenantUserId],
+    organizationId: lease.organizationId,
+    excludeUserId: actor.userId,
+    type: "deposit.topup_requested",
+    severity: "info",
+    title: "Deposit top-up requested",
+    message: `KES ${parsed.data.amount.toLocaleString()} requested — ${parsed.data.reason}`,
+    resourceType: "DepositTopUpRequest",
+    resourceId: row.id,
+    link: requestedByTenant ? `/leasing/${lease.id}` : "/tenant/lease",
   });
 
   return Response.json({ data: row }, { status: 201 });

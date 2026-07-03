@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/server/password";
 import { createAuthToken } from "@/lib/server/token";
 import { buildUserAccess } from "@/lib/server/identity";
 import { jsonError , withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 export const POST = withErrorHandler(async (req: Request) => {
   const body = (await req.json()) as {
@@ -22,6 +23,7 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   let orgId: string;
   let branchId: string;
+  let newlyCreatedOrg: { id: string; name: string; status: string } | null = null;
 
   if (body.orgName?.trim()) {
     const slug = body.orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -43,17 +45,22 @@ export const POST = withErrorHandler(async (req: Request) => {
     });
     orgId = newOrg.id;
     branchId = newBranch.id;
+    newlyCreatedOrg = { id: newOrg.id, name: newOrg.name, status: newOrg.status };
   } else if (body.orgCode?.trim()) {
     const org = await prisma.organization.findFirst({ where: { id: body.orgCode.trim() } });
     if (!org) return jsonError(400, "Organization not found. Check the code and try again.");
+    if (org.status !== "active") {
+      return jsonError(409, "This organization is not active yet. Ask the organization owner or Super Admin to approve or reactivate it first.");
+    }
     const branch = await prisma.branch.findFirst({ where: { organizationId: org.id }, orderBy: { createdAt: "asc" } });
     if (!branch) return jsonError(400, "Organization has no branches configured.");
+    if (branch.status !== "active") return jsonError(409, "The primary branch is inactive. Contact an administrator.");
     orgId = org.id;
     branchId = branch.id;
   } else {
-    const fallbackOrg = await prisma.organization.findFirst({ orderBy: { createdAt: "asc" } });
+    const fallbackOrg = await prisma.organization.findFirst({ where: { status: "active" }, orderBy: { createdAt: "asc" } });
     if (!fallbackOrg) return jsonError(400, "Please provide an organization name to create your account.");
-    const fallbackBranch = await prisma.branch.findFirst({ where: { organizationId: fallbackOrg.id }, orderBy: { createdAt: "asc" } });
+    const fallbackBranch = await prisma.branch.findFirst({ where: { organizationId: fallbackOrg.id, status: "active" }, orderBy: { createdAt: "asc" } });
     if (!fallbackBranch) return jsonError(400, "Organization has no branches configured.");
     orgId = fallbackOrg.id;
     branchId = fallbackBranch.id;
@@ -84,6 +91,23 @@ export const POST = withErrorHandler(async (req: Request) => {
       branchId: branchId,
     },
   });
+
+  if (newlyCreatedOrg) {
+    const isAgency = newlyCreatedOrg.status === "pending_review";
+    await notify({
+      organizationId: newlyCreatedOrg.id,
+      roles: ["super_admin"],
+      type: isAgency ? "organization.agency_pending_review" : "organization.registered",
+      severity: isAgency ? "warning" : "info",
+      title: isAgency ? "New agency awaiting approval" : "New organization registered",
+      message: isAgency
+        ? `"${newlyCreatedOrg.name}" registered as an agency and is awaiting your compliance review.`
+        : `"${newlyCreatedOrg.name}" registered and is now active.`,
+      resourceType: "Organization",
+      resourceId: newlyCreatedOrg.id,
+      link: "/admin/organizations",
+    });
+  }
 
   const access = await buildUserAccess(user.id);
   const token = createAuthToken({

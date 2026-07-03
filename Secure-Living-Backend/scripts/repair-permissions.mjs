@@ -77,6 +77,9 @@ const PERMISSION_CODES = [
   "platform:stats:view",
   // Visitor management — ban/blacklist workflow
   "visitor:view", "visitor:manage", "visitor:blacklist:remove",
+  // Tenant self-registering a visitor for their own unit only (distinct from
+  // visitor:manage, which is org-wide add/blacklist/approve powers)
+  "visitor:create",
   // Dispute Management — first-line landlord response vs final admin decision
   "dispute:respond", "dispute:resolve",
   // Support Module Restructure — Support Tickets / Contact Requests (tenants use
@@ -226,6 +229,7 @@ const ROLES = [
       "deduction:respond",
       "role-context:switch",
       "service-request:view", "service-request:create", "service-request:dispute",
+      "visitor:create",
     ],
   },
   {

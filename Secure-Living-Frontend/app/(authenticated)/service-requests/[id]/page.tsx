@@ -156,7 +156,7 @@ function fmtShort(d: string) {
 function statusBadge(status: SRStatus) {
   const map: Record<SRStatus, { label: string; className: string }> = {
     DRAFT: { label: "Draft", className: "bg-slate-100 text-slate-600 border-slate-200" },
-    SUBMITTED: { label: "Submitted", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    SUBMITTED: { label: "Pending", className: "bg-blue-100 text-blue-700 border-blue-200" },
     APPROVED: { label: "Approved", className: "bg-indigo-100 text-indigo-700 border-indigo-200" },
     REJECTED: { label: "Rejected", className: "bg-red-100 text-red-700 border-red-200" },
     QUOTING: { label: "Quoting", className: "bg-purple-100 text-purple-700 border-purple-200" },
@@ -167,13 +167,21 @@ function statusBadge(status: SRStatus) {
     IN_PROGRESS: { label: "In Progress", className: "bg-blue-100 text-blue-700 border-blue-200" },
     BLOCKED: { label: "Blocked", className: "bg-red-100 text-red-700 border-red-200" },
     COMPLETED: { label: "Completed", className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    CANCELLED: { label: "Cancelled", className: "bg-slate-100 text-slate-500 border-slate-200" },
+    CANCELLED: { label: "Closed", className: "bg-slate-100 text-slate-500 border-slate-200" },
     DISPUTED: { label: "Disputed", className: "bg-red-100 text-red-700 border-red-200" },
   };
   const s = map[status] ?? { label: status, className: "bg-slate-100 text-slate-600 border-slate-200" };
   return (
     <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${s.className}`}>
       {s.label}
+    </span>
+  );
+}
+
+function escalationBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-100 px-3 py-1 text-sm font-semibold text-orange-700">
+      Escalated
     </span>
   );
 }
@@ -216,7 +224,7 @@ function typeBadge(type: ServiceType) {
 
 const STATUS_DESCRIPTIONS: Record<SRStatus, string> = {
   DRAFT: "This request is in draft. Submit it to start the workflow.",
-  SUBMITTED: "Awaiting manager review and approval.",
+  SUBMITTED: "Pending manager review and approval.",
   APPROVED: "Approved. Ready to assign a provider or request a quote.",
   REJECTED: "This request has been rejected.",
   QUOTING: "Quotes are being collected from providers.",
@@ -227,9 +235,26 @@ const STATUS_DESCRIPTIONS: Record<SRStatus, string> = {
   IN_PROGRESS: "Work is actively underway.",
   BLOCKED: "Work is blocked. Manager action required.",
   COMPLETED: "Work has been completed successfully.",
-  CANCELLED: "This request was cancelled.",
+  CANCELLED: "This request has been closed.",
   DISPUTED: "There is an open dispute on this request.",
 };
+
+function hasUserPermission(
+  user: { permissions?: string[]; role?: string } | null | undefined,
+  permission: string
+) {
+  if (!user) return false;
+  if (user.permissions?.includes("*") || user.permissions?.includes(permission)) return true;
+
+  // Backward compatibility for older demo sessions that predate permission refresh.
+  if (permission === "service-request:manage") {
+    return user.role === "super_admin" || user.role === "admin" || user.role === "landlord";
+  }
+  if (permission === "service-request:execute") return user.role === "staff";
+  if (permission === "service-request:create") return user.role === "tenant" || user.role === "landlord";
+  if (permission === "service-request:dispute") return user.role === "tenant" || user.role === "landlord";
+  return false;
+}
 
 function metadataLabel(key: string): string {
   const labels: Record<string, string> = {
@@ -628,6 +653,7 @@ export default function ServiceRequestDetailPage() {
   const [showDispute, setShowDispute] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [showResubmit, setShowResubmit] = useState(false);
+  const [showEscalate, setShowEscalate] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.authToken || !id) return;
@@ -658,11 +684,11 @@ export default function ServiceRequestDetailPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${user.authToken}`,
         },
-        ...(body ? { body: JSON.stringify(body) } : {}),
+        body: JSON.stringify(body ?? {}),
       });
       if (!res.ok) {
-        const err = (await res.json()) as { message?: string };
-        toast(err.message ?? "Action failed", "error");
+        const err = (await res.json().catch(() => null)) as { message?: string; error?: string } | null;
+        toast(err?.message ?? err?.error ?? "Action failed", "error");
         return;
       }
       toast("Action completed successfully", "success");
@@ -674,9 +700,10 @@ export default function ServiceRequestDetailPage() {
     }
   }
 
-  const role = user?.role ?? "landlord";
-  const isManager = role === "admin" || role === "super_admin" || role === "landlord";
-  const isExecutor = role === "staff";
+  const canManage = hasUserPermission(user, "service-request:manage");
+  const canExecute = hasUserPermission(user, "service-request:execute");
+  const canCreate = hasUserPermission(user, "service-request:create");
+  const canDispute = hasUserPermission(user, "service-request:dispute");
 
   const openEscalation = sr?.escalations?.find((e) => !e.resolvedAt);
 
@@ -742,7 +769,7 @@ export default function ServiceRequestDetailPage() {
               <p className="mt-1 text-xs text-red-500">Escalated {fmtDate(openEscalation.escalatedAt)}</p>
             </div>
           </div>
-          {isManager && (
+          {canManage && (
             <Button
               size="sm"
               variant="outline"
@@ -778,6 +805,7 @@ export default function ServiceRequestDetailPage() {
               {typeBadge(sr.serviceType)}
               {priorityBadge(sr.srPriority)}
               {statusBadge(sr.srStatus)}
+              {openEscalation ? escalationBadge() : null}
             </div>
           </div>
         </div>
@@ -881,7 +909,7 @@ export default function ServiceRequestDetailPage() {
                   ))}
                 </tbody>
               </table>
-              {isManager && sr.srStatus === "QUOTING" && (
+              {canManage && sr.srStatus === "QUOTING" && (
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm"
@@ -1005,7 +1033,7 @@ export default function ServiceRequestDetailPage() {
           <Section title="Actions">
             <div className="flex flex-col gap-2">
               {/* DRAFT → Submit */}
-              {sr.srStatus === "DRAFT" && (
+              {sr.srStatus === "DRAFT" && canCreate && (
                 <Button
                   className="w-full"
                   disabled={actionLoading}
@@ -1016,7 +1044,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* SUBMITTED → Approve / Reject (manager) */}
-              {sr.srStatus === "SUBMITTED" && isManager && (
+              {sr.srStatus === "SUBMITTED" && canManage && (
                 <>
                   <Button
                     className="w-full"
@@ -1037,7 +1065,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* APPROVED → Assign / Request Quote (manager) */}
-              {sr.srStatus === "APPROVED" && isManager && (
+              {sr.srStatus === "APPROVED" && canManage && (
                 <>
                   <Button
                     className="w-full"
@@ -1058,7 +1086,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* ASSIGNED / SCHEDULING_PENDING → Start Work (executor/staff) */}
-              {(sr.srStatus === "ASSIGNED" || sr.srStatus === "SCHEDULING_PENDING") && (isExecutor || isManager) && (
+              {(sr.srStatus === "ASSIGNED" || sr.srStatus === "SCHEDULING_PENDING") && (canExecute || canManage) && (
                 <Button
                   className="w-full"
                   disabled={actionLoading}
@@ -1071,7 +1099,7 @@ export default function ServiceRequestDetailPage() {
               {/* IN_PROGRESS → Mark Blocked / Complete / Escalate */}
               {sr.srStatus === "IN_PROGRESS" && (
                 <>
-                  {(isExecutor || isManager) && (
+                  {(canExecute || canManage) && (
                     <Button
                       variant="outline"
                       className="w-full border-red-300 text-red-700 hover:bg-red-50"
@@ -1081,7 +1109,7 @@ export default function ServiceRequestDetailPage() {
                       Mark Blocked
                     </Button>
                   )}
-                  {(isExecutor || isManager) && (
+                  {(canExecute || canManage) && (
                     <Button
                       className="w-full bg-emerald-600 hover:bg-emerald-700"
                       disabled={actionLoading}
@@ -1090,12 +1118,12 @@ export default function ServiceRequestDetailPage() {
                       <CheckCircle2 className="mr-1.5 h-4 w-4" /> Mark Complete
                     </Button>
                   )}
-                  {isManager && (
+                  {canManage && (
                     <Button
                       variant="outline"
                       className="w-full"
                       disabled={actionLoading}
-                      onClick={() => void simpleAction("escalate")}
+                      onClick={() => setShowEscalate(true)}
                     >
                       Escalate
                     </Button>
@@ -1104,7 +1132,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* BLOCKED → Unblock (manager) */}
-              {sr.srStatus === "BLOCKED" && isManager && (
+              {sr.srStatus === "BLOCKED" && canManage && (
                 <Button
                   className="w-full"
                   disabled={actionLoading}
@@ -1115,7 +1143,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* COMPLETED → Dispute */}
-              {sr.srStatus === "COMPLETED" && (
+              {sr.srStatus === "COMPLETED" && canDispute && (
                 <Button
                   variant="outline"
                   className="w-full border-red-300 text-red-700 hover:bg-red-50"
@@ -1127,7 +1155,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* REJECTED -> Resubmit with rectification notes */}
-              {sr.srStatus === "REJECTED" && (
+              {sr.srStatus === "REJECTED" && canCreate && (
                 <>
                   <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
                     This request was rejected. Add rectification notes before resubmitting it for approval.
@@ -1143,7 +1171,7 @@ export default function ServiceRequestDetailPage() {
               )}
 
               {/* Any active → Cancel (manager) */}
-              {isManager &&
+              {canManage &&
                 ![
                   "COMPLETED",
                   "CANCELLED",
@@ -1156,7 +1184,7 @@ export default function ServiceRequestDetailPage() {
                     disabled={actionLoading}
                     onClick={() => setShowCancel(true)}
                   >
-                    <X className="mr-1.5 h-4 w-4" /> Cancel Request
+                    <X className="mr-1.5 h-4 w-4" /> Close Request
                   </Button>
                 )}
             </div>
@@ -1220,10 +1248,26 @@ export default function ServiceRequestDetailPage() {
             setShowCancel(false);
           });
         }}
-        title="Cancel Request"
-        description="Provide a reason for cancelling this request"
+        title="Close Request"
+        description="Provide a reason for closing this request"
         label="Reason"
-        confirmLabel="Cancel Request"
+        confirmLabel="Close Request"
+        confirmVariant="outline"
+        loading={actionLoading}
+      />
+
+      <TextInputModal
+        open={showEscalate}
+        onClose={() => setShowEscalate(false)}
+        onConfirm={(text) => {
+          void simpleAction("escalate", { reason: text }).then(() => {
+            setShowEscalate(false);
+          });
+        }}
+        title="Escalate Request"
+        description="Explain why this request needs admin or Super Admin attention"
+        label="Escalation Reason"
+        confirmLabel="Escalate"
         confirmVariant="outline"
         loading={actionLoading}
       />

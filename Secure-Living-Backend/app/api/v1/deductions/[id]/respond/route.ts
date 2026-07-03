@@ -4,6 +4,7 @@ import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/serv
 import { hasPermission } from "@/lib/server/authz";
 import { appendAudit } from "@/lib/server/audit";
 import { statusForAction, canPerformAction } from "@/lib/server/deduction-status";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -60,6 +61,35 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     beforeJson: { status: existing.status },
     afterJson: { status, note: parsed.data.note ?? null },
   });
+
+  if (isTenant) {
+    // Tenant accepted/disputed — notify org staff.
+    await notify({
+      organizationId: existing.inspection.organizationId,
+      excludeUserId: actor.userId,
+      type: `deduction.${status}`,
+      severity: status === "disputed" ? "warning" : "info",
+      title: status === "disputed" ? "Tenant disputed a deposit deduction" : "Tenant accepted a deposit deduction",
+      message: parsed.data.note ?? existing.description,
+      resourceType: "InspectionDeduction",
+      resourceId: existing.id,
+      link: "/vacating",
+    });
+  } else {
+    // Landlord/staff finalised — notify the tenant.
+    await notify({
+      roles: [],
+      userIds: [existing.inspection.vacatingNotice.tenantId],
+      excludeUserId: actor.userId,
+      type: "deduction.finalised",
+      severity: "info",
+      title: "A deposit deduction was finalised",
+      message: existing.description,
+      resourceType: "InspectionDeduction",
+      resourceId: existing.id,
+      link: "/tenant/lease",
+    });
+  }
 
   return Response.json({ data: updated });
 });

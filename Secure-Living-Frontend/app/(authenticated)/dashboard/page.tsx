@@ -235,7 +235,7 @@ function buildMetrics(stats: DashboardStats, role: UserRole | string): MetricCar
     label: "My Maintenance Requests",
     value: String(stats.openServiceRequests),
     icon: Wrench, color: "text-orange-600", bg: "bg-orange-50",
-    href: "/maintenance",
+    href: "/service-requests",
   };
   const myAssignedJobsCard: MetricCard = {
     label: "My Assigned Jobs",
@@ -364,14 +364,15 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
         { label: "Add Visitor", href: "/visitors" },
         { label: "Create Checklist", href: "/checklists" },
         { label: "Properties", href: "/properties" },
-        { label: "Maintenance", href: "/maintenance" },
+        { label: "Service Requests", href: "/service-requests" },
         { label: "Tenants", href: "/tenants" },
         { label: "KYC", href: "/kyc" },
       ];
     case "tenant":
       return [
-        { label: "Submit Maintenance", href: "/maintenance" },
-        { label: "View My Lease", href: "/leasing" },
+        { label: "Submit Request", href: "/service-requests" },
+        { label: "View My Lease", href: "/tenant/lease" },
+        { label: "View Payments", href: "/tenant/lease/payments" },
         { label: "KYC & Documents", href: "/kyc" },
       ];
     default:
@@ -379,7 +380,7 @@ function getQuickActions(role: UserRole | string): QuickAction[] {
         { label: "Add Tenant", href: "/tenants/new" },
         { label: "Add Property", href: "/properties/new" },
         { label: "Create Invoice", href: "/rent-collection/receipts" },
-        { label: "Maintenance", href: "/maintenance" },
+        { label: "Service Requests", href: "/service-requests" },
         { label: "KYC", href: "/kyc" },
       ];
   }
@@ -403,7 +404,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
         sectionLabel: "Platform Overview",
         headerLinks: [
           { label: "Properties", href: "/properties", variant: "secondary" },
-          { label: "Service Requests", href: "/maintenance", variant: "outline" },
+          { label: "Service Requests", href: "/service-requests", variant: "outline" },
         ],
         showActivity: true,
         showChart: true,
@@ -415,7 +416,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
         sectionLabel: "Manager Overview",
         headerLinks: [
           { label: "Properties", href: "/properties", variant: "secondary" },
-          { label: "Service Requests", href: "/maintenance", variant: "outline" },
+          { label: "Service Requests", href: "/service-requests", variant: "outline" },
         ],
         showActivity: true,
         showChart: true,
@@ -427,7 +428,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
         sectionLabel: "Portfolio Overview",
         headerLinks: [
           { label: "My Properties", href: "/properties", variant: "secondary" },
-          { label: "Maintenance", href: "/maintenance", variant: "outline" },
+          { label: "Service Requests", href: "/service-requests", variant: "outline" },
         ],
         showActivity: true,
         showChart: true,
@@ -439,7 +440,7 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
         sectionLabel: "Work Overview",
         headerLinks: [
           { label: "Properties", href: "/properties", variant: "secondary" },
-          { label: "Maintenance", href: "/maintenance", variant: "outline" },
+          { label: "Service Requests", href: "/service-requests", variant: "outline" },
         ],
         showActivity: true,
         showChart: false,
@@ -450,8 +451,8 @@ function getRoleConfig(role: UserRole | string): RoleConfig {
         subtitle: "Your home and lease overview",
         sectionLabel: "My Overview",
         headerLinks: [
-          { label: "My Lease", href: "/leasing", variant: "secondary" },
-          { label: "Maintenance", href: "/maintenance", variant: "outline" },
+          { label: "My Lease", href: "/tenant/lease", variant: "secondary" },
+          { label: "Service Requests", href: "/service-requests", variant: "outline" },
         ],
         showActivity: false,
         showChart: false,

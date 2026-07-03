@@ -137,10 +137,10 @@ export const createEscrowSchema = z.object({
 
 export const createRentInvoiceSchema = z.object({
   leaseId: z.string().min(1),
-  tenantId: z.string().min(1),
-  landlordId: z.string().min(1),
-  propertyId: z.string().min(1),
-  unitId: z.string().min(1),
+  tenantId: z.string().min(1).optional(),
+  landlordId: z.string().min(1).optional(),
+  propertyId: z.string().min(1).optional(),
+  unitId: z.string().min(1).optional(),
   invoiceNumber: z.string().min(1),
   periodStart: z.string().datetime(),
   periodEnd: z.string().datetime(),

@@ -6,6 +6,7 @@ import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { canSrTransition, SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -79,6 +80,21 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     branchId: updated.branchId,
     beforeJson: { srStatus: existing.srStatus, assignedToUserId: existing.assignedToUserId },
     afterJson: { srStatus: updated.srStatus, assignedToUserId: updated.assignedToUserId },
+  });
+
+  await notify({
+    organizationId: updated.organizationId,
+    branchId: updated.branchId,
+    roles: [],
+    userIds: [parsed.data.assignedTo],
+    excludeUserId: actor.userId,
+    type: "service_request.assigned",
+    severity: "info",
+    title: "Service request assigned to you",
+    message: `"${updated.title}" has been assigned to you.`,
+    resourceType: "ServiceRequest",
+    resourceId: updated.id,
+    link: `/service-requests/${updated.id}`,
   });
 
   return Response.json({ data: updated });

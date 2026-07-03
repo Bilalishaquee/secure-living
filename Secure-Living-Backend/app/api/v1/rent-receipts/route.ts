@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
-import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
+import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
 const createSchema = z.object({
   invoiceId: z.string().min(1),
@@ -35,7 +35,14 @@ export const GET = withErrorHandler(async (req: Request) => {
 
   const where: Record<string, unknown> = {};
   if (invoiceId) where.invoiceId = invoiceId;
-  if (tenantId) where.tenantId = tenantId;
+
+  if (actor.role === "tenant") {
+    where.tenantId = actor.userId;
+  } else {
+    const denied = requirePermission(actor, "finance:view");
+    if (denied) return denied;
+    if (tenantId) where.tenantId = tenantId;
+  }
 
   const rows = await prisma.rentReceipt.findMany({
     where,
@@ -48,6 +55,8 @@ export const GET = withErrorHandler(async (req: Request) => {
 export const POST = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
   if (actor instanceof Response) return actor;
+  const denied = requirePermission(actor, "rent_collection:manage");
+  if (denied) return denied;
 
   const parsed = await parseBody(req, createSchema);
   if (!parsed.ok) return parsed.response;
