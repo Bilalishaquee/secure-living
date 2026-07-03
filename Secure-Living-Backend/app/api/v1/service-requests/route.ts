@@ -5,14 +5,46 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
-import { SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { isServiceTypeBlocked } from "@/lib/server/service-access";
+import { notify } from "@/lib/server/notify";
+
+// ── Service Request Ownership Rules (UPDATE.md: "Service Request Ownership") ────
+//
+// Who receives a request: on creation, if the request is tied to a property that
+// has a managerUserId set, it is auto-assigned to that property manager as the
+// first responsible party (see `initialAssigneeUserId` below). If the property has
+// no manager on file, the request stays unassigned and lands in the org's shared
+// queue (GET /service-requests with no assignedToUserId filter) for any staff
+// member with service-request:manage to triage manually via POST .../assign.
+//
+// Assignment rules: the auto-assignment above is a lightweight "first responder"
+// assignment (plain assignedToUserId, no ServiceRequestAssignment row, no provider
+// vetting) so the property manager can triage. The separate POST .../assign route
+// is for the later, distinct step of assigning an actual ServiceProvider to execute
+// the work — it enforces provider category rules (INTERNAL vs VERIFIED_MARKETPLACE)
+// that don't apply to a manager doing initial triage.
+//
+// Resolution workflow: the SrStatus enum transitions (see lib/server/service-fsm.ts)
+// from SUBMITTED through APPROVED/QUOTING/ASSIGNED/IN_PROGRESS to COMPLETED.
+//
+// Escalation workflow: modeled as its own ServiceRequestEscalation record (see
+// POST .../escalate), not a status value — escalating doesn't change srStatus, it
+// records who escalated to whom and why, for SLA/oversight purposes.
+//
+// Closure process: COMPLETED (work done) or CANCELLED (withdrawn) are the terminal
+// srStatus values — see canSrTransition in service-fsm.ts for the exact allowed
+// terminal transitions.
+//
+// Notification rule: every ownership-relevant event (auto-assign, manual assign,
+// escalate, status change) is written to AuditLog via appendAudit AND fanned out
+// via lib/server/notify.ts to the assignee directly (or Super Admin/Admin when
+// unassigned) — see the notify() calls below and in assign/escalate/complete/block.
 
 // ── Schema ─────────────────────────────────────────────────────────────────────
 
 const createSrSchema = z.object({
-  organizationId: z.string().min(1),
-  branchId: z.string().min(1),
+  organizationId: z.string().min(1).optional(),
+  branchId: z.string().min(1).optional(),
   propertyId: z.string().optional(),
   unitId: z.string().optional(),
   tenantUserId: z.string().optional(),
@@ -66,8 +98,13 @@ export const GET = withErrorHandler(async (req: Request) => {
     ? {}
     : { branchId: { in: actor.branchIds }, organizationId: { in: actor.orgIds } };
 
+  const tenantOwnFilter = actor.role === "tenant"
+    ? { OR: [{ tenantUserId: actor.userId }, { createdBy: actor.userId }] }
+    : {};
+
   const where = {
     ...scopeFilter,
+    ...tenantOwnFilter,
     ...(branchId ? { branchId } : {}),
     ...(orgId ? { organizationId: orgId } : {}),
     ...(serviceType ? { serviceType } : {}),
@@ -114,7 +151,43 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!parsed.ok) return parsed.response;
   const body = parsed.data;
 
-  const scoped = requireScope(actor, body.organizationId, body.branchId);
+  const property = body.propertyId
+    ? await prisma.property.findFirst({
+        where: {
+          id: body.propertyId,
+          ...(actor.permissions.includes("*") ? {} : { organizationId: { in: actor.orgIds } }),
+        },
+        select: { id: true, organizationId: true, branchId: true, managerUserId: true },
+      })
+    : null;
+  if (body.propertyId && !property) return jsonError(404, "Property not found or out of scope");
+
+  const unit = body.unitId
+    ? await prisma.unit.findFirst({
+        where: {
+          id: body.unitId,
+          ...(body.propertyId ? { propertyId: body.propertyId } : {}),
+          ...(actor.permissions.includes("*") ? {} : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } }),
+        },
+        select: { id: true, organizationId: true, branchId: true, propertyId: true },
+      })
+    : null;
+  if (body.unitId && !unit) return jsonError(404, "Unit not found or out of scope");
+
+  const organizationId = body.organizationId ?? property?.organizationId ?? unit?.organizationId ?? actor.orgIds[0];
+  const branchId = body.branchId ?? property?.branchId ?? unit?.branchId ?? actor.branchIds[0];
+  if (!organizationId || !branchId) {
+    return jsonError(400, "Unable to determine organization or branch for this service request");
+  }
+
+  if (property && (property.organizationId !== organizationId || property.branchId !== branchId)) {
+    return jsonError(400, "Property does not match the selected organization or branch");
+  }
+  if (unit && (unit.organizationId !== organizationId || unit.branchId !== branchId)) {
+    return jsonError(400, "Unit does not match the selected organization or branch");
+  }
+
+  const scoped = requireScope(actor, organizationId, branchId);
   if (scoped) return scoped;
 
   const restriction = await isServiceTypeBlocked(body.serviceType, {
@@ -201,15 +274,17 @@ export const POST = withErrorHandler(async (req: Request) => {
 
   const id = randomUUID();
 
+  const initialAssigneeUserId = property?.managerUserId ?? null;
+
   const row = await prisma.$transaction(async (tx) => {
     const sr = await tx.serviceRequest.create({
       data: {
         id,
-        organizationId: body.organizationId,
-        branchId: body.branchId,
+        organizationId,
+        branchId,
         propertyId: body.propertyId ?? null,
         unitId: body.unitId ?? null,
-        tenantUserId: body.tenantUserId ?? null,
+        tenantUserId: body.tenantUserId ?? (actor.role === "tenant" ? actor.userId : null),
         title: body.title,
         description: body.description,
         serviceType: body.serviceType,
@@ -223,6 +298,7 @@ export const POST = withErrorHandler(async (req: Request) => {
         category: body.category ?? "other",
         priority: body.priority ?? "low",
         idempotencyKey: body.idempotencyKey ?? null,
+        assignedToUserId: initialAssigneeUserId,
         metadata: body.customTypeId
           ? { ...((body.metadata as Record<string, unknown>) ?? {}), customTypeId: body.customTypeId } as import("@prisma/client").Prisma.InputJsonValue
           : body.metadata ? (body.metadata as import("@prisma/client").Prisma.InputJsonValue) : undefined,
@@ -242,6 +318,46 @@ export const POST = withErrorHandler(async (req: Request) => {
 
     return sr;
   });
+
+  if (initialAssigneeUserId) {
+    await appendAudit({
+      userId: actor.userId,
+      role: actor.role,
+      action: "service_request.auto_assigned",
+      resourceType: "service_request",
+      resourceId: row.id,
+      orgId: row.organizationId,
+      branchId: row.branchId,
+      afterJson: { assignedToUserId: initialAssigneeUserId, reason: "property manager on file" },
+    });
+    await notify({
+      organizationId: row.organizationId,
+      branchId: row.branchId,
+      roles: [],
+      userIds: [initialAssigneeUserId],
+      excludeUserId: actor.userId,
+      type: "service_request.assigned",
+      severity: "info",
+      title: "New service request assigned to you",
+      message: `"${row.title}" was auto-assigned to you as the property manager.`,
+      resourceType: "ServiceRequest",
+      resourceId: row.id,
+      link: `/service-requests/${row.id}`,
+    });
+  } else {
+    await notify({
+      organizationId: row.organizationId,
+      branchId: row.branchId,
+      excludeUserId: actor.userId,
+      type: "service_request.unassigned",
+      severity: "info",
+      title: "New unassigned service request",
+      message: `"${row.title}" has no property manager on file and needs manual assignment.`,
+      resourceType: "ServiceRequest",
+      resourceId: row.id,
+      link: `/service-requests/${row.id}`,
+    });
+  }
 
   // Increment SR counter for gated packages
   if (subscription && subscription.package.serviceRequestMonthlyLimit !== null) {

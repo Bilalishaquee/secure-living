@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -60,6 +61,21 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       });
     }
     return row;
+  });
+
+  const notifyTenant = request.requestedBy !== "tenant";
+  await notify({
+    roles: notifyTenant ? [] : ["super_admin", "admin"],
+    userIds: notifyTenant ? [lease.tenantUserId] : [],
+    organizationId: lease.organizationId,
+    excludeUserId: actor.userId,
+    type: `deposit.topup_${status}`,
+    severity: status === "disputed" ? "warning" : "info",
+    title: status === "accepted" ? "Deposit top-up accepted" : "Deposit top-up disputed",
+    message: parsed.data.note ?? request.reason,
+    resourceType: "DepositTopUpRequest",
+    resourceId: updated.id,
+    link: notifyTenant ? "/tenant/lease" : `/leasing/${lease.id}`,
   });
 
   return Response.json({ data: updated });

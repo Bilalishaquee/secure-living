@@ -7,7 +7,7 @@ import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
-type DisputeStatus = "OPEN" | "LANDLORD_RESPONDED" | "ESCALATED" | "RESOLVED_ACCEPTED" | "RESOLVED_REJECTED" | "RESOLVED_OTHER";
+type DisputeStatus = "OPEN" | "LANDLORD_RESPONDED" | "ESCALATED" | "RESOLVED_ACCEPTED" | "RESOLVED_REJECTED" | "RESOLVED_OTHER" | "UNDER_APPEAL";
 
 type Dispute = {
   id: string;
@@ -15,6 +15,7 @@ type Dispute = {
   status: DisputeStatus;
   landlordResponse: string | null;
   adminDecision: string | null;
+  appealReason: string | null;
   resolvedAt: string | null;
   createdAt: string;
   raisedByUserId: string;
@@ -35,6 +36,7 @@ const STATUS_CONFIG: Record<DisputeStatus, { label: string; color: string }> = {
   RESOLVED_ACCEPTED:  { label: "Resolved — Approved", color: "bg-emerald-100 text-emerald-700" },
   RESOLVED_REJECTED:  { label: "Resolved — Declined", color: "bg-slate-100 text-slate-600" },
   RESOLVED_OTHER:     { label: "Resolved — Other",    color: "bg-blue-100 text-blue-700" },
+  UNDER_APPEAL:       { label: "Under Appeal",         color: "bg-purple-100 text-purple-700" },
 };
 
 const REASON_LABELS: Record<string, string> = {
@@ -44,7 +46,9 @@ const REASON_LABELS: Record<string, string> = {
   other: "Other reason",
 };
 
-const ACTIVE_STATUSES: DisputeStatus[] = ["OPEN", "LANDLORD_RESPONDED", "ESCALATED"];
+// A dispute under appeal is active again — it needs a fresh admin decision, same as a
+// newly-opened one (Rectification Process: "Dispute Declined -> Appeal -> Review").
+const ACTIVE_STATUSES: DisputeStatus[] = ["OPEN", "LANDLORD_RESPONDED", "ESCALATED", "UNDER_APPEAL"];
 
 export default function DisputesPage() {
   const { user } = useAuth();
@@ -205,6 +209,13 @@ export default function DisputesPage() {
                   <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-sm text-emerald-800">
                     <p className="text-xs font-semibold uppercase tracking-wide mb-1">Admin Decision</p>
                     {d.adminDecision}
+                  </div>
+                )}
+
+                {d.status === "UNDER_APPEAL" && d.appealReason && (
+                  <div className="rounded-lg border border-purple-100 bg-purple-50 p-3 text-sm text-purple-800">
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1">Tenant&apos;s Appeal</p>
+                    {d.appealReason}
                   </div>
                 )}
 

@@ -979,3 +979,37 @@ Additional charges linked to Alice Njeri's booking (`cmqgir6070003bwq7t1ouby3x`)
 ---
 
 *All passwords: `Demo@1234` — All data seeded idempotently (re-running scripts is safe)*
+
+---
+
+## Public Search Test Examples
+
+Visitors can test this without logging in from:
+
+- Homepage navbar search
+- Mobile menu search
+- `/listings-search?q=<keyword>`
+- Public API: `/api/v1/public/search?q=<keyword>&limit=5`
+
+| Search Term | Where to Test | Expected Public Results |
+|-------------|---------------|-------------------------|
+| `karen`     | `/listings-search?q=karen` | Properties: Karen Residences / Sunrise Apartments; Locations: Karen; Agents: Diana Weru if coverage area matches |
+| `nairobi`   | `/listings-search?q=nairobi` | Location and property matches for Nairobi-area records |
+| `plumbing`  | `/listings-search?q=plumbing` | Services: Plumbing service category |
+| `cleaning`  | `/listings-search?q=cleaning` | Services: Cleaning service category |
+| `diana`     | `/listings-search?q=diana` | Agents & Providers: Diana Weru |
+| `electrical`| `/listings-search?q=electrical` | Services or providers with electrical specializations |
+
+API smoke test examples:
+
+```bash
+curl "http://localhost:4000/api/v1/public/search?q=karen&limit=5"
+curl "http://localhost:4000/api/v1/public/search?q=plumbing&limit=5"
+curl "http://localhost:4000/api/v1/public/search?q=nairobi&limit=5"
+```
+
+Pass criteria:
+
+- No login is required.
+- Response includes public buckets: `listings`, `properties`, `locations`, `agents`, `services`.
+- No private contact details, lease data, tenant data, or internal financial records are exposed.

@@ -245,18 +245,45 @@ export default function TaxonomiesPage() {
         <p className="font-semibold">What is a &quot;taxonomy&quot; here?</p>
         <p className="mt-1 text-sky-800">
           A taxonomy is a category, type, or custom field you define once — it then shows up as an option
-          everywhere that kind of thing is used across the platform. This page has two independent sections:
+          everywhere that kind of thing is used across the platform. Secure Living has six of them. Two are
+          managed directly on this page (the tabs below); the other four live on their own pages, linked here
+          for reference.
         </p>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sky-800">
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sky-800">
           <li>
-            <strong>Application Custom Fields</strong> — extra questions/fields that appear on the tenant
-            rental application form (e.g. &quot;Pet breed&quot;, &quot;Employer name&quot;). Add, reorder, or
-            require them here; changes apply to every new application immediately.
+            <strong>Application Templates</strong> <span className="text-sky-600">(this page — &quot;Application Custom Fields&quot; tab)</span> —
+            the questions and required documents a tenant must fill in/upload when applying to rent a unit
+            (e.g. &quot;Employer name&quot;, a payslip upload). Add, reorder, or require them here; changes
+            apply to every new application immediately. Presets (Standard Residential, Furnished Short-Term,
+            Commercial) can seed a starting set.
           </li>
           <li>
-            <strong>Service Type Configs</strong> — the rules for each marketplace service category (e.g.
-            Plumbing, Electrical): whether a quote is required, whether a supervisor must approve it, and what
-            evidence a provider must upload to mark a job complete.
+            <strong>Service Modes</strong> <span className="text-sky-600">(this page — &quot;Service Type Configs&quot; tab)</span> —
+            the rules for each marketplace service category (e.g. Plumbing, Electrical): whether a quote is
+            required, whether a supervisor must approve it, and what evidence a provider must upload to mark a
+            job complete. Only Super Admin can create/edit these.
+          </li>
+          <li>
+            <strong>Property Categories</strong> <a href="/properties/new" className="underline">(set on Add/Edit Property)</a> —
+            classifies a property as Residential, Commercial, Short-Stay, etc. Controls which checklist and
+            application templates make sense for it and how it's grouped on the Properties page.
+          </li>
+          <li>
+            <strong>Service Categories</strong> <a href="/admin/service-categories" className="underline">(Service Categories page)</a> —
+            the marketplace service types themselves (Plumbing, Cleaning, Security, Painting...). Used when a
+            provider registers what they offer, and when a tenant/landlord raises a Service Enquiry. Each one
+            can have a Service Mode (above) attached.
+          </li>
+          <li>
+            <strong>Checklist Templates</strong> <a href="/checklists" className="underline">(Inspection Checklist Templates page)</a> —
+            reusable move-in/move-out inspection forms (Area, Item, Qty, plus any custom columns a landlord
+            adds). Assigned to a lease when a tenant moves in or out.
+          </li>
+          <li>
+            <strong>Listing Types</strong> <span className="text-sky-600">(set via the property/unit&apos;s category and unit type)</span> —
+            a listing doesn&apos;t have its own separate &quot;type&quot; field; it inherits its category
+            (residential/commercial/short-stay) and unit type from the property and unit it&apos;s published
+            from. This determines which filters and attributes apply to it on the public listing.
           </li>
         </ul>
       </div>

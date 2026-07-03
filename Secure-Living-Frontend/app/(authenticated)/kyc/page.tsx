@@ -32,7 +32,7 @@ interface VerificationState {
   iprsResult: string | null;
   trustedPersonnelStatus: TrustedPersonnelStatus;
   goodConductExpiresAt: string | null;
-  kycDocuments: { id: string; documentType: string; status: string; uploadedAt: string }[];
+  kycDocuments: { id: string; documentType: string; status: string; uploadedAt: string; rejectionReason: string | null }[];
 }
 
 const LEVELS: { level: VerificationLevel; label: string; description: string; icon: React.ReactNode }[] = [
@@ -342,14 +342,22 @@ export default function KycPage() {
                 <p className="text-xs font-semibold text-slate-500">Submitted documents</p>
                 <div className="mt-2 space-y-1 text-xs text-slate-600">
                   {state.kycDocuments.slice(0, 5).map((d) => (
-                    <div key={d.id} className="flex items-center justify-between">
-                      <span className="capitalize">{d.documentType.replace(/_/g, " ")}</span>
-                      <Badge
-                        variant={d.status === "verified" ? "success" : d.status === "rejected" ? "error" : "neutral"}
-                        className="text-[10px]"
-                      >
-                        {d.status}
-                      </Badge>
+                    <div key={d.id} className={d.status === "rejected" ? "rounded bg-red-50 p-1.5" : ""}>
+                      <div className="flex items-center justify-between">
+                        <span className="capitalize">{d.documentType.replace(/_/g, " ")}</span>
+                        <Badge
+                          variant={d.status === "verified" || d.status === "approved" ? "success" : d.status === "rejected" ? "error" : "neutral"}
+                          className="text-[10px]"
+                        >
+                          {d.status}
+                        </Badge>
+                      </div>
+                      {d.status === "rejected" && (
+                        <p className="mt-1 text-[11px] text-red-700">
+                          {d.rejectionReason ? `Reason: ${d.rejectionReason}. ` : ""}
+                          Upload a corrected document above to resubmit.
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

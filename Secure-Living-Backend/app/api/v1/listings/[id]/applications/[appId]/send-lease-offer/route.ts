@@ -4,6 +4,7 @@ import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { ensureDepositEscrowForLease } from "@/lib/server/deposit";
 import { appendAudit } from "@/lib/server/audit";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string; appId: string } };
 
@@ -82,6 +83,19 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orgId: unit.organizationId,
     branchId: unit.branchId,
     afterJson: { applicationId: application.id, tenantUserId: application.applicantId },
+  });
+
+  await notify({
+    roles: [],
+    userIds: [application.applicantId],
+    excludeUserId: actor.userId,
+    type: "lease.offer_sent",
+    severity: "info",
+    title: "You have a new lease offer",
+    message: `A lease offer for ${body.rentAmount.toLocaleString()} KES/${body.paymentFrequency === "monthly" ? "month" : "quarter"} is ready for your review.`,
+    resourceType: "Lease",
+    resourceId: lease.id,
+    link: "/tenant/lease",
   });
 
   return Response.json({ data: lease }, { status: 201 });

@@ -230,7 +230,7 @@ export default function LeaseDetailPage({ params }: PageProps) {
       });
       if (res.ok) {
         const json = (await res.json()) as { data: Lease };
-        toast("Renewal draft created. Activate it after review/signing.", "success");
+        toast("Renewal offer sent — the tenant can now Accept & Sign or Decline it from their portal.", "success");
         router.push(`/leasing/${json.data.id}`);
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
@@ -550,7 +550,7 @@ export default function LeaseDetailPage({ params }: PageProps) {
       <Modal open={showRenewModal} onOpenChange={setShowRenewModal} title="Renew Lease">
         <div className="space-y-4">
           <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-            A terminated lease is kept as a historical record. Renewal creates a new draft lease for the same tenant and unit, then it can be activated after review/signing.
+A terminated or expired lease is kept as a historical record. Renewal sends a new Lease Offer for the same tenant and unit — the tenant must Accept & Sign (or Decline) it from their portal before it becomes active, just like a first-time lease offer.
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

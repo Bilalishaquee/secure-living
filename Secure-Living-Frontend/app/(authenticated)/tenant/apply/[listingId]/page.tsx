@@ -25,6 +25,12 @@ type CustomField = {
   displayOrder: number;
 };
 
+type ExistingApplication = {
+  id: string;
+  status: string;
+  adminNotes: string | null;
+};
+
 type PageProps = { params: { listingId: string } };
 
 // Update-2.md: "landlord gives the tenant an application form which outlines the
@@ -41,6 +47,9 @@ export default function TenantApplyPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [existing, setExisting] = useState<ExistingApplication | null>(null);
+
+  const isResubmit = existing?.status === "REVIEWING";
 
   useEffect(() => {
     if (!user?.authToken) return;
@@ -54,12 +63,21 @@ export default function TenantApplyPage({ params }: PageProps) {
         const listingJson = (await lr.json()) as { data: Listing };
         setListing(listingJson.data);
 
-        const fr = await fetch(`/api/v1/applications/custom-fields?organizationId=${listingJson.data.organizationId}`, {
-          headers: { Authorization: `Bearer ${user.authToken}` },
-        });
+        const [fr, er] = await Promise.all([
+          fetch(`/api/v1/applications/custom-fields?organizationId=${listingJson.data.organizationId}`, {
+            headers: { Authorization: `Bearer ${user.authToken}` },
+          }),
+          fetch(`/api/v1/listings/${params.listingId}/apply`, {
+            headers: { Authorization: `Bearer ${user.authToken}` },
+          }),
+        ]);
         if (fr.ok) {
           const fieldsJson = (await fr.json()) as { data: CustomField[] };
           setFields(fieldsJson.data.slice().sort((a, b) => a.displayOrder - b.displayOrder));
+        }
+        if (er.ok) {
+          const existingJson = (await er.json()) as { data: ExistingApplication | null };
+          setExisting(existingJson.data);
         }
       } finally {
         setLoading(false);
@@ -67,7 +85,10 @@ export default function TenantApplyPage({ params }: PageProps) {
     })();
   }, [user?.authToken, params.listingId]);
 
-  const missingRequired = fields.filter((f) => f.isRequired && (
+  // On resubmit, a field already on file from the first submission counts as satisfied
+  // even if not re-touched here — the server has the same "keep existing if not
+  // resupplied" logic, this is just avoiding a false client-side block.
+  const missingRequired = fields.filter((f) => f.isRequired && !isResubmit && (
     f.fieldType === "upload" ? !files[f.id] : !values[f.id]?.trim()
   ));
 
@@ -91,7 +112,10 @@ export default function TenantApplyPage({ params }: PageProps) {
         }
       }
 
-      const res = await fetch(`/api/v1/listings/${params.listingId}/apply`, {
+      const url = isResubmit
+        ? `/api/v1/applications/${existing?.id}/resubmit`
+        : `/api/v1/listings/${params.listingId}/apply`;
+      const res = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Bearer ${user.authToken}` },
         body: form,
@@ -116,7 +140,7 @@ export default function TenantApplyPage({ params }: PageProps) {
         <Card>
           <CardContent className="flex flex-col items-center py-16 text-center">
             <CheckCircle2 className="mb-4 h-12 w-12 text-emerald-500" />
-            <p className="text-lg font-medium text-slate-700">Application submitted</p>
+            <p className="text-lg font-medium text-slate-700">{isResubmit ? "Application resubmitted" : "Application submitted"}</p>
             <p className="mt-1 text-sm text-slate-500">
               Your landlord will review your requirements and get back to you. If accepted, a lease offer will appear on your My Lease page.
             </p>
@@ -127,12 +151,39 @@ export default function TenantApplyPage({ params }: PageProps) {
     );
   }
 
+  // Already applied and not in a resubmittable state — show status instead of a form
+  // that would otherwise silently create a confusing duplicate application.
+  if (existing && existing.status !== "REVIEWING") {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card>
+          <CardContent className="flex flex-col items-center py-16 text-center">
+            <CheckCircle2 className="mb-4 h-12 w-12 text-blue-500" />
+            <p className="text-lg font-medium text-slate-700">You've already applied</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Status: <span className="font-semibold">{existing.status}</span>. Your landlord will follow up if anything else is needed.
+            </p>
+            <Button className="mt-4" variant="outline" onClick={() => router.push("/tenant/lease")}>Go to My Lease</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Apply — {listing.title}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">{isResubmit ? "Resubmit — " : "Apply — "}{listing.title}</h1>
         <p className="mt-1 text-sm text-slate-500">{formatKes(listing.rentAmount)}/month. Complete the requirements your landlord has set below.</p>
       </div>
+
+      {isResubmit && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Your landlord requested more information</p>
+          {existing?.adminNotes && <p className="mt-1">{existing.adminNotes}</p>}
+          <p className="mt-1 text-xs">Anything you don&apos;t change below keeps what you submitted before.</p>
+        </div>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Requirements</CardTitle></CardHeader>

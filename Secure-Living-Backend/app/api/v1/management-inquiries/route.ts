@@ -10,10 +10,14 @@ export const GET = withErrorHandler(async (req: Request) => {
   if (denied) return denied;
 
   const isSuperAdmin = actor.permissions.includes("*");
+  const url = new URL(req.url);
+  const escalatedOnly = url.searchParams.get("escalated") === "true";
+
   const rows = await prisma.managementInquiry.findMany({
-    where: isSuperAdmin
-      ? {}
-      : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } },
+    where: {
+      ...(isSuperAdmin ? {} : { organizationId: { in: actor.orgIds }, branchId: { in: actor.branchIds } }),
+      ...(escalatedOnly && { escalatedToSuperAdmin: true }),
+    },
     orderBy: { createdAt: "desc" },
   });
 

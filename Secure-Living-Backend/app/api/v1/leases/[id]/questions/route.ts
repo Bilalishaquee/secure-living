@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -41,6 +42,18 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   const row = await prisma.leaseQuestion.create({
     data: { id: randomUUID(), leaseId: params.id, askedBy: actor.userId, question: parsed.data.question },
+  });
+
+  await notify({
+    organizationId: lease.organizationId,
+    excludeUserId: actor.userId,
+    type: "lease.question_asked",
+    severity: "info",
+    title: "Tenant asked a question about their lease",
+    message: parsed.data.question,
+    resourceType: "Lease",
+    resourceId: lease.id,
+    link: `/leasing/${lease.id}`,
   });
 
   return Response.json({ data: row }, { status: 201 });

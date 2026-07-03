@@ -20,7 +20,7 @@ export const GET = withErrorHandler(async (req: Request) => {
       kycDocuments: {
         orderBy: { uploadedAt: "desc" },
         take: 10,
-        select: { id: true, documentType: true, status: true, uploadedAt: true },
+        select: { id: true, documentType: true, status: true, uploadedAt: true, rejectionReason: true },
       },
     },
   });

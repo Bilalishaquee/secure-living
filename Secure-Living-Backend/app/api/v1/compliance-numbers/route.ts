@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 const SUBJECT_TYPES = ["TENANT", "PROPERTY", "AGENT", "USER"] as const;
 
@@ -62,6 +63,9 @@ export const GET = withErrorHandler(async (req: Request) => {
   const subjectType = url.searchParams.get("subjectType");
   const subjectId = url.searchParams.get("subjectId");
   const status = url.searchParams.get("status");
+  // Search by the compliance number itself, e.g. "SLC-NAI-" or a full code —
+  // the "number plate" lookup a landlord/admin would actually type in.
+  const code = url.searchParams.get("code");
 
   const where: Record<string, unknown> = {};
   if (organizationId) where.organizationId = organizationId;
@@ -69,6 +73,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   if (subjectType) where.subjectType = subjectType;
   if (subjectId) where.subjectId = subjectId;
   if (status) where.status = status;
+  if (code) where.complianceId = { contains: code, mode: "insensitive" };
 
   const rows = await prisma.complianceNumber.findMany({
     where,
@@ -113,6 +118,20 @@ export const POST = withErrorHandler(async (req: Request) => {
       issuedAt: body.issuedAt ? new Date(body.issuedAt) : new Date(),
       expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     },
+  });
+
+  await notify({
+    organizationId: body.organizationId,
+    roles: ["super_admin"],
+    userIds: subjectType === "TENANT" || subjectType === "USER" ? [subjectId] : [],
+    excludeUserId: actor.userId,
+    type: "compliance_number.issued",
+    severity: "info",
+    title: "Compliance number issued",
+    message: `${complianceId} issued for ${subjectType.toLowerCase()} ${subjectId.slice(0, 8)}…`,
+    resourceType: "ComplianceNumber",
+    resourceId: row.id,
+    link: "/compliance",
   });
 
   return Response.json({ data: row }, { status: 201 });

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { writeOutboxEvent } from "@/lib/server/sr-helpers";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -16,7 +17,7 @@ const ESCALATABLE_STATUSES: SrStatus[] = [
 ];
 
 const escalateSchema = z.object({
-  escalatedTo: z.string().min(1, "escalatedTo is required"),
+  escalatedTo: z.string().min(1, "escalatedTo is required").optional().default("admin_queue"),
   reason: z.string().min(1, "reason is required"),
 });
 
@@ -65,6 +66,21 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orgId: existing.organizationId,
     branchId: existing.branchId,
     afterJson: escalation,
+  });
+
+  await notify({
+    organizationId: existing.organizationId,
+    branchId: existing.branchId,
+    roles: ["super_admin", "admin"],
+    userIds: parsed.data.escalatedTo === "admin_queue" ? [] : [parsed.data.escalatedTo],
+    excludeUserId: actor.userId,
+    type: "service_request.escalated",
+    severity: "warning",
+    title: "Service request escalated",
+    message: `"${existing.title}" was escalated: ${parsed.data.reason}`,
+    resourceType: "ServiceRequest",
+    resourceId: params.id,
+    link: `/service-requests/${params.id}`,
   });
 
   return Response.json({ data: escalation }, { status: 201 });

@@ -5,6 +5,7 @@ import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { canSrTransition, SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -81,6 +82,22 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     branchId: updated.branchId,
     beforeJson: { srStatus: existing.srStatus },
     afterJson: { srStatus: updated.srStatus, resolvedAt: now },
+  });
+
+  const requesterIds = Array.from(new Set([existing.createdBy, existing.tenantUserId].filter((id): id is string => !!id)));
+  await notify({
+    organizationId: updated.organizationId,
+    branchId: updated.branchId,
+    roles: [],
+    userIds: requesterIds,
+    excludeUserId: actor.userId,
+    type: "service_request.completed",
+    severity: "info",
+    title: "Your service request was completed",
+    message: `"${updated.title}" has been marked completed.`,
+    resourceType: "ServiceRequest",
+    resourceId: updated.id,
+    link: `/service-requests/${updated.id}`,
   });
 
   return Response.json({ data: updated });

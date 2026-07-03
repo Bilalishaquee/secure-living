@@ -3,6 +3,7 @@ import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission , withErrorHandler } from "@/lib/server/http";
 import { createScreeningReportSchema } from "@/lib/server/validation";
+import { notify } from "@/lib/server/notify";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
@@ -47,5 +48,25 @@ export const POST = withErrorHandler(async (req: Request) => {
     resourceId: row.id,
     afterJson: row,
   });
+
+  const application = await prisma.rentalApplication.findUnique({
+    where: { id: b.applicationId },
+    include: { listing: { select: { organizationId: true } } },
+  });
+  if (application) {
+    await notify({
+      organizationId: application.listing.organizationId,
+      roles: ["admin"],
+      excludeUserId: actor.userId,
+      type: "screening_report.created",
+      severity: "info",
+      title: "New screening report available",
+      message: `A screening report (${b.recommendation}) is ready for ${b.applicantName}.`,
+      resourceType: "RentalApplication",
+      resourceId: application.id,
+      link: `/listings/${application.listingId}`,
+    });
+  }
+
   return Response.json({ data: row }, { status: 201 });
 })

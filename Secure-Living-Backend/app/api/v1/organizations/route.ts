@@ -48,6 +48,7 @@ export const POST = withErrorHandler(async (req: Request) => {
       country: body.country,
       email: body.email,
       phone: body.phone,
+      status: body.type === "Agency" ? "pending_review" : "active",
     },
   });
   const branch = await prisma.branch.create({

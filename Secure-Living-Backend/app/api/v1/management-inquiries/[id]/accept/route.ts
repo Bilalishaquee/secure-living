@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -14,12 +15,12 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const inquiry = await prisma.managementInquiry.findUnique({ where: { id: params.id } });
   if (!inquiry) return jsonError(404, "Inquiry not found");
   if (inquiry.landlordId !== actor.userId) return jsonError(403, "Forbidden");
-  if (inquiry.status !== "INVITED") return jsonError(409, "No pending invitation to accept");
+  if (inquiry.status !== "INVITATION_SENT") return jsonError(409, "No pending invitation to accept");
 
   const [updated] = await prisma.$transaction([
     prisma.managementInquiry.update({
       where: { id: params.id },
-      data: { status: "COMPLETED", respondedBy: actor.userId, respondedAt: new Date() },
+      data: { status: "ACCEPTED", respondedBy: actor.userId, respondedAt: new Date() },
     }),
     prisma.property.update({
       where: { id: inquiry.propertyId },
@@ -31,6 +32,20 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     userId: actor.userId, role: actor.role, action: "MANAGEMENT_INQUIRY_ACCEPTED",
     resourceType: "ManagementInquiry", resourceId: inquiry.id, orgId: inquiry.organizationId, branchId: inquiry.branchId,
     afterJson: { propertyId: inquiry.propertyId, managementMode: "full_service" },
+  });
+
+  await notify({
+    organizationId: inquiry.organizationId,
+    branchId: inquiry.branchId,
+    roles: ["super_admin", "admin"],
+    excludeUserId: actor.userId,
+    type: "management_inquiry.accepted",
+    severity: "info",
+    title: "Management takeover accepted",
+    message: "The landlord accepted the management assistance invitation — the property is now full-service managed.",
+    resourceType: "ManagementInquiry",
+    resourceId: inquiry.id,
+    link: "/admin/management-inquiries",
   });
 
   return Response.json({ data: updated });

@@ -18,34 +18,30 @@ const featureLinks = [
 ];
 
 const resourceLinks = [
-  { label: "Tax Center", href: "/help/landlord" },
-  { label: "Blog", href: "/help" },
+  { label: "Tax Center", href: "/resources#market-insights" },
+  { label: "Blog", href: "/resources#market-insights" },
   { label: "Help Center", href: "/help" },
-  { label: "Forums", href: "/help" },
+  { label: "Forums", href: "/resources#help-center" },
   { label: "Newsletter", href: "#newsletter" },
-  { label: "Landlord Insurance", href: "/services/landlord-insurance" },
-  { label: "Preferred Services", href: "/services" },
+  { label: "Landlord Insurance", href: "/help/landlord" },
+  { label: "Preferred Services", href: "/#supporting-services" },
 ];
 
 const residentLinks = [
   { label: "Register / Log In", href: "/auth/login" },
-  { label: "Pay Rent", href: "/auth/register?role=tenant&next=/rent-collection" },
+  { label: "Pay Rent", href: "/auth/register?role=tenant&next=/tenant/lease/payments" },
   { label: "Complete Screening", href: "/auth/register?role=tenant&next=/screening" },
-  { label: "Find a Home", href: "/listings" },
-  { label: "Get Renters Insurance", href: "/services/renters-insurance" },
+  { label: "Find a Home", href: "/listings-search" },
+  { label: "Get Renters Insurance", href: "/help/tenant" },
 ];
 
-const searchTargets = [
-  { label: "pricing", href: "/pricing" },
-  { label: "features", href: "#platform" },
-  { label: "listings", href: "/listings" },
-  { label: "help", href: "/help" },
-  { label: "tenant", href: "/auth/register?role=tenant" },
-  { label: "landlord", href: "/auth/register?role=landlord" },
-  { label: "manager", href: "/auth/register?role=staff" },
-  { label: "provider", href: "/auth/register?role=provider" },
-  { label: "services", href: "/services" },
-];
+type PublicSearchResults = {
+  listings: { id: string; title: string; rentAmount: number; currency: string }[];
+  properties: { id: string; name: string; location: string; propertyType?: string }[];
+  locations: { id: string; name: string; propertyCount: number; listingCount: number }[];
+  agents: { id: string; name: string; specializations: string[]; coverageAreas: string[]; verificationLevel?: string }[];
+  services: { id: string; slug: string; name: string; tagline: string | null }[];
+};
 
 type DropdownKey = "features" | "resources" | "residents" | null;
 
@@ -54,7 +50,11 @@ export function LandingNavbar() {
   const [open, setOpen] = useState(false);
   const [dd, setDd] = useState<DropdownKey>(null);
   const [search, setSearch] = useState("");
+  const [results, setResults] = useState<PublicSearchResults | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
+  const searchDebounceRef = useRef<number | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -138,12 +138,33 @@ export function LandingNavbar() {
     </div>
   );
 
-  const onSearch = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (searchDebounceRef.current) window.clearTimeout(searchDebounceRef.current);
+    const q = search.trim();
+    if (q.length < 2) {
+      setResults(null);
+      setShowResults(false);
+      return;
+    }
+    searchDebounceRef.current = window.setTimeout(() => {
+      setSearching(true);
+      fetch(`/api/v1/public/search?q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => { if (json?.data) { setResults(json.data); setShowResults(true); } })
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 250);
+    return () => { if (searchDebounceRef.current) window.clearTimeout(searchDebounceRef.current); };
+  }, [search]);
+
+  const hasResults = !!results && (
+    results.listings.length + results.properties.length + results.locations.length + results.agents.length + results.services.length > 0
+  );
+
+  const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = search.trim().toLowerCase();
-    if (!q) return;
-    const match = searchTargets.find((item) => item.label.includes(q) || q.includes(item.label));
-    window.location.href = match?.href ?? `/help?search=${encodeURIComponent(q)}`;
+    const q = search.trim();
+    if (q.length >= 2) window.location.href = `/listings-search?q=${encodeURIComponent(q)}`;
   };
 
   return (
@@ -177,15 +198,82 @@ export function LandingNavbar() {
         </nav>
 
         <div className="z-[110] hidden items-center gap-2 lg:flex">
-          <form onSubmit={onSearch} className="relative">
+          <form onSubmit={onSearchSubmit} className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search"
-              className="h-9 w-36 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm text-slate-700 outline-none transition focus:w-48 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
-              aria-label="Search Secure Living"
+              onFocus={() => { if (hasResults) setShowResults(true); }}
+              onBlur={() => window.setTimeout(() => setShowResults(false), 150)}
+              placeholder="Search properties, agents, services…"
+              className="h-9 w-44 rounded-md border border-slate-200 bg-white pl-8 pr-2 text-sm text-slate-700 outline-none transition focus:w-72 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+              aria-label="Search properties, locations, agents, and services"
             />
+            <AnimatePresence>
+              {showResults && search.trim().length >= 2 ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full z-[120] mt-1 max-h-96 w-80 overflow-y-auto rounded-md border border-slate-200 bg-white py-2 shadow-lg"
+                >
+                  {searching ? (
+                    <p className="px-4 py-3 text-sm text-slate-400">Searching…</p>
+                  ) : !hasResults ? (
+                    <p className="px-4 py-3 text-sm text-slate-400">No matches for &quot;{search.trim()}&quot;</p>
+                  ) : (
+                    <>
+                      {results!.listings.length > 0 && (
+                        <SearchGroup title="Listings">
+                          {results!.listings.map((l) => (
+                            <Link key={l.id} href={`/listings-search?q=${encodeURIComponent(search.trim())}`} className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              {l.title} <span className="text-slate-400">— {l.currency} {l.rentAmount.toLocaleString()}/mo</span>
+                            </Link>
+                          ))}
+                        </SearchGroup>
+                      )}
+                      {results!.properties.length > 0 && (
+                        <SearchGroup title="Properties">
+                          {results!.properties.map((p) => (
+                            <Link key={p.id} href={`/listings-search?q=${encodeURIComponent(p.name)}`} className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              {p.name} <span className="text-slate-400">— {p.location}</span>
+                            </Link>
+                          ))}
+                        </SearchGroup>
+                      )}
+                      {results!.locations.length > 0 && (
+                        <SearchGroup title="Locations">
+                          {results!.locations.map((location) => (
+                            <Link key={location.id} href={`/listings-search?q=${encodeURIComponent(location.name)}`} className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              {location.name} <span className="text-slate-400">— {location.propertyCount} properties</span>
+                            </Link>
+                          ))}
+                        </SearchGroup>
+                      )}
+                      {results!.agents.length > 0 && (
+                        <SearchGroup title="Agents & Providers">
+                          {results!.agents.map((a) => (
+                            <Link key={a.id} href={`/listings-search?q=${encodeURIComponent(a.name)}`} className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              {a.name} <span className="text-slate-400">— {a.specializations.join(", ")}</span>
+                            </Link>
+                          ))}
+                        </SearchGroup>
+                      )}
+                      {results!.services.length > 0 && (
+                        <SearchGroup title="Services">
+                          {results!.services.map((s) => (
+                            <Link key={s.id} href={`/services/${s.slug}`} className="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              {s.name}
+                            </Link>
+                          ))}
+                        </SearchGroup>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
           </form>
           <Button variant="ghost" asChild>
             <Link href="/auth/login" className="text-sm font-semibold text-slate-700 hover:text-slate-900">
@@ -218,6 +306,16 @@ export function LandingNavbar() {
             className="overflow-hidden border-t border-slate-200 bg-white lg:hidden"
           >
             <div className="flex flex-col gap-0.5 px-4 py-4">
+              <form onSubmit={onSearchSubmit} className="relative mb-2">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search properties, locations, agents, services"
+                  className="w-full rounded-md border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20"
+                  aria-label="Search properties, locations, agents, and services"
+                />
+              </form>
               <Link
                 href="/auth/register?role=landlord"
                 className="mb-2 rounded-md bg-brand-blue py-3 text-center text-sm font-semibold text-white"
@@ -283,5 +381,14 @@ export function LandingNavbar() {
         ) : null}
       </AnimatePresence>
     </motion.header>
+  );
+}
+
+function SearchGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b border-slate-100 py-1 last:border-b-0">
+      <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{title}</p>
+      {children}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/db";
 import { requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
 import { appendAudit } from "@/lib/server/audit";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -28,6 +29,18 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     resourceId: lease.id,
     orgId: lease.organizationId,
     branchId: lease.branchId,
+  });
+
+  await notify({
+    organizationId: lease.organizationId,
+    excludeUserId: actor.userId,
+    type: "lease.renewal_requested",
+    severity: "info",
+    title: "Tenant requested lease renewal",
+    message: "A tenant has requested to renew their active lease.",
+    resourceType: "Lease",
+    resourceId: lease.id,
+    link: `/leasing/${lease.id}`,
   });
 
   return Response.json({ data: updated });

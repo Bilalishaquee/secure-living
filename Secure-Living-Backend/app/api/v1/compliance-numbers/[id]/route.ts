@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -38,6 +39,22 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
         : {}),
     },
   });
+
+  if (parsed.data.status === "REVOKED") {
+    await notify({
+      organizationId: existing.organizationId,
+      roles: ["super_admin", "admin"],
+      userIds: (existing.subjectType === "TENANT" || existing.subjectType === "USER") && existing.subjectId ? [existing.subjectId] : [],
+      excludeUserId: actor.userId,
+      type: "compliance_number.revoked",
+      severity: "warning",
+      title: "Compliance number revoked",
+      message: `${existing.complianceId} was revoked${parsed.data.revokedReason ? `: ${parsed.data.revokedReason}` : "."}`,
+      resourceType: "ComplianceNumber",
+      resourceId: existing.id,
+      link: "/compliance",
+    });
+  }
 
   return Response.json({ data: updated });
 });

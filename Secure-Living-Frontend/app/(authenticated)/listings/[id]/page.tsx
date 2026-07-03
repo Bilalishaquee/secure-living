@@ -35,7 +35,8 @@ export default function ListingDetailPage({ params }: Props) {
   const { toast } = useToast();
   const [listing, setListing] = useState<Record<string, unknown> | null>(null);
   const [applications, setApplications] = useState<Array<Record<string, unknown>>>([]);
-  const [screeningByApp, setScreeningByApp] = useState<Record<string, Record<string, unknown>>>({});
+  const [screeningByApp, setScreeningByApp] = useState<Record<string, Array<Record<string, unknown>>>>({});
+  const [screeningOpenFor, setScreeningOpenFor] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"details" | "applications">("details");
@@ -82,10 +83,10 @@ export default function ListingDetailPage({ params }: Props) {
             }).then((r) => (r.ok ? r.json() : { data: [] })).catch(() => ({ data: [] })),
           ),
         );
-        const byApp: Record<string, Record<string, unknown>> = {};
+        const byApp: Record<string, Array<Record<string, unknown>>> = {};
         apps.forEach((a, i) => {
           const reports = results[i]?.data ?? [];
-          if (reports.length > 0) byApp[a.id as string] = reports[0];
+          if (reports.length > 0) byApp[a.id as string] = reports;
         });
         setScreeningByApp(byApp);
       }
@@ -367,6 +368,14 @@ export default function ListingDetailPage({ params }: Props) {
       {activeTab === "applications" && (
         <Card>
           <CardContent className="p-0">
+            <div className="border-b border-slate-100 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <p>
+                <strong>Screening workflow:</strong> whoever holds edit access on this listing (you, your agency, or staff) is
+                responsible for the decision. <strong>Approve</strong> makes the applicant eligible for a lease offer,
+                <strong> Reject</strong> closes the application, and <strong>Request Info</strong> lets the applicant correct
+                and resubmit their documents for another review — it does not close the application.
+              </p>
+            </div>
             {applications.length === 0 ? (
               <p className="py-12 text-center text-sm text-slate-500">No applications yet</p>
             ) : (
@@ -383,7 +392,8 @@ export default function ListingDetailPage({ params }: Props) {
                 <tbody className="divide-y divide-slate-100">
                   {applications.map((app) => {
                     const asc = APP_STATUS_COLORS[app.status as string] ?? "bg-slate-100 text-slate-700";
-                    const screening = screeningByApp[app.id as string];
+                    const reports = screeningByApp[app.id as string] ?? [];
+                    const screening = reports[0];
                     const recBadge: Record<string, string> = {
                       approve: "bg-green-100 text-green-700",
                       review: "bg-amber-100 text-amber-700",
@@ -395,9 +405,31 @@ export default function ListingDetailPage({ params }: Props) {
                         <td className="px-4 py-3 text-slate-600">{new Date(app.submittedAt as string).toLocaleDateString()}</td>
                         <td className="px-4 py-3">
                           {screening ? (
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${recBadge[screening.recommendation as string] ?? "bg-slate-100 text-slate-600"}`}>
-                              {(screening.recommendation as string).toUpperCase()}{screening.score != null ? ` · ${screening.score}` : ""}
-                            </span>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setScreeningOpenFor((v) => (v === (app.id as string) ? null : (app.id as string)))}
+                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${recBadge[screening.recommendation as string] ?? "bg-slate-100 text-slate-600"}`}
+                              >
+                                {(screening.recommendation as string).toUpperCase()}{screening.score != null ? ` · ${screening.score}` : ""}
+                                {reports.length > 1 ? ` (${reports.length})` : ""}
+                              </button>
+                              {screeningOpenFor === (app.id as string) && (
+                                <div className="mt-2 max-w-xs space-y-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] shadow-sm">
+                                  {reports.map((r, i) => (
+                                    <div key={(r.id as string) ?? i} className={i > 0 ? "border-t border-slate-100 pt-2" : ""}>
+                                      <p className="font-semibold text-slate-700">
+                                        {(r.recommendation as string).toUpperCase()}{r.score != null ? ` · Score ${r.score}` : ""}
+                                        <span className="ml-1 font-normal text-slate-400">
+                                          {new Date(r.createdAt as string).toLocaleDateString()}
+                                        </span>
+                                      </p>
+                                      {r.notes ? <p className="mt-0.5 text-slate-500">{r.notes as string}</p> : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-xs text-slate-400">Not screened</span>
                           )}

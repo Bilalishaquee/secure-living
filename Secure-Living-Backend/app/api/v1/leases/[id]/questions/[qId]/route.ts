@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string; qId: string } };
 
@@ -29,6 +30,19 @@ export const PATCH = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const updated = await prisma.leaseQuestion.update({
     where: { id: params.qId },
     data: { answer: parsed.data.answer, answeredBy: actor.userId, answeredAt: new Date() },
+  });
+
+  await notify({
+    roles: [],
+    userIds: [lease.tenantUserId],
+    excludeUserId: actor.userId,
+    type: "lease.question_answered",
+    severity: "info",
+    title: "Your lease question was answered",
+    message: parsed.data.answer,
+    resourceType: "Lease",
+    resourceId: lease.id,
+    link: "/tenant/lease",
   });
 
   return Response.json({ data: updated });
