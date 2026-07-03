@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor , withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 const inviteSchema = z.object({
   organizationId: z.string().min(1),
@@ -84,6 +85,20 @@ export const POST = withErrorHandler(async (req: Request) => {
     orgId: body.organizationId,
     branchId: body.branchId,
     afterJson: { inviteeEmail: invite.inviteeEmail, roleSlug: invite.roleSlug },
+  });
+
+  // The invitee isn't a platform user yet (invited by email) — cannot be targeted via
+  // userIds, so this is a log-style FYI to the org's admins/super admins only.
+  await notify({
+    organizationId: body.organizationId,
+    excludeUserId: actor.userId,
+    type: "team.invited",
+    severity: "info",
+    title: "Team invitation sent",
+    message: `${invite.inviteeEmail} invited as ${invite.roleSlug.replace(/_/g, " ")}`,
+    resourceType: "TeamInvitation",
+    resourceId: invite.id,
+    link: "/team",
   });
 
   return Response.json({ data: invite }, { status: 201 });

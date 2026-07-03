@@ -25,10 +25,29 @@ type OrgRow = {
   country: string;
   email: string;
   phone?: string | null;
+  kraPin?: string | null;
+  bankPayoutAccount?: string | null;
   usersCount: number;
   status: string;
+  rejectionReason?: string | null;
+  reapplicationCount?: number;
+  deactivationReason?: string | null;
   branches: { id: string; name: string; location?: string | null; usersCount?: number }[];
 };
+
+type AuditRow = {
+  id: string;
+  action: string;
+  userId: string;
+  timestamp: string;
+  afterJson: unknown;
+};
+
+const CHECKLIST_ITEMS: { key: "businessRegistrationVerified" | "contactDetailsConfirmed" | "kycDocumentsReviewed"; label: string }[] = [
+  { key: "businessRegistrationVerified", label: "Business registration verified" },
+  { key: "contactDetailsConfirmed", label: "Contact details confirmed" },
+  { key: "kycDocumentsReviewed", label: "KYC documents reviewed" },
+];
 
 export default function OrganizationsPage() {
   const { user } = useAuth();
@@ -44,6 +63,17 @@ export default function OrganizationsPage() {
     phone: "",
   });
   const [branchDraft, setBranchDraft] = useState<Record<string, string>>({});
+  const [reviewTarget, setReviewTarget] = useState<OrgRow | null>(null);
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [rejectReason, setRejectReason] = useState("");
+  const [editTarget, setEditTarget] = useState<OrgRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", kraPin: "", bankPayoutAccount: "" });
+  const [deactivateTarget, setDeactivateTarget] = useState<OrgRow | null>(null);
+  const [deactivateReason, setDeactivateReason] = useState("");
+  const [auditTarget, setAuditTarget] = useState<string | null>(null);
+  const [auditRows, setAuditRows] = useState<AuditRow[]>([]);
+
+  const isSuperAdmin = user?.permissions?.includes("*") ?? false;
 
   useEffect(() => {
     if (!user) return;
@@ -92,14 +122,33 @@ export default function OrganizationsPage() {
     toast("Organization created", "success");
   };
 
-  const reviewOrg = async (orgId: string, decision: "approve" | "reject") => {
-    const res = await fetch(`/api/v1/organizations/${orgId}`, {
+  const openReview = (org: OrgRow) => {
+    setReviewTarget(org);
+    setChecklist({});
+    setRejectReason("");
+  };
+
+  const submitReview = async (decision: "approve" | "reject") => {
+    if (!reviewTarget) return;
+    if (decision === "reject" && !rejectReason.trim()) {
+      toast("A rejection reason is required", "error");
+      return;
+    }
+    const res = await fetch(`/api/v1/organizations/${reviewTarget.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${user?.authToken ?? ""}`,
       },
-      body: JSON.stringify({ decision }),
+      body: JSON.stringify({
+        decision,
+        note: rejectReason.trim() || undefined,
+        checklist: {
+          businessRegistrationVerified: !!checklist.businessRegistrationVerified,
+          contactDetailsConfirmed: !!checklist.contactDetailsConfirmed,
+          kycDocumentsReviewed: !!checklist.kycDocumentsReviewed,
+        },
+      }),
     });
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -107,8 +156,87 @@ export default function OrganizationsPage() {
       return;
     }
     const json = (await res.json()) as { data: OrgRow };
-    setOrgs((items) => items.map((o) => (o.id === orgId ? { ...o, status: json.data.status } : o)));
+    setOrgs((items) => items.map((o) => (o.id === reviewTarget.id ? { ...o, ...json.data } : o)));
+    setReviewTarget(null);
     toast(decision === "approve" ? "Organization approved" : "Organization rejected", "success");
+  };
+
+  const reapply = async (orgId: string) => {
+    const res = await fetch(`/api/v1/organizations/${orgId}/reapply`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      toast(j.error ?? "Failed to resubmit", "error");
+      return;
+    }
+    const json = (await res.json()) as { data: OrgRow };
+    setOrgs((items) => items.map((o) => (o.id === orgId ? { ...o, ...json.data } : o)));
+    toast("Resubmitted for review", "success");
+  };
+
+  const openEdit = (org: OrgRow) => {
+    setEditTarget(org);
+    setEditForm({
+      name: org.name,
+      email: org.email,
+      phone: org.phone ?? "",
+      kraPin: org.kraPin ?? "",
+      bankPayoutAccount: org.bankPayoutAccount ?? "",
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editTarget) return;
+    const res = await fetch(`/api/v1/organizations/${editTarget.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken ?? ""}` },
+      body: JSON.stringify(editForm),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      toast(j.error ?? "Failed to save changes", "error");
+      return;
+    }
+    const json = (await res.json()) as { data: OrgRow };
+    setOrgs((items) => items.map((o) => (o.id === editTarget.id ? { ...o, ...json.data } : o)));
+    setEditTarget(null);
+    toast("Organization updated", "success");
+  };
+
+  const submitDeactivation = async (action: "activate" | "deactivate") => {
+    if (!deactivateTarget) return;
+    if (action === "deactivate" && !deactivateReason.trim()) {
+      toast("A reason is required to deactivate", "error");
+      return;
+    }
+    const res = await fetch(`/api/v1/organizations/${deactivateTarget.id}/activation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken ?? ""}` },
+      body: JSON.stringify({ action, reason: deactivateReason.trim() || undefined }),
+    });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      toast(j.error ?? "Failed", "error");
+      return;
+    }
+    const json = (await res.json()) as { data: OrgRow };
+    setOrgs((items) => items.map((o) => (o.id === deactivateTarget.id ? { ...o, ...json.data } : o)));
+    setDeactivateTarget(null);
+    setDeactivateReason("");
+    toast(action === "activate" ? "Organization activated" : "Organization deactivated", "success");
+  };
+
+  const openAudit = async (orgId: string) => {
+    setAuditTarget(orgId);
+    const res = await fetch(`/api/v1/audit-logs?resourceType=Organization&resourceId=${orgId}`, {
+      headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
+    });
+    if (res.ok) {
+      const json = (await res.json()) as { data: AuditRow[] };
+      setAuditRows(json.data);
+    }
   };
 
   const addBranch = async (orgId: string) => {
@@ -146,11 +274,19 @@ export default function OrganizationsPage() {
         </Button>
       </div>
 
+      <div className="rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-xs text-sky-800">
+        <strong>Ownership model:</strong> Admins and Super Admins can create organizations here. Landlords and
+        agencies can also self-register from the public registration flow. Landlord/independent-manager organizations
+        become active immediately; agency organizations enter pending review and cannot operate until Super Admin
+        approval. Only a Super Admin can approve, reject, activate, or deactivate an organization. Organization owners
+        can maintain their own contact, tax, and payout details.
+      </div>
+
       <Modal
         open={modalOpen}
         onOpenChange={setModalOpen}
         title="Create organization"
-        description="Add a new tenant organization to Secure Living."
+        description="Add a new organization. Agency organizations are created in Pending Review until Super Admin approval."
       >
         <div className="space-y-4">
           <div>
@@ -231,26 +367,54 @@ export default function OrganizationsPage() {
                 <Badge variant="neutral">{org.usersCount} users</Badge>
                 <Badge
                   variant={
-                    org.status === "pending_review" ? "warning" : org.status === "rejected" ? "error" : "success"
+                    org.status === "pending_review" ? "warning"
+                    : org.status === "rejected" || org.status === "inactive" ? "error"
+                    : "success"
                   }
                 >
                   {org.status === "pending_review" ? "Pending Review" : org.status}
                 </Badge>
-                {org.status === "pending_review" && (
-                  <div className="flex shrink-0 gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button type="button" size="sm" onClick={() => reviewOrg(org.id, "approve")}>
-                      Approve
+                <div className="flex shrink-0 gap-2" onClick={(e) => e.stopPropagation()}>
+                  {isSuperAdmin && org.status === "pending_review" && (
+                    <Button type="button" size="sm" onClick={() => openReview(org)}>
+                      Review
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => reviewOrg(org.id, "reject")}>
-                      Reject
+                  )}
+                  {org.status === "rejected" && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => reapply(org.id)}>
+                      Resubmit
                     </Button>
-                  </div>
-                )}
+                  )}
+                  {isSuperAdmin && (org.status === "active" || org.status === "inactive") && (
+                    <Button type="button" size="sm" variant="outline" onClick={() => setDeactivateTarget(org)}>
+                      {org.status === "active" ? "Deactivate" : "Activate"}
+                    </Button>
+                  )}
+                  <Button type="button" size="sm" variant="ghost" onClick={() => openEdit(org)}>
+                    Edit
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={() => void openAudit(org.id)}>
+                    Audit Trail
+                  </Button>
+                </div>
               </button>
               {org.status === "pending_review" && (
                 <p className="border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-xs text-amber-800">
-                  This {org.type.toLowerCase()} organization self-registered and is awaiting Super Admin compliance
-                  review before it can operate on the platform.
+                  Operations locked: this {org.type.toLowerCase()} organization is awaiting Super Admin compliance
+                  review and will not receive operational permissions until approved.
+                  {(org.reapplicationCount ?? 0) > 0 && ` (Resubmitted ${org.reapplicationCount}×)`}
+                  {!isSuperAdmin && " Only a Super Admin can review it."}
+                </p>
+              )}
+              {org.status === "rejected" && org.rejectionReason && (
+                <p className="border-b border-red-100 bg-red-50/60 px-4 py-2 text-xs text-red-800">
+                  Rejected: {org.rejectionReason}
+                </p>
+              )}
+              {org.status === "inactive" && org.deactivationReason && (
+                <p className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-600">
+                  Operations locked: this organization is inactive and its users will not receive operational
+                  permissions. Reason: {org.deactivationReason}
                 </p>
               )}
               {expanded === org.id ? (
@@ -297,6 +461,116 @@ export default function OrganizationsPage() {
           </Card>
         ))}
       </div>
+
+      {/* Approval Checklist / Reject Modal */}
+      <Modal open={!!reviewTarget} onOpenChange={(open) => { if (!open) setReviewTarget(null); }} title={`Review ${reviewTarget?.name ?? ""}`}>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-brand-navy">Approval checklist</p>
+            {CHECKLIST_ITEMS.map((item) => (
+              <label key={item.key} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={!!checklist[item.key]}
+                  onChange={(e) => setChecklist((c) => ({ ...c, [item.key]: e.target.checked }))}
+                />
+                {item.label}
+              </label>
+            ))}
+          </div>
+          <div>
+            <label className="text-sm font-medium">Rejection reason (required if rejecting)</label>
+            <textarea
+              className="mt-1 min-h-20 w-full rounded-xl border border-surface-border px-3 py-2 text-sm"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Explain what's missing or incorrect…"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" className="flex-1 text-red-600 hover:bg-red-50" onClick={() => void submitReview("reject")}>
+              Reject
+            </Button>
+            <Button type="button" className="flex-1" onClick={() => void submitReview("approve")}>
+              Approve
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Organization Modal */}
+      <Modal open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }} title={`Edit ${editTarget?.name ?? ""}`}>
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm font-medium">Name</label>
+            <input className="mt-1 w-full rounded-xl border border-surface-border px-3 py-2 text-sm" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Email</label>
+            <input type="email" className="mt-1 w-full rounded-xl border border-surface-border px-3 py-2 text-sm" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Phone</label>
+            <input className="mt-1 w-full rounded-xl border border-surface-border px-3 py-2 text-sm" value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">KRA PIN</label>
+            <input className="mt-1 w-full rounded-xl border border-surface-border px-3 py-2 text-sm" value={editForm.kraPin} onChange={(e) => setEditForm((f) => ({ ...f, kraPin: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Bank Payout Account</label>
+            <input className="mt-1 w-full rounded-xl border border-surface-border px-3 py-2 text-sm" value={editForm.bankPayoutAccount} onChange={(e) => setEditForm((f) => ({ ...f, bankPayoutAccount: e.target.value }))} />
+          </div>
+          <Button type="button" className="w-full" onClick={() => void saveEdit()}>Save Changes</Button>
+        </div>
+      </Modal>
+
+      {/* Activate/Deactivate Modal */}
+      <Modal
+        open={!!deactivateTarget}
+        onOpenChange={(open) => { if (!open) { setDeactivateTarget(null); setDeactivateReason(""); } }}
+        title={deactivateTarget?.status === "active" ? "Deactivate Organization" : "Activate Organization"}
+      >
+        <div className="space-y-4">
+          {deactivateTarget?.status === "active" ? (
+            <>
+              <p className="text-sm text-slate-500">A reason is required — this will suspend the organization&apos;s ability to operate on the platform.</p>
+              <textarea
+                className="min-h-20 w-full rounded-xl border border-surface-border px-3 py-2 text-sm"
+                value={deactivateReason}
+                onChange={(e) => setDeactivateReason(e.target.value)}
+                placeholder="Reason for deactivation…"
+              />
+              <Button type="button" variant="outline" className="w-full text-red-600 hover:bg-red-50" onClick={() => void submitDeactivation("deactivate")}>
+                Confirm Deactivation
+              </Button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500">This will restore the organization&apos;s ability to operate on the platform.</p>
+              <Button type="button" className="w-full" onClick={() => void submitDeactivation("activate")}>
+                Confirm Activation
+              </Button>
+            </>
+          )}
+        </div>
+      </Modal>
+
+      {/* Audit Trail Modal */}
+      <Modal open={!!auditTarget} onOpenChange={(open) => { if (!open) setAuditTarget(null); }} title="Audit Trail">
+        <div className="max-h-96 space-y-2 overflow-y-auto">
+          {auditRows.length === 0 ? (
+            <p className="text-sm text-slate-400">No audit history yet for this organization.</p>
+          ) : (
+            auditRows.map((row) => (
+              <div key={row.id} className="rounded-lg border border-slate-100 px-3 py-2 text-xs">
+                <p className="font-semibold text-slate-700">{row.action.replace(/_/g, " ")}</p>
+                <p className="text-slate-400">{new Date(row.timestamp).toLocaleString()} · {row.userId.slice(0, 8)}…</p>
+              </div>
+            ))
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string; appId: string } };
 
@@ -36,6 +37,29 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
       ...(parsed.data.adminNotes !== undefined && { adminNotes: parsed.data.adminNotes }),
     },
   });
+
+  const decisionCopy: Record<string, { title: string; severity: "info" | "warning" }> = {
+    SHORTLISTED: { title: "Your application was shortlisted", severity: "info" },
+    ACCEPTED: { title: "Your application was accepted", severity: "info" },
+    REJECTED: { title: "Your application was not successful", severity: "warning" },
+    REVIEWING: { title: "More information requested for your application", severity: "warning" },
+  };
+  const copy = decisionCopy[parsed.data.status];
+  if (copy) {
+    await notify({
+      roles: [],
+      userIds: [application.applicantId],
+      type: "application.decision",
+      severity: copy.severity,
+      title: copy.title,
+      message: parsed.data.adminNotes?.trim()
+        ? parsed.data.adminNotes.trim()
+        : `Status updated to ${parsed.data.status.toLowerCase()}.`,
+      resourceType: "RentalApplication",
+      resourceId: application.id,
+      link: `/tenant/apply/${application.listingId}`,
+    });
+  }
 
   return Response.json({ data: updated });
 });

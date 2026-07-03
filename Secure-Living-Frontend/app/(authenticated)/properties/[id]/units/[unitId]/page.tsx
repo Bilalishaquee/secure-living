@@ -716,7 +716,7 @@ export default function UnitDetailPage({ params }: Props) {
               <h2 className="font-semibold text-brand-navy">Recent Maintenance</h2>
             </div>
             <Button size="sm" variant="outline" asChild>
-              <Link href="/maintenance">View all</Link>
+              <Link href="/service-requests">View all</Link>
             </Button>
           </div>
           {requests.length > 0 ? (

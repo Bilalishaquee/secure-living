@@ -5,6 +5,7 @@ import { appendAudit } from "@/lib/server/audit";
 import { parseBody, requireActor, requirePermission, requireScope, jsonError, withErrorHandler } from "@/lib/server/http";
 import { canSrTransition, SR_EVENT_MAP } from "@/lib/server/service-fsm";
 import { writeSrTransition, writeOutboxEvent } from "@/lib/server/sr-helpers";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -65,6 +66,19 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     branchId: updated.branchId,
     beforeJson: { srStatus: existing.srStatus },
     afterJson: { srStatus: updated.srStatus, blockedReasonType: parsed.data.blockedReasonType },
+  });
+
+  await notify({
+    organizationId: updated.organizationId,
+    branchId: updated.branchId,
+    excludeUserId: actor.userId,
+    type: "service_request.blocked",
+    severity: "warning",
+    title: "Service request blocked",
+    message: `"${updated.title}" was blocked: ${parsed.data.blockedReasonType}${parsed.data.blockedReason ? ` — ${parsed.data.blockedReason}` : ""}`,
+    resourceType: "ServiceRequest",
+    resourceId: updated.id,
+    link: `/service-requests/${updated.id}`,
   });
 
   return Response.json({ data: updated });

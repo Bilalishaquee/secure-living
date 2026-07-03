@@ -6,12 +6,27 @@ import { prisma } from "@/lib/server/db";
 import { parseBody, withErrorHandler, jsonError } from "@/lib/server/http";
 import { actorFromAuthorizationHeader } from "@/lib/server/authz";
 import { missingRequiredFields } from "@/lib/server/application-requirements";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
 const applySchema = z.object({ message: z.string().optional() });
 
 const uploadRoot = path.join(process.cwd(), "uploads", "application-documents");
+
+// Lets a logged-in tenant check whether they already have an application on this
+// listing (and its status/adminNotes) so the apply page can offer Resubmit instead of
+// a duplicate fresh application when status is REVIEWING.
+export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
+  const actor = actorFromAuthorizationHeader(req.headers.get("authorization"));
+  if (!actor) return jsonError(401, "Login required");
+
+  const application = await prisma.rentalApplication.findFirst({
+    where: { listingId: params.id, applicantId: actor.userId },
+    orderBy: { submittedAt: "desc" },
+  });
+  return Response.json({ data: application });
+});
 
 // Update-2.md: "the tenants submit the requirements and the form (optionally)" — a
 // landlord's ApplicationCustomField list mixes required-document uploads (employment
@@ -34,6 +49,17 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     if (!parsed.ok) return parsed.response;
     const application = await prisma.rentalApplication.create({
       data: { listingId: params.id, applicantId, message: parsed.data.message, status: "PENDING" },
+    });
+    await notify({
+      organizationId: listing.organizationId,
+      excludeUserId: applicantId === "anonymous" ? undefined : applicantId,
+      type: "application.received",
+      severity: "info",
+      title: "New rental application received",
+      message: `A new application was submitted for ${listing.title}.`,
+      resourceType: "RentalApplication",
+      resourceId: application.id,
+      link: `/listings/${listing.id}`,
     });
     return Response.json({ data: application }, { status: 201 });
   }
@@ -101,6 +127,18 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
       });
     }
   }
+
+  await notify({
+    organizationId: listing.organizationId,
+    excludeUserId: applicantId === "anonymous" ? undefined : applicantId,
+    type: "application.received",
+    severity: "info",
+    title: "New rental application received",
+    message: `A new application was submitted for ${listing.title}.`,
+    resourceType: "RentalApplication",
+    resourceId: application.id,
+    link: `/listings/${listing.id}`,
+  });
 
   return Response.json({ data: application }, { status: 201 });
 });

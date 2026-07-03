@@ -3,6 +3,7 @@ import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 import { DEDUCTION_CATEGORIES, missingEvidence, hasSignedChecklistPair } from "@/lib/server/evidence";
 import { appendAudit } from "@/lib/server/audit";
+import { notify } from "@/lib/server/notify";
 
 type Ctx = { params: { id: string } };
 
@@ -100,6 +101,22 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
     orgId: notice.organizationId,
     afterJson: { deductionCount: inspection.deductions.length, totalAmount: inspection.deductions.reduce((s, d) => s + d.amount, 0) },
   });
+
+  if (inspection.deductions.length > 0) {
+    const total = inspection.deductions.reduce((s, d) => s + d.amount, 0);
+    await notify({
+      roles: [],
+      userIds: [notice.tenantId],
+      excludeUserId: actor.userId,
+      type: "deduction.proposed",
+      severity: "warning",
+      title: "Deposit deductions proposed for your move-out",
+      message: `${inspection.deductions.length} deduction${inspection.deductions.length !== 1 ? "s" : ""} totalling KES ${total.toLocaleString()} — review and respond.`,
+      resourceType: "MoveOutInspection",
+      resourceId: inspection.id,
+      link: "/tenant/lease",
+    });
+  }
 
   return Response.json({ data: inspection });
 });

@@ -14,7 +14,7 @@ export default function AdminManualPage() {
           ← All manuals
         </Link>
       </p>
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-brand-navy">
+      <h1 className="font-display text-3xl font-semibold text-brand-navy">
         Admin manual
       </h1>
       <p className="text-[var(--text-secondary)]">
