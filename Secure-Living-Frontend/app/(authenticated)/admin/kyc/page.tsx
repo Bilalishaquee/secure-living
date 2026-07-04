@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldCheck, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, Eye, ShieldCheck, XCircle } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
@@ -84,6 +84,25 @@ export default function AdminKycReviewPage() {
     }
   }
 
+  async function viewDocument(doc: KycDoc) {
+    try {
+      const res = await fetch(`/api/v1/kyc/documents/${doc.id}/view`, {
+        headers: { Authorization: `Bearer ${user?.authToken ?? ""}` },
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast(j.error ?? "Document is not available", "error");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast("Could not open document", "error");
+    }
+  }
+
   const pendingCount = docs.filter((d) => d.status === "pending").length;
 
   return (
@@ -140,6 +159,9 @@ export default function AdminKycReviewPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={STATUS_BADGE[d.status] ?? "neutral"}>{d.status}</Badge>
+                  <Button size="sm" variant="outline" onClick={() => viewDocument(d)}>
+                    <Eye className="mr-1.5 h-4 w-4" /> View document
+                  </Button>
                   {d.status === "pending" && (
                     <>
                       <Button size="sm" onClick={() => review(d.id, "approve")} disabled={busyId === d.id}>
