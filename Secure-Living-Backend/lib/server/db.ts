@@ -1,13 +1,22 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaNeon } from "@prisma/adapter-neon";
-import { Pool } from "@neondatabase/serverless";
+import { neonConfig, Pool } from "@neondatabase/serverless";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+function shouldUseNeonAdapter() {
+  const databaseUrl = process.env.DATABASE_URL ?? "";
+  return process.env.DATABASE_DRIVER === "neon" || databaseUrl.includes(".neon.tech");
+}
+
 function createPrismaClient(): PrismaClient {
-  // Production (Vercel): use Neon WebSocket adapter — handles serverless cold starts
-  // Development: standard TCP PrismaClient — works directly from local machine
-  if (process.env.NODE_ENV === "production") {
+  // Neon URLs use the serverless adapter in every environment so local dev does
+  // not depend on direct PostgreSQL TCP access to Neon's pooler.
+  if (shouldUseNeonAdapter()) {
+    if (typeof WebSocket !== "undefined") {
+      neonConfig.webSocketConstructor = WebSocket;
+    }
+    neonConfig.poolQueryViaFetch = true;
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
     const adapter = new PrismaNeon(pool);
     return new PrismaClient({ adapter, log: ["error"] });
