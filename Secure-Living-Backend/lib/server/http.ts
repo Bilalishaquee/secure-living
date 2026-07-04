@@ -14,6 +14,14 @@ function logError(method: string, pathname: string, err: Error) {
   if (process.env.NODE_ENV !== "production") console.error(err.stack);
 }
 
+function isDatabaseConnectivityError(err: Error) {
+  return (
+    err.name === "PrismaClientInitializationError" ||
+    err.message.includes("Can't reach database server") ||
+    err.message.includes("Timed out fetching a new connection")
+  );
+}
+
 export function withErrorHandler(fn: RouteHandler): RouteHandler {
   return async (req, ctx) => {
     try {
@@ -21,6 +29,15 @@ export function withErrorHandler(fn: RouteHandler): RouteHandler {
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e));
       logError(req.method, new URL(req.url).pathname, err);
+      if (isDatabaseConnectivityError(err)) {
+        return Response.json(
+          {
+            error: "Database unavailable",
+            detail: "The API cannot reach the configured database. Check DATABASE_URL, database status, VPN/firewall, or use a reachable local Postgres database.",
+          },
+          { status: 503 }
+        );
+      }
       return Response.json(
         {
           error: "Internal server error",

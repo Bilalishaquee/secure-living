@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -15,7 +16,9 @@ import {
   MapPin,
   Phone,
   Ruler,
+  Search,
   TrendingUp,
+  UserCheck,
   Wrench,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
@@ -156,6 +159,7 @@ const UNIT_CATEGORIES = ["residential", "commercial", "industrial"];
 export default function UnitDetailPage({ params }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   const [unit, setUnit] = useState<UnitDetail | null>(null);
   const [lease, setLease] = useState<LeaseDetail | null>(null);
@@ -172,6 +176,22 @@ export default function UnitDetailPage({ params }: Props) {
   const [rentLoading, setRentLoading] = useState(false);
   const [showCreateLease, setShowCreateLease] = useState(false);
   const [leaseForm, setLeaseForm] = useState({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" });
+  const [tenantQuery, setTenantQuery] = useState("");
+  const [tenantOptions, setTenantOptions] = useState<Array<{ id: string; name: string; email: string; status?: string }>>([]);
+  const [tenantFocus, setTenantFocus] = useState(false);
+
+  useEffect(() => {
+    if (!tenantFocus || !user?.authToken || tenantQuery.trim().length < 2) { setTenantOptions([]); return; }
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/v1/users?q=${encodeURIComponent(tenantQuery)}&limit=10`, { headers: { Authorization: `Bearer ${user.authToken}` } });
+      if (res.ok) {
+        const json = (await res.json()) as { data: Array<{ id: string; name: string; email: string; status?: string }> };
+        setTenantOptions(json.data ?? []);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantQuery, tenantFocus, user?.authToken]);
   const [showNewSR, setShowNewSR] = useState(false);
   const [srForm, setSrForm] = useState({ title: "", description: "", priority: "medium", category: "other" });
 
@@ -343,10 +363,14 @@ export default function UnitDetailPage({ params }: Props) {
         toast(err.error ?? "Failed to create lease", "error");
         return;
       }
-      toast("Lease created successfully", "success");
+      const j = await res.json() as { data: { id: string } };
+      toast("Lease created successfully. Redirecting to lease detail…", "success");
       setShowCreateLease(false);
       setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" });
-      await load();
+      setTenantQuery("");
+      setTenantOptions([]);
+      setTenantFocus(false);
+      router.push(`/leasing/${j.data.id}`);
     } finally {
       setSaving(false);
     }
@@ -366,6 +390,7 @@ export default function UnitDetailPage({ params }: Props) {
           branchId: unit.branchId,
           propertyId: unit.propertyId,
           unitId: unit.id,
+          tenantUserId: unit.currentTenantId ?? undefined,
           title: srForm.title,
           description: srForm.description || srForm.title,
           type: "maintenance",
@@ -392,6 +417,12 @@ export default function UnitDetailPage({ params }: Props) {
 
   const statusColor = STATUS_COLORS[unit.status] ?? "bg-slate-100 text-slate-700 border-slate-200";
   const isVacant = unit.status === "vacant" || unit.status === "unavailable";
+  const maintenanceHistoryParams = new URLSearchParams({
+    unitId: unit.id,
+    propertyId: unit.propertyId,
+  });
+  if (unit.currentTenantId) maintenanceHistoryParams.set("tenantUserId", unit.currentTenantId);
+  const maintenanceHistoryHref = `/service-requests?${maintenanceHistoryParams.toString()}`;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
@@ -619,7 +650,7 @@ export default function UnitDetailPage({ params }: Props) {
                 type="button"
                 className="mt-4"
                 size="sm"
-                onClick={() => { setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: unit.rentAmountKes?.toString() ?? "", depositAmount: unit.depositAmountKes?.toString() ?? "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" }); setShowCreateLease(true); }}
+                onClick={() => { setLeaseForm({ tenantUserId: "", leaseType: "fixed_term", startDate: "", endDate: "", rentAmount: unit.rentAmountKes?.toString() ?? "", depositAmount: unit.depositAmountKes?.toString() ?? "", depositModel: "LANDLORD_RESERVE", paymentFrequency: "monthly" }); setTenantQuery(""); setTenantOptions([]); setTenantFocus(false); setShowCreateLease(true); }}
               >
                 Create Lease
               </Button>
@@ -716,7 +747,7 @@ export default function UnitDetailPage({ params }: Props) {
               <h2 className="font-semibold text-brand-navy">Recent Maintenance</h2>
             </div>
             <Button size="sm" variant="outline" asChild>
-              <Link href="/service-requests">View all</Link>
+              <Link href={maintenanceHistoryHref}>{unit.currentTenantId ? "View tenant history" : "View unit history"}</Link>
             </Button>
           </div>
           {requests.length > 0 ? (
@@ -777,20 +808,51 @@ export default function UnitDetailPage({ params }: Props) {
       {/* Create Lease Modal */}
       <Modal
         open={showCreateLease}
-        onOpenChange={(open) => { if (!open) setShowCreateLease(false); }}
+        onOpenChange={(open) => { if (!open) { setShowCreateLease(false); setTenantFocus(false); } }}
         title={`Create Lease — Unit ${unit.unitNumber}`}
       >
         <form onSubmit={(e) => { void handleCreateLease(e); }} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tenant User ID <span className="text-red-500">*</span></label>
-            <input
-              required
-              value={leaseForm.tenantUserId}
-              onChange={(e) => setLeaseForm((f) => ({ ...f, tenantUserId: e.target.value }))}
-              placeholder="Paste tenant's user ID"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40 font-mono"
-            />
-            <p className="mt-1 text-[11px] text-[var(--text-muted)]">Find the ID from Tenants → View profile</p>
+            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Tenant <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                placeholder="Search tenant by name, email, phone, or ID"
+                value={tenantQuery}
+                onChange={(e) => setTenantQuery(e.target.value)}
+                onFocus={() => setTenantFocus(true)}
+                onBlur={() => setTimeout(() => setTenantFocus(false), 250)}
+                autoComplete="off"
+              />
+              {tenantFocus && tenantQuery.length >= 2 && tenantOptions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {tenantOptions.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-blue-50 ${leaseForm.tenantUserId === t.id ? "bg-blue-50 text-blue-700" : ""}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setLeaseForm((f) => ({ ...f, tenantUserId: t.id })); setTenantQuery(`${t.name} - ${t.email}`); setTenantOptions([]); setTenantFocus(false); }}
+                    >
+                      <UserCheck className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-medium truncate">{t.name}</span>
+                        <span className="block text-xs text-slate-500 truncate">{t.email}</span>
+                      </div>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.status === "active" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                        {t.status ?? "unknown"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tenantFocus && tenantQuery.length >= 2 && tenantOptions.length === 0 && (
+                <p className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-lg">
+                  No users found.
+                </p>
+              )}
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -867,7 +929,7 @@ export default function UnitDetailPage({ params }: Props) {
             <p className="mt-1 text-[11px] text-[var(--text-muted)]">Escrow model shows the Escrow Badge and enables top-up requests.</p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => setShowCreateLease(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => { setShowCreateLease(false); setTenantFocus(false); }}>Cancel</Button>
             <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Lease"}</Button>
           </div>
         </form>

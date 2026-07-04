@@ -38,6 +38,10 @@ type Lease = {
   documentUploadedAt: string | null;
   applicationId: string | null;
   tenantSignedAt: string | null;
+  tenantName: string | null;
+  tenantEmail: string | null;
+  propertyName: string | null;
+  unitNumber: string | null;
   declinedAt: string | null;
   declineReason: string | null;
   renewalRequestedAt: string | null;
@@ -352,6 +356,11 @@ export default function LeaseDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {lease.status === "draft" && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          <strong>This lease is in draft.</strong> It has not been sent to the tenant yet. Click <strong>&quot;Change Status&quot;</strong> above and select <strong>&quot;offered&quot;</strong> to send it to the tenant for review and signing.
+        </div>
+      )}
       {lease.status === "offered" && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-800">
           Awaiting the tenant&apos;s signature. They can review, ask questions, accept & sign, or decline this offer from their portal.
@@ -408,14 +417,17 @@ export default function LeaseDetailPage({ params }: PageProps) {
           <CardContent className="space-y-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Tenant</span>
-              <Link href={`/tenants/${lease.tenantUserId}`} className="font-medium text-blue-600 hover:underline">
-                {lease.tenantUserId.slice(0, 16)}…
-              </Link>
+              <div className="text-right">
+                <Link href={`/tenants/${lease.tenantUserId}`} className="font-medium text-blue-600 hover:underline">
+                  {lease.tenantName ?? lease.tenantUserId.slice(0, 16) + "…"}
+                </Link>
+                {lease.tenantEmail && <p className="text-xs text-slate-500">{lease.tenantEmail}</p>}
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Property</span>
               <Link href={`/properties/${lease.propertyId}`} className="font-medium text-blue-600 hover:underline">
-                {lease.propertyId.slice(0, 16)}…
+                {lease.propertyName ?? lease.propertyId.slice(0, 16) + "…"}
               </Link>
             </div>
             <div className="flex items-center justify-between">
@@ -424,7 +436,7 @@ export default function LeaseDetailPage({ params }: PageProps) {
                 href={`/properties/${lease.propertyId}/units/${lease.unitId}`}
                 className="font-medium text-blue-600 hover:underline"
               >
-                {lease.unitId.slice(0, 16)}…
+                {lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitId.slice(0, 16) + "…"}
               </Link>
             </div>
           </CardContent>

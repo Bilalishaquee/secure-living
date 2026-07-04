@@ -992,7 +992,7 @@ model Lease {
   organizationId   String
   branchId         String
   propertyId       String
-  unitId           String
+  unitId           String?
   tenantUserId     String
   leaseType        String
   rentAmount       Float

@@ -75,19 +75,23 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (!organizationId) return jsonError(400, "No organization");
 
   const existing = await prisma.applicationCustomField.findMany({ where: { organizationId, isActive: true } });
+  const existingLabels = new Set(existing.map((field) => field.fieldLabel.trim().toLowerCase()));
+  const fieldsToCreate = preset.fields.filter((field) => !existingLabels.has(field.fieldLabel.trim().toLowerCase()));
   const startOrder = existing.length;
 
-  await prisma.applicationCustomField.createMany({
-    data: preset.fields.map((f, idx) => ({
-      id: randomUUID(),
-      organizationId,
-      fieldLabel: f.fieldLabel,
-      fieldType: f.fieldType,
-      fieldOptions: f.fieldOptions ?? [],
-      isRequired: f.isRequired ?? false,
-      displayOrder: startOrder + idx,
-    })),
-  });
+  if (fieldsToCreate.length > 0) {
+    await prisma.applicationCustomField.createMany({
+      data: fieldsToCreate.map((f, idx) => ({
+        id: randomUUID(),
+        organizationId,
+        fieldLabel: f.fieldLabel,
+        fieldType: f.fieldType,
+        fieldOptions: f.fieldOptions ?? [],
+        isRequired: f.isRequired ?? false,
+        displayOrder: startOrder + idx,
+      })),
+    });
+  }
 
   const rows = await prisma.applicationCustomField.findMany({
     where: { organizationId, isActive: true },

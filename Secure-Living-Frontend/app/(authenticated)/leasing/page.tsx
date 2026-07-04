@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FilePlus, FileText, Home, Calendar, DollarSign, Search } from "lucide-react";
+import { FilePlus, FileText, Home, Calendar, DollarSign, Search, UserCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { formatKes } from "@/lib/utils";
@@ -32,6 +32,10 @@ type Lease = {
   startDate: string;
   endDate: string;
   createdAt: string;
+  tenantName: string | null;
+  tenantEmail: string | null;
+  propertyName: string | null;
+  unitNumber: string | null;
 };
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "neutral" | "info"> = {
@@ -59,7 +63,22 @@ export default function LeasingPage() {
   const [properties, setProperties] = useState<Array<{ id: string; name: string; propertyCode?: string | null }>>([]);
   const [units, setUnits] = useState<Array<{ id: string; unitNumber: string; status: string }>>([]);
   const [tenantQuery, setTenantQuery] = useState("");
-  const [tenantOptions, setTenantOptions] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [tenantOptions, setTenantOptions] = useState<Array<{ id: string; name: string; email: string; status?: string }>>([]);
+  const [tenantFocus, setTenantFocus] = useState(false);
+  const tenantWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tenantFocus || !user?.authToken || tenantQuery.trim().length < 2) { setTenantOptions([]); return; }
+    const timer = setTimeout(async () => {
+      const res = await fetch(`/api/v1/users?q=${encodeURIComponent(tenantQuery)}&limit=10`, { headers: authHeader() });
+      if (res.ok) {
+        const json = (await res.json()) as { data: Array<{ id: string; name: string; email: string; status?: string }> };
+        setTenantOptions(json.data ?? []);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantQuery, tenantFocus, user?.authToken]);
 
   const [form, setForm] = useState({
     propertyId: "",
@@ -109,16 +128,6 @@ export default function LeasingPage() {
     }
   }
 
-  async function searchTenants(q: string) {
-    setTenantQuery(q);
-    if (q.trim().length < 2) { setTenantOptions([]); return; }
-    const res = await fetch(`/api/v1/users?q=${encodeURIComponent(q)}&limit=10`, { headers: authHeader() });
-    if (res.ok) {
-      const json = (await res.json()) as { data: Array<{ id: string; name: string; email: string }> };
-      setTenantOptions(json.data ?? []);
-    }
-  }
-
   async function handleCreate() {
     if (!user) return;
     setSaving(true);
@@ -126,11 +135,11 @@ export default function LeasingPage() {
       const res = await fetch("/api/v1/leases", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeader() },
-        body: JSON.stringify({
+          body: JSON.stringify({
           organizationId: user.organizationId,
           branchId: user.branchId,
           propertyId: form.propertyId,
-          unitId: form.unitId,
+          ...(form.unitId ? { unitId: form.unitId } : {}),
           tenantUserId: form.tenantUserId,
           leaseType: form.leaseType,
           rentAmount: parseFloat(form.rentAmount),
@@ -142,13 +151,15 @@ export default function LeasingPage() {
         }),
       });
       if (res.ok) {
-        toast("Lease created successfully.", "success");
+        const j = (await res.json()) as { data: { id: string } };
+        toast("Lease created successfully. Redirecting to lease detail…", "success");
         setShowCreate(false);
         setForm({ propertyId: "", unitId: "", tenantUserId: "", leaseType: "fixed_term", rentAmount: "", depositAmount: "", depositModel: "LANDLORD_RESERVE", startDate: "", endDate: "", paymentFrequency: "monthly" });
         setTenantQuery("");
         setTenantOptions([]);
+        setTenantFocus(false);
         setUnits([]);
-        await loadLeases();
+        router.push(`/leasing/${j.data.id}`);
       } else {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         toast(err.error ?? "Failed to create lease.", "error");
@@ -182,9 +193,9 @@ export default function LeasingPage() {
       render: (r) => (
         <div>
           <Link href={`/properties/${r.propertyId}`} className="text-sm font-medium text-blue-600 hover:underline">
-            {r.propertyId.slice(0, 8)}…
+            {r.propertyName ?? r.propertyId.slice(0, 8) + "…"}
           </Link>
-          <p className="text-xs text-slate-400">{r.unitId.slice(0, 8)}…</p>
+          <p className="text-xs text-slate-400">{r.unitNumber ? `Unit ${r.unitNumber}` : r.unitId.slice(0, 8) + "…"}</p>
         </div>
       ),
     },
@@ -192,9 +203,12 @@ export default function LeasingPage() {
       key: "tenantUserId",
       header: "Tenant",
       render: (r) => (
-        <Link href={`/tenants/${r.tenantUserId}`} className="text-sm font-medium text-slate-700 hover:underline">
-          {r.tenantUserId.slice(0, 12)}…
-        </Link>
+        <div className="text-right">
+          <Link href={`/tenants/${r.tenantUserId}`} className="text-sm font-medium text-slate-700 hover:underline">
+            {r.tenantName ?? r.tenantUserId.slice(0, 12) + "…"}
+          </Link>
+          {r.tenantEmail && <p className="text-xs text-slate-400">{r.tenantEmail}</p>}
+        </div>
       ),
     },
     {
@@ -284,7 +298,7 @@ export default function LeasingPage() {
           <Button variant="outline" onClick={() => { setUploadSearch(""); setShowUploadPicker(true); }}>
             <FilePlus className="mr-1.5 h-4 w-4" /> Upload Lease
           </Button>
-          <Button onClick={() => { setShowCreate(true); void loadProperties(); }}>
+          <Button onClick={() => { setShowCreate(true); setTenantFocus(false); setTenantQuery(""); setTenantOptions([]); void loadProperties(); }}>
             <FilePlus className="mr-1.5 h-4 w-4" /> New Lease
           </Button>
         </div>
@@ -333,7 +347,7 @@ export default function LeasingPage() {
       </Card>
 
       {/* Create Lease Modal */}
-      <Modal open={showCreate} onOpenChange={setShowCreate} title="New Lease">
+      <Modal open={showCreate} onOpenChange={(open) => { if (!open) { setTenantFocus(false); setTenantQuery(""); setTenantOptions([]); } setShowCreate(open); }} title="New Lease">
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
@@ -354,18 +368,19 @@ export default function LeasingPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">Unit *</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Unit</label>
               <select
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
                 value={form.unitId}
                 onChange={(e) => setForm((f) => ({ ...f, unitId: e.target.value }))}
                 disabled={!form.propertyId}
               >
-                <option value="">Select unit...</option>
+                <option value="">None (property-level lease)</option>
                 {units.map((u) => (
                   <option key={u.id} value={u.id}>Unit {u.unitNumber} - {u.status}</option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-slate-500">Leave as "None" to create a lease for the entire property (no specific unit).</p>
             </div>
           </div>
 
@@ -384,29 +399,47 @@ export default function LeasingPage() {
             </p>
           </div>
 
-          <div>
+          <div ref={tenantWrapRef}>
             <label className="mb-1 block text-sm font-medium text-slate-700">Tenant *</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-              placeholder="Search tenant by name, email, phone, or ID"
-              value={tenantQuery}
-              onChange={(e) => { void searchTenants(e.target.value); }}
-            />
-            {tenantOptions.length > 0 && (
-              <div className="mt-2 max-h-44 overflow-auto rounded-lg border border-slate-200 bg-white">
-                {tenantOptions.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className={`block w-full px-3 py-2 text-left text-sm hover:bg-blue-50 ${form.tenantUserId === t.id ? "bg-blue-50 text-blue-700" : ""}`}
-                    onClick={() => { setForm((f) => ({ ...f, tenantUserId: t.id })); setTenantQuery(`${t.name} - ${t.email}`); setTenantOptions([]); }}
-                  >
-                    <span className="font-medium">{t.name}</span>
-                    <span className="ml-2 text-xs text-slate-500">{t.email}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/40"
+                placeholder="Search tenant by name, email, phone, or ID"
+                value={tenantQuery}
+                onChange={(e) => setTenantQuery(e.target.value)}
+                onFocus={() => setTenantFocus(true)}
+                onBlur={() => setTimeout(() => setTenantFocus(false), 250)}
+                autoComplete="off"
+              />
+              {tenantFocus && tenantQuery.length >= 2 && tenantOptions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {tenantOptions.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      className={`flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-blue-50 ${form.tenantUserId === t.id ? "bg-blue-50 text-blue-700" : ""}`}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { setForm((f) => ({ ...f, tenantUserId: t.id })); setTenantQuery(`${t.name} - ${t.email}`); setTenantOptions([]); setTenantFocus(false); }}
+                    >
+                      <UserCheck className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-medium truncate">{t.name}</span>
+                        <span className="block text-xs text-slate-500 truncate">{t.email}</span>
+                      </div>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${t.status === "active" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                        {t.status ?? "unknown"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {tenantFocus && tenantQuery.length >= 2 && tenantOptions.length === 0 && (
+                <p className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500 shadow-lg">
+                  No users found.
+                </p>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -481,10 +514,10 @@ export default function LeasingPage() {
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setTenantFocus(false); setTenantQuery(""); setTenantOptions([]); }}>Cancel</Button>
             <Button
               onClick={() => { void handleCreate(); }}
-              disabled={!form.propertyId || !form.unitId || !form.tenantUserId || !form.rentAmount || !form.startDate || !form.endDate || saving}
+              disabled={!form.propertyId || !form.tenantUserId || !form.rentAmount || !form.startDate || !form.endDate || saving}
             >
               {saving ? "Creating…" : "Create Lease"}
             </Button>

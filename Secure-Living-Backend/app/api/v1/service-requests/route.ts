@@ -87,6 +87,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   const srPriority = url.searchParams.get("srPriority") as SrPriority | null;
   const serviceMode = url.searchParams.get("serviceMode") as ServiceMode | null;
   const assignedToUserId = url.searchParams.get("assignedToUserId");
+  const tenantUserId = url.searchParams.get("tenantUserId");
   const unitId = url.searchParams.get("unitId");
   const propertyId = url.searchParams.get("propertyId");
   const shortStayBookingId = url.searchParams.get("shortStayBookingId");
@@ -112,6 +113,7 @@ export const GET = withErrorHandler(async (req: Request) => {
     ...(srPriority ? { srPriority } : {}),
     ...(serviceMode ? { serviceMode } : {}),
     ...(assignedToUserId ? { assignedToUserId } : {}),
+    ...(tenantUserId ? { tenantUserId } : {}),
     ...(unitId ? { unitId } : {}),
     ...(propertyId ? { propertyId } : {}),
     ...(shortStayBookingId ? { shortStayBookingId } : {}),

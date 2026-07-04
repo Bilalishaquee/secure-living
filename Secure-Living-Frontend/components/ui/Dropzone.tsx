@@ -11,7 +11,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 
-const ACCEPT = ".pdf,.jpg,.jpeg,.png,image/*,application/pdf";
+const ACCEPT =
+  ".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.gif,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 type DropzoneProps = {
   label: string;
@@ -101,7 +102,7 @@ export function Dropzone({ label, onFileSelect, className }: DropzoneProps) {
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-10 w-10 text-brand-blue" aria-hidden />
             <span className="text-sm text-[var(--text-secondary)]">
-              Drag and drop or click to upload (PDF, JPG, PNG)
+              Drag and drop or click to upload (PDF, Word, JPG, PNG, WEBP)
             </span>
           </div>
         ) : (

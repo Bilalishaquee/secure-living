@@ -14,12 +14,21 @@ export const POST = withErrorHandler(async (req: Request) => {
     role?: string;
     orgName?: string;
     orgCode?: string;
+    referralCode?: string;
   };
   if (!body.email || !body.password || !body.fullName) return jsonError(400, "Missing required fields");
   if (body.password.length < 8) return jsonError(400, "Password must be at least 8 characters");
 
   const existing = await prisma.appUser.findUnique({ where: { email: body.email.toLowerCase() } });
   if (existing) return jsonError(409, "Email already registered");
+
+  const normalizedReferralCode = body.referralCode?.trim().toUpperCase();
+  const referralCode = normalizedReferralCode
+    ? await prisma.referralCode.findUnique({ where: { code: normalizedReferralCode } })
+    : null;
+  if (normalizedReferralCode && (!referralCode || !referralCode.isActive)) {
+    return jsonError(400, "Referral link is invalid or no longer active");
+  }
 
   let orgId: string;
   let branchId: string;
@@ -91,6 +100,47 @@ export const POST = withErrorHandler(async (req: Request) => {
       branchId: branchId,
     },
   });
+
+  if (referralCode) {
+    const existingReferral = await prisma.referral.findFirst({
+      where: {
+        referralCodeId: referralCode.id,
+        OR: [{ referredEmail: user.email }, { referredUserId: user.id }],
+      },
+    });
+    const referral = existingReferral
+      ? await prisma.referral.update({
+          where: { id: existingReferral.id },
+          data: {
+            referredUserId: user.id,
+            referredEmail: user.email,
+            referredName: user.fullName,
+            status: existingReferral.status === "invited" ? "registered" : existingReferral.status,
+            acquisitionSource: "referral",
+          },
+        })
+      : await prisma.referral.create({
+          data: {
+            referralCodeId: referralCode.id,
+            referredUserId: user.id,
+            referredEmail: user.email,
+            referredName: user.fullName,
+            status: "registered",
+            acquisitionSource: "referral",
+            rewardType: referralCode.rewardType,
+            rewardValue: referralCode.rewardValue,
+            qualificationNote: "Registered through referral link",
+          },
+        });
+    await prisma.referralActivity.create({
+      data: {
+        referralId: referral.id,
+        actorUserId: user.id,
+        eventType: "registered",
+        note: "Account created from referral link",
+      },
+    });
+  }
 
   if (newlyCreatedOrg) {
     const isAgency = newlyCreatedOrg.status === "pending_review";

@@ -1,10 +1,7 @@
-import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/server/db";
 import { requireActor, requirePermission, jsonError , withErrorHandler } from "@/lib/server/http";
-
-const uploadRoot = path.join(process.cwd(), "uploads", "kyc");
+import { prepareUploadedDocument } from "@/lib/server/document-upload";
+import { notify } from "@/lib/server/notify";
 
 export const GET = withErrorHandler(async (req: Request) => {
   const actor = requireActor(req);
@@ -15,6 +12,22 @@ export const GET = withErrorHandler(async (req: Request) => {
       : { OR: [{ userId: actor.userId }, { organizationId: { in: actor.orgIds } }] },
     orderBy: { uploadedAt: "desc" },
     take: 500,
+    select: {
+      id: true,
+      userId: true,
+      organizationId: true,
+      branchId: true,
+      documentType: true,
+      fileName: true,
+      mimeType: true,
+      filePath: true,
+      fileSizeBytes: true,
+      status: true,
+      uploadedAt: true,
+      reviewedAt: true,
+      reviewedByUserId: true,
+      rejectionReason: true,
+    },
   });
   return Response.json({ data: rows });
 })
@@ -32,26 +45,68 @@ export const POST = withErrorHandler(async (req: Request) => {
   const file = form.get("file");
   if (!docType || !(file instanceof File)) return jsonError(400, "documentType and file are required");
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await mkdir(uploadRoot, { recursive: true });
-  const fileId = randomUUID();
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const savedPath = path.join(uploadRoot, `${fileId}-${safeName}`);
-  await writeFile(savedPath, bytes);
+  const prepared = await prepareUploadedDocument(file);
+  if (!prepared.ok) return jsonError(prepared.status, prepared.message);
+  const document = prepared.data;
 
   const row = await prisma.kycDocument.create({
     data: {
-      id: fileId,
+      id: document.id,
       userId: actor.userId,
       organizationId: organizationId || null,
       branchId: branchId || null,
       documentType: docType,
-      fileName: file.name,
-      mimeType: file.type || "application/octet-stream",
-      filePath: savedPath,
-      fileSizeBytes: bytes.byteLength,
+      fileName: document.fileName,
+      mimeType: document.mimeType,
+      filePath: document.storagePath,
+      fileBytes: document.fileBytes,
+      fileSizeBytes: document.fileSizeBytes,
       status: "pending",
     },
+    select: {
+      id: true,
+      userId: true,
+      organizationId: true,
+      branchId: true,
+      documentType: true,
+      fileName: true,
+      mimeType: true,
+      filePath: true,
+      fileSizeBytes: true,
+      status: true,
+      uploadedAt: true,
+      reviewedAt: true,
+      reviewedByUserId: true,
+      rejectionReason: true,
+    },
   });
+
+  await notify({
+    organizationId: row.organizationId,
+    branchId: row.branchId,
+    excludeUserId: actor.userId,
+    type: "kyc.document.submitted",
+    severity: "warning",
+    title: "KYC document submitted",
+    message: `${actor.email} uploaded ${row.documentType.replace(/_/g, " ")} for review.`,
+    resourceType: "KycDocument",
+    resourceId: row.id,
+    link: `/admin/kyc?filter=pending&doc=${row.id}`,
+  });
+
+  await notify({
+    organizationId: row.organizationId,
+    branchId: row.branchId,
+    roles: [],
+    userIds: [actor.userId],
+    type: "kyc.document.received",
+    severity: "info",
+    title: "KYC document received",
+    message: `Your ${row.documentType.replace(/_/g, " ")} was submitted and is pending review.`,
+    resourceType: "KycDocument",
+    resourceId: row.id,
+    link: "/kyc",
+  });
+
   return Response.json({ data: row }, { status: 201 });
 })

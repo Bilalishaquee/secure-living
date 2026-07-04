@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import {
   AlertTriangle,
@@ -82,6 +83,7 @@ interface ServiceRequest {
   srStatus: SRStatus;
   propertyId?: string;
   unitId?: string;
+  tenantUserId?: string;
   assignedTo?: string;
   createdAt: string;
   dueAt?: string;
@@ -770,6 +772,10 @@ interface SrGatingInfo {
 
 export default function ServiceRequestsPage() {
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const scopedPropertyId = searchParams.get("propertyId") ?? "";
+  const scopedUnitId = searchParams.get("unitId") ?? "";
+  const scopedTenantUserId = searchParams.get("tenantUserId") ?? "";
 
   const [rows, setRows] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -824,6 +830,9 @@ export default function ServiceRequestsPage() {
       if (filterStatus) params.set("srStatus", filterStatus);
       if (filterPriority) params.set("srPriority", filterPriority);
       if (filterMode) params.set("serviceMode", filterMode);
+      if (scopedPropertyId) params.set("propertyId", scopedPropertyId);
+      if (scopedUnitId) params.set("unitId", scopedUnitId);
+      if (scopedTenantUserId) params.set("tenantUserId", scopedTenantUserId);
       params.set("page", String(page));
       params.set("limit", "20");
 
@@ -834,6 +843,7 @@ export default function ServiceRequestsPage() {
       const json = (await res.json()) as {
         data: ServiceRequest[];
         meta?: { totalPages?: number };
+        pagination?: { pages?: number };
       };
       let data = json.data ?? [];
 
@@ -853,7 +863,7 @@ export default function ServiceRequestsPage() {
       }
 
       setRows(data);
-      setTotalPages(json.meta?.totalPages ?? 1);
+      setTotalPages(json.meta?.totalPages ?? json.pagination?.pages ?? 1);
 
       // Compute KPIs
       const openStatuses: SRStatus[] = ["SUBMITTED", "APPROVED", "ASSIGNED", "IN_PROGRESS"];
@@ -880,7 +890,7 @@ export default function ServiceRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.authToken, activeTab, filterStatus, filterPriority, filterMode, filterFrom, filterTo, page]);
+  }, [user?.authToken, activeTab, filterStatus, filterPriority, filterMode, filterFrom, filterTo, page, scopedPropertyId, scopedUnitId, scopedTenantUserId]);
 
   useEffect(() => {
     void load();
@@ -930,6 +940,17 @@ export default function ServiceRequestsPage() {
           <a href="/settings?tab=subscription" className="ml-4 shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700">
             Upgrade Plan
           </a>
+        </div>
+      )}
+
+      {(scopedUnitId || scopedTenantUserId) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          <span>
+            Showing service request history for {scopedTenantUserId ? "the selected tenant in this unit" : "this unit"}.
+          </span>
+          <Link href="/service-requests" className="text-xs font-semibold text-blue-700 hover:underline">
+            View all service requests
+          </Link>
         </div>
       )}
 

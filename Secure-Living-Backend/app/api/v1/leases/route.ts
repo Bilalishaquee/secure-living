@@ -98,7 +98,7 @@ export const POST = withErrorHandler(async (req: Request) => {
       organizationId: body.organizationId,
       branchId: body.branchId,
       propertyId: body.propertyId,
-      unitId: body.unitId,
+      unitId: body.unitId ?? null,
       tenantUserId: body.tenantUserId,
       leaseType: body.leaseType,
       rentAmount: body.rentAmount,

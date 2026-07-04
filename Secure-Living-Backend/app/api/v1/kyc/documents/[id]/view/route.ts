@@ -40,13 +40,15 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const inOrganization = !!doc.organizationId && actor.orgIds.includes(doc.organizationId);
   if (!canReview && !ownsDocument && !inOrganization) return jsonError(403, "Forbidden");
 
-  let bytes: Buffer | null = null;
-  for (const filePath of candidatePaths(doc.filePath)) {
-    try {
-      bytes = await readFile(filePath);
-      break;
-    } catch {
-      // Try the next known storage path shape. Older demo rows used relative paths.
+  let bytes: Buffer | null = doc.fileBytes ? Buffer.from(doc.fileBytes) : null;
+  if (!bytes) {
+    for (const filePath of candidatePaths(doc.filePath)) {
+      try {
+        bytes = await readFile(filePath);
+        break;
+      } catch {
+        // Try the next known storage path shape. Older demo rows used relative paths.
+      }
     }
   }
 

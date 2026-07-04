@@ -78,6 +78,7 @@ export default function RegisterPage() {
   const [orgMode, setOrgMode] = useState<"join" | "create">("create");
   const [orgCode, setOrgCode] = useState("");
   const [orgName, setOrgName] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [dir, setDir] = useState(1);
   const [nextPath, setNextPath] = useState("/dashboard");
 
@@ -89,6 +90,8 @@ export default function RegisterPage() {
     }
     const requestedNext = searchParams.get("next");
     if (requestedNext?.startsWith("/")) setNextPath(requestedNext);
+    const requestedReferral = searchParams.get("ref") ?? searchParams.get("referral") ?? searchParams.get("referralCode");
+    if (requestedReferral) setReferralCode(requestedReferral.trim().toUpperCase());
   }, []);
 
   useEffect(() => {
@@ -137,6 +140,7 @@ export default function RegisterPage() {
       preferredLanguage: "English",
       orgName: orgMode === "create" ? orgName.trim() || undefined : undefined,
       orgCode: orgMode === "join" ? orgCode.trim() || undefined : undefined,
+      referralCode: referralCode.trim().toUpperCase() || undefined,
     });
     if (!ok) {
       toast("Registration failed. Please verify details and retry.", "error");
@@ -376,6 +380,14 @@ export default function RegisterPage() {
                   <p className="text-sm text-[var(--text-secondary)]">
                     Set up your organization access to continue.
                   </p>
+                  {referralCode ? (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                      <p className="font-semibold">Referral link detected</p>
+                      <p className="mt-1 text-xs text-emerald-800">
+                        This account will be credited to referral code <span className="font-mono font-semibold">{referralCode}</span> after registration.
+                      </p>
+                    </div>
+                  ) : null}
                   {role !== "staff" ? (
                     <div className="flex gap-2 rounded-xl bg-surface-gray p-1">
                       <button
@@ -426,6 +438,15 @@ export default function RegisterPage() {
                       />
                     </div>
                   )}
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">Referral code</label>
+                    <input
+                      className="w-full rounded-xl border border-surface-border px-3 py-2.5 font-mono text-sm uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                      placeholder="Optional referral code"
+                    />
+                  </div>
                   <div className="flex gap-3 pt-4">
                     <Button
                       type="button"

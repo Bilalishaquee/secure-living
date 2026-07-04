@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Eye, ShieldCheck, XCircle } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,8 @@ type KycDoc = {
   organizationId: string | null;
   documentType: string;
   fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
   status: string; // pending, approved, rejected
   uploadedAt: string;
   reviewedAt: string | null;
@@ -27,9 +30,24 @@ const STATUS_BADGE: Record<string, "warning" | "success" | "error"> = {
   rejected: "error",
 };
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readableMime(mimeType: string): string {
+  if (mimeType.includes("pdf")) return "PDF";
+  if (mimeType.includes("wordprocessingml")) return "Word";
+  if (mimeType.includes("msword")) return "Word";
+  if (mimeType.startsWith("image/")) return mimeType.replace("image/", "").toUpperCase();
+  return "Document";
+}
+
 export default function AdminKycReviewPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [docs, setDocs] = useState<KycDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
@@ -56,6 +74,13 @@ export default function AdminKycReviewPage() {
     if (user?.authToken) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.authToken]);
+
+  useEffect(() => {
+    const nextFilter = searchParams.get("filter");
+    if (nextFilter === "pending" || nextFilter === "approved" || nextFilter === "rejected" || nextFilter === "all") {
+      setFilter(nextFilter);
+    }
+  }, [searchParams]);
 
   const filtered = useMemo(
     () => (filter === "all" ? docs : docs.filter((d) => d.status === filter)),
@@ -96,7 +121,18 @@ export default function AdminKycReviewPage() {
       }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const canOpenInline = blob.type.startsWith("image/") || blob.type.includes("pdf");
+      if (canOpenInline) {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = doc.fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        toast("Document downloaded for review", "info");
+      }
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch {
       toast("Could not open document", "error");
@@ -104,6 +140,7 @@ export default function AdminKycReviewPage() {
   }
 
   const pendingCount = docs.filter((d) => d.status === "pending").length;
+  const focusedDocId = searchParams.get("doc");
 
   return (
     <div className="w-full space-y-6">
@@ -147,10 +184,17 @@ export default function AdminKycReviewPage() {
         <div className="space-y-3">
           {filtered.map((d) => (
             <Card key={d.id}>
-              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <CardContent
+                className={`flex flex-wrap items-center justify-between gap-3 p-4 ${
+                  focusedDocId === d.id ? "ring-2 ring-brand-blue/60" : ""
+                }`}
+              >
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900">{d.documentType}</p>
                   <p className="truncate text-xs text-slate-500">{d.fileName}</p>
+                  <p className="text-xs text-slate-400">
+                    {readableMime(d.mimeType)} - {formatBytes(d.fileSizeBytes)}
+                  </p>
                   <p className="text-xs text-slate-400">
                     Uploaded {new Date(d.uploadedAt).toLocaleDateString()}
                     {d.reviewedAt ? ` · Reviewed ${new Date(d.reviewedAt).toLocaleDateString()}` : ""}

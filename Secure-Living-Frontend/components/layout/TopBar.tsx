@@ -43,6 +43,7 @@ const labels: Record<string, string> = {
   taxonomies: "Taxonomies",
   crm: "CRM",
   "custom-fields": "Custom Fields",
+  "rental-application": "Rental Application",
   receipts: "Rent Receipts",
   "household-charges": "Household Charges",
   charges: "Nightgrab Charges",

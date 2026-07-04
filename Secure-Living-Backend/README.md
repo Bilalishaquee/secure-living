@@ -194,7 +194,7 @@ Create `Secure-Living-Backend/.env`:
 
 ```env
 # Required
-DATABASE_URL="file:./prisma/dev.db"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require"
 
 # Optional — change in production
 APP_AUTH_SECRET=your-secret-here
@@ -202,3 +202,5 @@ APP_AUTH_SECRET=your-secret-here
 # Frontend URL (for CORS headers if added later)
 NEXT_PUBLIC_SITE_URL=https://your-domain.com
 ```
+
+For local development, `DATABASE_URL` must point to a reachable PostgreSQL database. The current Prisma schema uses `provider = "postgresql"`, so SQLite-style URLs such as `file:./prisma/dev.db` are not supported.

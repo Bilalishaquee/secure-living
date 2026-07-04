@@ -7,6 +7,13 @@ import { useToast } from "@/lib/toast-context";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Modal } from "@/components/ui/Modal";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 
 type Restriction = {
   id: string;
@@ -18,7 +25,9 @@ type Restriction = {
   createdAt: string;
 };
 
-const emptyForm = { organizationId: "", userId: "", serviceType: "", mode: "BLOCKED" as "ALLOWED" | "BLOCKED", reason: "" };
+const EMPTY_ORG = "__none__";
+const EMPTY_USER = "__none__";
+const emptyForm = { organizationId: EMPTY_ORG, userId: EMPTY_USER, serviceType: "", mode: "BLOCKED" as "ALLOWED" | "BLOCKED", reason: "" };
 
 export default function ServiceRestrictionsAdminPage() {
   const { user } = useAuth();
@@ -28,23 +37,64 @@ export default function ServiceRestrictionsAdminPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
 
   async function load() {
     setLoading(true);
+    setOrgsLoading(true);
+    setUsersLoading(true);
     try {
-      const res = await fetch(`/api/v1/service-access-restrictions`, {
-        headers: { Authorization: `Bearer ${user?.authToken}` },
-      });
-      if (res.ok) {
-        const j = await res.json();
+      const [rowsRes, orgsRes, usersRes] = await Promise.all([
+        fetch(`/api/v1/service-access-restrictions`, {
+          headers: { Authorization: `Bearer ${user?.authToken}` },
+        }),
+        fetch(`/api/v1/organizations`, {
+          headers: { Authorization: `Bearer ${user?.authToken}` },
+        }),
+        fetch(`/api/v1/users`, {
+          headers: { Authorization: `Bearer ${user?.authToken}` },
+        }),
+      ]);
+
+      if (rowsRes.ok) {
+        const j = await rowsRes.json();
         setRows(j.data ?? []);
+      }
+      if (orgsRes.ok) {
+        const j = await orgsRes.json();
+        setOrgs(j.data ?? []);
+      }
+      if (usersRes.ok) {
+        const j = await usersRes.json();
+        setUsers(j.data ?? []);
       }
     } finally {
       setLoading(false);
+      setOrgsLoading(false);
+      setUsersLoading(false);
     }
   }
 
   useEffect(() => { if (user?.authToken) load(); }, [user?.authToken]);
+
+  async function handleOrgChange(orgId: string) {
+    if (!user?.authToken) return;
+    setUsersLoading(true);
+    try {
+      const res = await fetch(`/api/v1/users?organizationId=${orgId}`, {
+        headers: { Authorization: `Bearer ${user.authToken}` },
+      });
+      if (res.ok) {
+        const j = await res.json();
+        setUsers(j.data ?? []);
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  };
 
   async function handleSave() {
     setSaving(true);
@@ -53,8 +103,8 @@ export default function ServiceRestrictionsAdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user?.authToken}` },
         body: JSON.stringify({
-          organizationId: form.organizationId || undefined,
-          userId: form.userId || undefined,
+          organizationId: form.organizationId === EMPTY_ORG ? undefined : form.organizationId,
+          userId: form.userId === EMPTY_USER ? undefined : form.userId,
           serviceType: form.serviceType,
           mode: form.mode,
           reason: form.reason || undefined,
@@ -159,41 +209,88 @@ export default function ServiceRestrictionsAdminPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Service Type *</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              placeholder="e.g. LEGAL, CLEANING, MAINTENANCE"
+            <Select
               value={form.serviceType}
-              onChange={(e) => setForm((f) => ({ ...f, serviceType: e.target.value.toUpperCase() }))}
-            />
+              onValueChange={(value) => setForm((f) => ({ ...f, serviceType: value }))}
+              disabled={orgsLoading || usersLoading}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select service type" />
+              </SelectTrigger>
+              <SelectContent>
+                {[
+                  "MAINTENANCE",
+                  "INSPECTION",
+                  "LEGAL",
+                  "PROXY",
+                  "VALUATION",
+                  "CLEANING",
+                  "FOOD_DELIVERY",
+                  "AIRPORT_TRANSFER",
+                  "GUEST_ASSISTANCE",
+                  "CUSTOM"
+                ].map((type) => (
+                  <SelectItem key={type} value={type}>{type}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Organization ID (optional)</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none"
-              placeholder="Leave blank for platform-wide"
+            <label className="mb-1 block text-sm font-medium text-slate-700">Organization (optional)</label>
+            <Select
               value={form.organizationId}
-              onChange={(e) => setForm((f) => ({ ...f, organizationId: e.target.value }))}
-            />
+              onValueChange={(value) => {
+                setForm((f) => ({ ...f, organizationId: value, userId: EMPTY_USER }));
+                if (value !== EMPTY_ORG) handleOrgChange(value);
+              }}
+              disabled={orgsLoading}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select organization or leave blank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={EMPTY_ORG}>Platform-wide</SelectItem>
+                {orgs.map((org) => (
+                  <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {orgsLoading && <p className="text-xs text-slate-500 mt-1">Loading organizations...</p>}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">User ID (optional)</label>
-            <input
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none"
-              placeholder="Most specific — overrides org/platform scope"
+            <label className="mb-1 block text-sm font-medium text-slate-700">User (optional)</label>
+            <Select
               value={form.userId}
-              onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
-            />
+              onValueChange={(value) => setForm((f) => ({ ...f, userId: value }))}
+              disabled={usersLoading || form.organizationId === EMPTY_ORG}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select user or leave blank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={EMPTY_USER}>No specific user</SelectItem>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {usersLoading && <p className="text-xs text-slate-500 mt-1">Loading users...</p>}
+            {form.organizationId === EMPTY_ORG && <p className="text-xs text-slate-500 mt-1">Select an organization first</p>}
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Mode</label>
-            <select
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            <Select
               value={form.mode}
-              onChange={(e) => setForm((f) => ({ ...f, mode: e.target.value as "ALLOWED" | "BLOCKED" }))}
+              onValueChange={(value) => setForm((f) => ({ ...f, mode: value as "ALLOWED" | "BLOCKED" }))}
             >
-              <option value="BLOCKED">Blocked</option>
-              <option value="ALLOWED">Allowed (override a broader block)</option>
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BLOCKED">Blocked</SelectItem>
+                <SelectItem value="ALLOWED">Allowed (override a broader block)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Reason</label>

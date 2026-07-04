@@ -87,7 +87,7 @@ function pickOverlayFromStored(stored: AuthUser): Partial<AuthUser> {
   return out;
 }
 
-type RegisterPayload = AuthUser & { password?: string; orgName?: string; orgCode?: string };
+type RegisterPayload = AuthUser & { password?: string; orgName?: string; orgCode?: string; referralCode?: string };
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -160,7 +160,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      const json = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
+      if (res.status === 503) throw new Error(json.detail ?? json.error ?? "Database unavailable");
+      return false;
+    }
     const json = (await res.json()) as { data: { token: string; user: AuthUser } };
     const nextUser = { ...json.data.user, authToken: json.data.token };
     persistUser(nextUser);
@@ -184,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: user.role || undefined,
         orgName: user.orgName || undefined,
         orgCode: user.orgCode || undefined,
+        referralCode: user.referralCode || undefined,
       }),
     });
     if (!res.ok) return false;

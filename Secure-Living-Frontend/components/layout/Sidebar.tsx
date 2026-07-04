@@ -21,6 +21,7 @@ import {
   Settings,
   Shield,
   ShieldCheck,
+  ShieldBan,
   Upload,
   Users,
   X,
@@ -95,6 +96,7 @@ const landlordGroups: NavGroup[] = [
       { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/rental-application", label: "Rental Application", icon: FileText },
     ],
   },
   {
@@ -146,7 +148,6 @@ const landlordGroups: NavGroup[] = [
     items: [
       { href: "/team", label: "Team", icon: UserPlus },
       { href: "/data-import", label: "Data Migration", icon: FileInput },
-      { href: "/crm/custom-fields", label: "App Custom Fields", icon: FileText },
     ],
   },
   {
@@ -172,6 +173,7 @@ const superAdminGroups: NavGroup[] = [
       { href: "/containers", label: "Portfolio", icon: Layers },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/rental-application", label: "Rental Application", icon: FileText },
       { href: "/leasing", label: "Leases", icon: Landmark },
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
@@ -234,6 +236,7 @@ const superAdminGroups: NavGroup[] = [
       { href: "/admin/management-inquiries", label: "Management Inquiries", icon: Building2 },
       { href: "/admin/rbac", label: "Roles & Permissions", icon: Shield },
       { href: "/admin/service-categories", label: "Service Categories", icon: Tags },
+      { href: "/admin/service-restrictions", label: "Service Restrictions", icon: ShieldBan },
       { href: "/team", label: "Team Invitations", icon: UserPlus },
       { href: "/commercial-readiness", label: "Commercial Readiness", icon: Ticket },
     ],
@@ -262,6 +265,7 @@ const adminGroups: NavGroup[] = [
       { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/properties", label: "Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/rental-application", label: "Rental Application", icon: FileText },
       { href: "/leasing", label: "Leases", icon: Landmark },
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
@@ -372,6 +376,7 @@ const agencyGroups: NavGroup[] = [
       { href: "/containers", label: "Managed Properties", icon: Layers },
       { href: "/properties", label: "Properties & Units", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/rental-application", label: "Rental Application", icon: FileText },
     ],
   },
   {
@@ -445,6 +450,7 @@ const agencyManagerGroups: NavGroup[] = [
       { href: "/crm", label: "CRM", icon: GanttChartSquare },
       { href: "/properties", label: "Managed Properties", icon: Building2 },
       { href: "/tenants", label: "Tenants", icon: Users },
+      { href: "/rental-application", label: "Rental Application", icon: FileText },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
     ],
   },

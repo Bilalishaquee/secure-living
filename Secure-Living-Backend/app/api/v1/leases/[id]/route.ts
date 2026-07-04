@@ -25,13 +25,21 @@ export const GET = withErrorHandler(async (req: Request, { params }: Ctx) => {
 
   // Same rationale as GET /leases — resolve a readable name/number without granting
   // broader unit:view access (see leases/route.ts comment).
-  const [property, unit] = await Promise.all([
+  const [property, unit, tenant] = await Promise.all([
     prisma.property.findUnique({ where: { id: lease.propertyId }, select: { name: true } }),
     prisma.unit.findUnique({ where: { id: lease.unitId }, select: { unitNumber: true } }),
+    prisma.appUser.findUnique({ where: { id: lease.tenantUserId }, select: { fullName: true, email: true } }),
   ]);
 
   return Response.json({
-    data: { ...lease, depositEscrow, propertyName: property?.name ?? null, unitNumber: unit?.unitNumber ?? null },
+    data: {
+      ...lease,
+      depositEscrow,
+      propertyName: property?.name ?? null,
+      unitNumber: unit?.unitNumber ?? null,
+      tenantName: tenant?.fullName ?? null,
+      tenantEmail: tenant?.email ?? null,
+    },
   });
 });
 

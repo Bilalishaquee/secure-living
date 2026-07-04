@@ -24,7 +24,7 @@ export const createLeaseSchema = z.object({
   organizationId: z.string().min(1),
   branchId: z.string().min(1),
   propertyId: z.string().min(1),
-  unitId: z.string().min(1),
+  unitId: z.string().optional(),
   tenantUserId: z.string().min(1),
   leaseType: z.enum(["fixed_term", "month_to_month"]),
   rentAmount: z.number().positive(),

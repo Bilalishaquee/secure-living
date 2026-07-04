@@ -1,10 +1,7 @@
-import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/server/db";
 import { requireActor, jsonError, withErrorHandler } from "@/lib/server/http";
-
-const uploadRoot = path.join(process.cwd(), "uploads", "kyc", "good-conduct");
+import { prepareUploadedDocument } from "@/lib/server/document-upload";
+import { notify } from "@/lib/server/notify";
 
 // POST /api/v1/kyc/trusted-personnel — apply for Level 3 Trusted Personnel status
 export const POST = withErrorHandler(async (req: Request) => {
@@ -50,6 +47,9 @@ export const POST = withErrorHandler(async (req: Request) => {
   const file = form.get("goodConductCertificate");
   if (!(file instanceof File)) return jsonError(400, "Good Conduct Certificate PDF is required");
   if (!file.type.includes("pdf")) return jsonError(400, "Good Conduct Certificate must be a PDF");
+  const prepared = await prepareUploadedDocument(file);
+  if (!prepared.ok) return jsonError(prepared.status, prepared.message);
+  const document = prepared.data;
 
   // Verify document is within 12 months (client-declared date — admin will verify)
   const issueDateStr = String(form.get("issueDate") ?? "");
@@ -60,11 +60,6 @@ export const POST = withErrorHandler(async (req: Request) => {
   if (issueDate < twelveMonthsAgo) {
     return jsonError(400, "Good Conduct Certificate must be dated within the last 12 months");
   }
-
-  await mkdir(uploadRoot, { recursive: true });
-  const fileId = randomUUID();
-  const savedPath = path.join(uploadRoot, `${fileId}-good-conduct.pdf`);
-  await writeFile(savedPath, Buffer.from(await file.arrayBuffer()));
 
   const expiryDate = new Date(issueDate);
   expiryDate.setFullYear(expiryDate.getFullYear() + 1);
@@ -81,17 +76,54 @@ export const POST = withErrorHandler(async (req: Request) => {
   });
 
   // Store the certificate as a KYC document for admin review
-  await prisma.kycDocument.create({
+  const kycDoc = await prisma.kycDocument.create({
     data: {
-      id: fileId,
+      id: document.id,
       userId: actor.userId,
       documentType: "good_conduct_certificate",
-      fileName: file.name,
-      mimeType: file.type,
-      filePath: savedPath,
-      fileSizeBytes: (await file.arrayBuffer()).byteLength,
+      fileName: document.fileName,
+      mimeType: document.mimeType,
+      filePath: document.storagePath,
+      fileBytes: document.fileBytes,
+      fileSizeBytes: document.fileSizeBytes,
       status: "pending",
     },
+    select: {
+      id: true,
+      userId: true,
+      organizationId: true,
+      branchId: true,
+      documentType: true,
+      fileName: true,
+      status: true,
+    },
+  });
+
+  await notify({
+    organizationId: kycDoc.organizationId,
+    branchId: kycDoc.branchId,
+    excludeUserId: actor.userId,
+    type: "kyc.trusted_personnel.submitted",
+    severity: "warning",
+    title: "Trusted Personnel KYC submitted",
+    message: `${actor.email} submitted a Good Conduct Certificate for Trusted Personnel review.`,
+    resourceType: "KycDocument",
+    resourceId: kycDoc.id,
+    link: `/admin/kyc?filter=pending&doc=${kycDoc.id}`,
+  });
+
+  await notify({
+    organizationId: kycDoc.organizationId,
+    branchId: kycDoc.branchId,
+    roles: [],
+    userIds: [actor.userId],
+    type: "kyc.trusted_personnel.received",
+    severity: "info",
+    title: "Trusted Personnel application received",
+    message: "Your Good Conduct Certificate was submitted and is pending admin review.",
+    resourceType: "KycDocument",
+    resourceId: kycDoc.id,
+    link: "/kyc",
   });
 
   return Response.json({
