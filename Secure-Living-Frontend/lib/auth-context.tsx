@@ -123,8 +123,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       headers: { Authorization: `Bearer ${base.authToken}` },
     })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: { data?: { token?: string; role?: string; permissions?: string[] } } | null) => {
+      .then(async (r) => {
+        if (r.ok) return (await r.json()) as { data?: { token?: string; role?: string; permissions?: string[] } };
+        if (r.status === 401 || r.status === 403) {
+          persistUser(null);
+          dispatch({ type: "HYDRATE", user: null });
+          return null;
+        }
+        return null;
+      })
+      .then((json) => {
+        if (!json) return;
         if (json?.data?.token) {
           const fresh: AuthUser = {
             ...base,
