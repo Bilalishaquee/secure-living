@@ -41,7 +41,6 @@ export default function ReportsPage() {
       if (!res.ok) return;
       const json = (await res.json()) as { data: Property[] };
       setProperties(json.data);
-      if (json.data[0]) setPropertyId(json.data[0].id);
     })();
   }, [user?.id, user?.authToken]);
 
