@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, jsonError, withErrorHandler } from "@/lib/server/http";
 
@@ -13,6 +14,8 @@ const updateSchema = z.object({
   order: z.number().int().optional(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
+  categoryType: z.enum(["MAINTENANCE", "PROFESSIONAL"]).optional(),
+  config: z.record(z.any()).nullable().optional(),
 });
 
 export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
@@ -27,8 +30,12 @@ export const PUT = withErrorHandler(async (req: Request, { params }: Ctx) => {
   const parsed = await parseBody(req, updateSchema);
   if (!parsed.ok) return parsed.response;
 
-  const { sortOrder, ...rest } = parsed.data;
-  const updateData = { ...rest, ...(sortOrder !== undefined ? { order: sortOrder } : {}) };
+  const { sortOrder, config, ...rest } = parsed.data;
+  const updateData = {
+    ...rest,
+    ...(sortOrder !== undefined ? { order: sortOrder } : {}),
+    ...(config !== undefined ? { config: (config as Prisma.InputJsonValue) ?? Prisma.JsonNull } : {}),
+  };
   const updated = await prisma.serviceCategory.update({ where: { id: params.id }, data: updateData });
   return Response.json({ data: updated });
 });

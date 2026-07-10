@@ -680,20 +680,23 @@ model UserRoleContext {
 // â”€â”€â”€ Supporting Services â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 model ServiceCategory {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  tagline     String?
-  description String?
-  icon        String?
-  isActive    Boolean  @default(true)
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  tagline      String?
+  description  String?
+  icon         String?
+  isActive     Boolean  @default(true)
+  order        Int      @default(0)
+  categoryType String   @default("MAINTENANCE")
+  config       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   enquiries ServiceEnquiry[]
 
   @@index([isActive, order])
+  @@index([categoryType])
 }
 
 model ServiceEnquiry {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/server/db";
 import { parseBody, requireActor, requirePermission, withErrorHandler } from "@/lib/server/http";
 
@@ -10,12 +11,17 @@ const createCategorySchema = z.object({
   icon: z.string().optional(),
   order: z.number().int().default(0),
   sortOrder: z.number().int().optional(),
+  categoryType: z.enum(["MAINTENANCE", "PROFESSIONAL"]).optional(),
+  isActive: z.boolean().optional(),
+  config: z.record(z.any()).nullable().optional(),
 });
 
-export const GET = withErrorHandler(async (_req: Request) => {
-  // Public — no auth required
+export const GET = withErrorHandler(async (req: Request) => {
+  // Public — no auth required. Admin callers may pass ?all=1 to include inactive categories.
+  const url = new URL(req.url);
+  const includeAll = url.searchParams.get("all") === "1";
   const rows = await prisma.serviceCategory.findMany({
-    where: { isActive: true },
+    where: includeAll ? {} : { isActive: true },
     orderBy: { order: "asc" },
   });
   return Response.json({ data: rows });
@@ -30,7 +36,13 @@ export const POST = withErrorHandler(async (req: Request) => {
   const parsed = await parseBody(req, createCategorySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { sortOrder, ...rest } = parsed.data;
-  const row = await prisma.serviceCategory.create({ data: { ...rest, ...(sortOrder !== undefined ? { order: sortOrder } : {}) } });
+  const { sortOrder, config, ...rest } = parsed.data;
+  const row = await prisma.serviceCategory.create({
+    data: {
+      ...rest,
+      ...(sortOrder !== undefined ? { order: sortOrder } : {}),
+      ...(config !== undefined ? { config: (config as Prisma.InputJsonValue) ?? Prisma.JsonNull } : {}),
+    },
+  });
   return Response.json({ data: row }, { status: 201 });
 });

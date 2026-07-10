@@ -60,7 +60,7 @@ export const GET = withErrorHandler(async (req: Request) => {
   // tenants the broader unit:view permission (which would leak every other unit's current
   // tenant in the same property) — so resolve just their own lease's property/unit here.
   const propertyIds = Array.from(new Set(rows.map((r) => r.propertyId)));
-  const unitIds = Array.from(new Set(rows.map((r) => r.unitId)));
+  const unitIds = Array.from(new Set(rows.map((r) => r.unitId).filter((id): id is string => Boolean(id))));
   const [properties, units] = await Promise.all([
     propertyIds.length ? prisma.property.findMany({ where: { id: { in: propertyIds } }, select: { id: true, name: true } }) : [],
     unitIds.length ? prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, unitNumber: true } }) : [],

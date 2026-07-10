@@ -272,7 +272,7 @@ export default function MyQueuePage() {
       {/* Header */}
       <div className="app-page-toolbar">
         <div>
-          <h1 className="app-page-title">My Job Queue</h1>
+          <h1 className="app-page-title">My Requests</h1>
           <p className="app-page-lead">Your assigned service requests — start, block, or complete jobs</p>
         </div>
         <div className="flex items-center gap-2">

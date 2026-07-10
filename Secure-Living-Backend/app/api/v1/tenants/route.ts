@@ -43,8 +43,8 @@ export const GET = withErrorHandler(async (req: Request) => {
     }
   }
 
-  const propertyIds = Array.from(new Set(leases.map((l) => l.propertyId)));
-  const unitIds = Array.from(new Set(leases.map((l) => l.unitId)));
+  const propertyIds = Array.from(new Set(leases.map((l) => l.propertyId).filter((id): id is string => Boolean(id))));
+  const unitIds = Array.from(new Set(leases.map((l) => l.unitId).filter((id): id is string => Boolean(id))));
   const [properties, units] = await Promise.all([
     propertyIds.length ? prisma.property.findMany({ where: { id: { in: propertyIds } }, select: { id: true, name: true } }) : [],
     unitIds.length ? prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, unitNumber: true } }) : [],

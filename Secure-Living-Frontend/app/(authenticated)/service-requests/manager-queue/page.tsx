@@ -211,7 +211,7 @@ export default function ManagerQueuePage() {
       {/* Header */}
       <div className="app-page-toolbar">
         <div>
-          <h1 className="app-page-title">Manager Queue</h1>
+          <h1 className="app-page-title">My Requests</h1>
           <p className="app-page-lead">Review, approve, and oversee all service requests in your organisation</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>

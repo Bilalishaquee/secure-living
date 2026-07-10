@@ -905,8 +905,8 @@ export default function ServiceRequestsPage() {
       {/* Header */}
       <div className="app-page-toolbar">
         <div>
-          <h1 className="app-page-title">Service Requests</h1>
-          <p className="app-page-lead">Manage all service requests across your portfolio</p>
+          <h1 className="app-page-title">Maintenance Services</h1>
+          <p className="app-page-lead">Manage all maintenance service requests across your portfolio</p>
         </div>
         {canCreate && (
           <Button

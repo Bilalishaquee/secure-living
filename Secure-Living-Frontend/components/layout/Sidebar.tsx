@@ -79,6 +79,9 @@ type NavItem = {
   label: string;
   icon: ComponentType<{ className?: string }>;
   roles?: UserRole[];
+  /** Optional sub-heading to visually nest related items under a parent nav group
+   *  (e.g. "Maintenance Services" / "Professional Services" under "Services & Marketplace"). */
+  section?: string;
 };
 
 type NavGroup = {
@@ -115,9 +118,6 @@ const landlordGroups: NavGroup[] = [
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
-      { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
@@ -125,11 +125,19 @@ const landlordGroups: NavGroup[] = [
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
       { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
       { href: "/screening/rent-score", label: "Rent Score", icon: Award },
-      { href: "/services", label: "Services", icon: Wrench },
       { href: "/utilities", label: "Utilities", icon: Zap },
       { href: "/utilities/household-charges", label: "Utility Charges", icon: ListChecks },
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Services & Marketplace",
+    items: [
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/manager-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
+      { href: "/providers", label: "Providers", icon: HardHat, section: "Maintenance Services" },
+      { href: "/services", label: "Professional Services", icon: Wrench, section: "Professional Services" },
     ],
   },
   {
@@ -209,11 +217,11 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "Services & Marketplace",
     items: [
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
-      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/manager-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
+      { href: "/providers", label: "Providers", icon: HardHat, section: "Maintenance Services" },
+      { href: "/services", label: "Professional Services", icon: Briefcase, section: "Professional Services" },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
-      { href: "/services", label: "Services", icon: Briefcase },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
       { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
@@ -298,11 +306,11 @@ const adminGroups: NavGroup[] = [
   {
     label: "Services & Marketplace",
     items: [
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
-      { href: "/providers", label: "Providers", icon: HardHat },
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/manager-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
+      { href: "/providers", label: "Providers", icon: HardHat, section: "Maintenance Services" },
+      { href: "/services", label: "Professional Services", icon: Briefcase, section: "Professional Services" },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
-      { href: "/services", label: "Professionals", icon: Briefcase },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
       { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
       { href: "/investments", label: "Investments", icon: LineChart },
@@ -349,13 +357,18 @@ const staffGroups: NavGroup[] = [
   {
     label: "Work",
     items: [
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/my-queue", label: "My Job Queue", icon: ClipboardList },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/leasing", label: "Leases", icon: Landmark },
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
-      { href: "/services", label: "Services", icon: Wrench },
       { href: "/short-stay/charges", label: "Nightgrab Charges", icon: Hotel },
+    ],
+  },
+  {
+    label: "Services & Marketplace",
+    items: [
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/my-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
+      { href: "/services", label: "Professional Services", icon: Wrench, section: "Professional Services" },
     ],
   },
   {
@@ -395,9 +408,6 @@ const agencyGroups: NavGroup[] = [
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
-      { href: "/providers", label: "Providers", icon: HardHat },
       { href: "/unit-readiness", label: "Unit Readiness", icon: CheckSquare },
       { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
       { href: "/short-stay", label: "Short Stay", icon: BedDouble },
@@ -409,6 +419,14 @@ const agencyGroups: NavGroup[] = [
       { href: "/utilities/household-charges", label: "Utility Charges", icon: ListChecks },
       { href: "/expenses", label: "Expenses", icon: Receipt },
       { href: "/lease-renewals", label: "Lease Renewals", icon: CalendarClock },
+    ],
+  },
+  {
+    label: "Services & Marketplace",
+    items: [
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/manager-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
+      { href: "/providers", label: "Providers", icon: HardHat, section: "Maintenance Services" },
     ],
   },
   {
@@ -460,12 +478,17 @@ const agencyManagerGroups: NavGroup[] = [
       { href: "/leasing", label: "Leasing", icon: Landmark },
       { href: "/leasing/templates", label: "Lease Templates", icon: ScrollText },
       { href: "/listings", label: "Listings", icon: Megaphone },
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
-      { href: "/service-requests/manager-queue", label: "Manager Queue", icon: ClipboardList },
       { href: "/screening", label: "Tenant Screening", icon: FileSearch },
       { href: "/intelligence", label: "MoveScore & Intel", icon: BrainCircuit },
       { href: "/screening/rent-score", label: "Rent Score", icon: Award },
       { href: "/vacating", label: "Move-Out / Vacating", icon: LogOut },
+    ],
+  },
+  {
+    label: "Services & Marketplace",
+    items: [
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell, section: "Maintenance Services" },
+      { href: "/service-requests/manager-queue", label: "My Requests", icon: ClipboardList, section: "Maintenance Services" },
     ],
   },
   {
@@ -485,7 +508,7 @@ const tenantGroups: NavGroup[] = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
       { href: "/tenant/lease", label: "My Lease", icon: FileText },
-      { href: "/service-requests", label: "Service Requests", icon: ConciergeBell },
+      { href: "/service-requests", label: "Maintenance Services", icon: ConciergeBell },
       { href: "/tenant/vacate", label: "Move-Out Notice", icon: LogOut },
       { href: "/tenant/checklist", label: "My Checklist", icon: ClipboardCheck },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
@@ -563,25 +586,34 @@ function SidebarNav({ groups, collapsed, pathname, onNavigate }: SidebarNavProps
           ) : (
             <div className="mb-1.5 mx-auto h-px w-8 bg-slate-200" aria-hidden />
           )}
-          {group.items.map((item) => {
+          {group.items.map((item, idx) => {
             const active = isActive(item.href);
             const Icon = item.icon;
+            const prevSection = idx > 0 ? group.items[idx - 1].section : undefined;
+            const showSectionHeader = !!item.section && item.section !== prevSection;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onNavigate}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
-                  active
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                )}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0 opacity-90" aria-hidden />
-                {!collapsed ? <span className="truncate">{item.label}</span> : null}
-              </Link>
+              <div key={item.href}>
+                {showSectionHeader && !collapsed ? (
+                  <p className="mb-1 mt-1.5 px-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400/80">
+                    {item.section}
+                  </p>
+                ) : null}
+                <Link
+                  href={item.href}
+                  onClick={onNavigate}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+                    item.section && !collapsed ? "ml-2" : "",
+                    active
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  )}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0 opacity-90" aria-hidden />
+                  {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                </Link>
+              </div>
             );
           })}
         </div>

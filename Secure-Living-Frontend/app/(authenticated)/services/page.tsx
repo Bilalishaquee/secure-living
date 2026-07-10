@@ -38,6 +38,7 @@ type ServiceCategory = {
   slug: string;
   tagline: string | null;
   description: string | null;
+  categoryType?: "MAINTENANCE" | "PROFESSIONAL" | null;
 };
 
 export default function ServicesPage() {
@@ -54,7 +55,14 @@ export default function ServicesPage() {
   useEffect(() => {
     fetch(`/api/v1/service-categories`)
       .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setCategories(j.data); })
+      .then((j) => {
+        if (j?.data) {
+          // Professional Services page: only show non-maintenance (advisory/profession-based)
+          // categories — maintenance/upkeep categories belong under Maintenance Services.
+          const professional = (j.data as ServiceCategory[]).filter((c) => c.categoryType !== "MAINTENANCE");
+          setCategories(professional);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -109,8 +117,8 @@ export default function ServicesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Supporting Services</h1>
-        <p className="mt-1 text-sm text-slate-500">Professional services across the full property lifecycle</p>
+        <h1 className="text-2xl font-bold text-slate-900">Professional Services</h1>
+        <p className="mt-1 text-sm text-slate-500">Advisory and profession-based services across the full property lifecycle</p>
       </div>
 
       {loading ? (
