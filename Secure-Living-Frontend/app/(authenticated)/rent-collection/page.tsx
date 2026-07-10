@@ -21,12 +21,12 @@ type RentInvoice = {
 type LeaseOption = {
   id: string;
   label: string;
-  tenantUserId: string;
+  tenantUserId: string | null;
   tenantName?: string | null;
   tenantEmail?: string | null;
-  propertyId: string;
+  propertyId: string | null;
   propertyName?: string | null;
-  unitId: string;
+  unitId: string | null;
   unitNumber?: string | null;
   rentAmount: number;
 };
@@ -88,19 +88,19 @@ export default function RentCollectionPage() {
       const json = (await res.json()) as {
         data: Array<{
           id: string;
-          unitId: string;
+          unitId: string | null;
           unitNumber?: string | null;
-          tenantUserId: string;
+          tenantUserId: string | null;
           tenantName?: string | null;
           tenantEmail?: string | null;
-          propertyId: string;
+          propertyId: string | null;
           propertyName?: string | null;
           rentAmount: number;
         }>;
       };
       setLeases((json.data ?? []).map((l) => ({
         id: l.id,
-        label: `${l.id.slice(0, 8)} — ${l.propertyName ?? l.propertyId.slice(0, 8)} / ${l.unitNumber ?? l.unitId.slice(0, 8)} — ${l.tenantName ?? l.tenantUserId.slice(0, 8)}`,
+        label: `${l.id ? l.id.slice(0, 8) : "—"} — ${l.propertyName ?? (l.propertyId ? l.propertyId.slice(0, 8) : "No property")} / ${l.unitNumber ?? (l.unitId ? l.unitId.slice(0, 8) : "No unit")} — ${l.tenantName ?? (l.tenantUserId ? l.tenantUserId.slice(0, 8) : "No tenant")}`,
         tenantUserId: l.tenantUserId,
         tenantName: l.tenantName,
         tenantEmail: l.tenantEmail,
@@ -129,9 +129,9 @@ export default function RentCollectionPage() {
     setInvoiceForm((f) => ({
       ...f,
       leaseId: lease.id,
-      tenantId: lease.tenantUserId,
-      propertyId: lease.propertyId,
-      unitId: lease.unitId,
+      tenantId: lease.tenantUserId ?? "",
+      propertyId: lease.propertyId ?? "",
+      unitId: lease.unitId ?? "",
       rentAmountKes: String(lease.rentAmount),
     }));
   }
@@ -288,9 +288,9 @@ export default function RentCollectionPage() {
             </select>
           </div>
 
-          <ReadonlyField label="Tenant" value={selectedLease ? `${selectedLease.tenantName ?? selectedLease.tenantUserId}${selectedLease.tenantEmail ? ` — ${selectedLease.tenantEmail}` : ""}` : "Select a lease"} />
-          <ReadonlyField label="Property" value={selectedLease ? `${selectedLease.propertyName ?? selectedLease.propertyId}` : "Select a lease"} />
-          <ReadonlyField label="Unit" value={selectedLease ? `${selectedLease.unitNumber ?? selectedLease.unitId}` : "Select a lease"} />
+          <ReadonlyField label="Tenant" value={selectedLease ? `${selectedLease.tenantName ?? selectedLease.tenantUserId ?? "No tenant"}${selectedLease.tenantEmail ? ` — ${selectedLease.tenantEmail}` : ""}` : "Select a lease"} />
+          <ReadonlyField label="Property" value={selectedLease ? `${selectedLease.propertyName ?? selectedLease.propertyId ?? "No property"}` : "Select a lease"} />
+          <ReadonlyField label="Unit" value={selectedLease ? `${selectedLease.unitNumber ?? selectedLease.unitId ?? "No unit"}` : "Select a lease"} />
           <ReadonlyField label="Lease ID" value={invoiceForm.leaseId || "Select a lease"} mono />
 
           <div>

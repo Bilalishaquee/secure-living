@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { formatKes } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -29,17 +29,24 @@ export default function AccountingPage() {
   const [history, setHistory] = useState<Summary[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const requestId = useRef(0);
+
   async function load() {
+    const id = ++requestId.current;
     setLoading(true);
     try {
       const [sr, hr] = await Promise.all([
         fetch(`/api/v1/accounting/monthly-summary?year=${year}&month=${month}`, { headers: { Authorization: `Bearer ${user?.authToken}` } }),
         fetch(`/api/v1/accounting/monthly-summary/history`, { headers: { Authorization: `Bearer ${user?.authToken}` } }),
       ]);
-      if (sr.ok) setSummary((await sr.json()).data);
-      if (hr.ok) setHistory((await hr.json()).data ?? []);
+      const summaryData = sr.ok ? (await sr.json()).data : undefined;
+      const historyData = hr.ok ? (await hr.json()).data ?? [] : undefined;
+      // Ignore stale responses from a superseded request (e.g. year/month changed while this was in flight).
+      if (id !== requestId.current) return;
+      if (summaryData !== undefined) setSummary(summaryData);
+      if (historyData !== undefined) setHistory(historyData);
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }
 

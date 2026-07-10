@@ -48,7 +48,6 @@ import {
   HardHat,
   CheckSquare,
   Zap,
-  ScanQrCode,
   DoorOpen,
   GitCompare,
   ScrollText,
@@ -57,7 +56,6 @@ import {
   Fingerprint,
   Eye,
   Hotel,
-  QrCode,
   GanttChartSquare,
   ListChecks,
   NotebookText,
@@ -145,8 +143,6 @@ const landlordGroups: NavGroup[] = [
     items: [
       { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
       { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
-      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
-      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
       { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
@@ -231,8 +227,6 @@ const superAdminGroups: NavGroup[] = [
   {
     label: "Access & Visitors",
     items: [
-      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
-      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
       { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
@@ -319,8 +313,6 @@ const adminGroups: NavGroup[] = [
   {
     label: "Access & Visitors",
     items: [
-      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
-      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
       { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],
@@ -434,8 +426,6 @@ const agencyGroups: NavGroup[] = [
     items: [
       { href: "/compliance", label: "Compliance Numbers", icon: Fingerprint },
       { href: "/compliance/micro-behaviors", label: "MicroBehavior", icon: Eye },
-      { href: "/qr/applications", label: "QR Applications", icon: ScanQrCode },
-      { href: "/qr/access-logs", label: "QR Access Logs", icon: QrCode },
       { href: "/visitors", label: "Visitors", icon: DoorOpen },
       { href: "/visitors/logs", label: "Visitor Logs", icon: DoorOpen },
     ],

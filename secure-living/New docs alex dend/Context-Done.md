@@ -1,6 +1,6 @@
 # Secure Living — Platform Context: Completed Work
 
-> **Purpose**: Grounding reference for humans and LLMs working on this codebase. Describes what has already been built so future work does not duplicate or contradict existing decisions. Verified against source code, Prisma schema, and git history as of 2026-07-10.
+> **Purpose**: Grounding reference for humans and LLMs working on this codebase. Describes what has already been built so future work does not duplicate or contradict existing decisions. Verified against source code, Prisma schema, and git history as of 2026-07-10 (last updated after commits `ef67352` and `d7b3893`).
 
 ## 1. Repository Layout
 
@@ -59,7 +59,13 @@ Five roles with dedicated dashboards and RBAC-scoped permissions: **Landlord, Te
 - Full **service request state-machine engine**: assign, start, submit, approve, reject, resubmit, complete, cancel, dispute, escalate/resolve, block/unblock, quotes (request/approve/reject), evidence upload
 - Provider management, provider audit log & performance tracking
 - SLA policies, service categories, service type configs, service access restrictions, service enquiries
-- **Planned/requested (not yet implemented)**: reorganize into "Maintenance Services" vs "Professional Services" categories, with a configurable service-delivery-strategy system (internal/managed/marketplace modes, visibility, availability, priority/assignment, approval, quotation, payment, SLA/credential, and automation rules) — per client feedback in `UPDATE.md`.
+- **Done — Services/Marketplace reorganization (client feedback in `UPDATE.md`, implemented in `ef67352`)**:
+  - Nav merged into one parent group **"Services & Marketplace"**, split into **"Maintenance Services"** (renamed from "Service Requests" — plumbing, electrical, security, interior, etc.) and **"Professional Services"** (surveying, legal, advisory, valuation, etc.)
+  - "Manager Queue"/"My Job Queue" renamed to **"My Requests"**; sub-modules (Providers, My Requests) re-nested under the correct category
+  - Live at: `/service-requests` (Maintenance Services), `/services` (Professional Services)
+  - `ServiceCategory` model extended with `categoryType` ("MAINTENANCE" | "PROFESSIONAL") and a flexible `config` JSON field (migration `20260710000000_service_category_config`); existing categories backfilled per the Maintenance/Professional split
+  - Admin **Service Category configurator** (`/admin/service-categories`) rebuilt into an 11-section Add/Edit form: Basic Info, Delivery Strategy (Internal/Managed/Marketplace + revenue-share), Visibility Rules (per role), Availability Rules (time windows + provider override), Priority/Routing, Approval Rules, Quotation Rules, Payment Rules (escrow/invoice/subscription), Assignment Strategy, SLA/Requirements, Automation Rules (auto-rating, notifications, invoicing). Category list shows a Maintenance/Professional badge + filter.
+  - Known scope-limit: "Managed Partner" is currently a free-text field, not yet linked to a real Provider/Organization record.
 
 ### 4.6 Utilities
 - Utility meters, readings, disputes, household charges, other/service charges
@@ -87,16 +93,22 @@ Five roles with dedicated dashboards and RBAC-scoped permissions: **Landlord, Te
 ### 4.10 Public / Marketing Site
 About, pricing (recently matched to client plan comparison), blog, careers, contact, demo, affiliate program, API access, legal pages (privacy/terms/cookies/security), role-specific help centers (admin/landlord/professional/staff/tenant), public listings search, public QR apply page, public service pages.
 
+### 4.11 Production Bug Fixes (2026-07-10)
+- Root cause: `leases.map(l => l.unitId)` / `.map(l => l.tenantId)`-style arrays included `null` (leases with no unit assigned), which Prisma's `{ id: { in: [...] } }` filter rejects, causing 500s.
+- Fixed in `/api/v1/tenants` and `/api/v1/leases` (filter out falsy ids before building the `in` array).
+- Follow-on frontend crash on `/leasing` (`Cannot read properties of null (reading 'slice')`) — pages called `.slice()` on `unitId` unconditionally; fixed to fall back to "No unit" when absent (`app/(authenticated)/leasing/page.tsx`, `leasing/[id]/page.tsx`).
+- Both confirmed fixed on production after deploy (commits `ef67352`, `d7b3893`).
+
 ## 5. Delivery Status Summary
 
-**Done / stable**: Auth + RBAC, Properties/Units/Leases/Listings, Tenants/CRM, KYC (upload/review/viewer), Service Request engine, Wallet/Ledger/Escrow/Deposit primitives, Rent collection/receipts, Utilities, QR access control, Short-stay/hospitality, Visitor management, Vacate/move-out + deposit deduction flow, Admin console, Notifications, Compliance tracking, public marketing site.
+**Done / stable**: Auth + RBAC, Properties/Units/Leases/Listings, Tenants/CRM, KYC (upload/review/viewer), Service Request engine, Services/Marketplace reorg (Maintenance vs Professional) with full category configurator, Wallet/Ledger/Escrow/Deposit primitives, Rent collection/receipts, Utilities, QR access control, Short-stay/hospitality, Visitor management, Vacate/move-out + deposit deduction flow, Admin console, Notifications, Compliance tracking, public marketing site.
 
 **In progress / planned**:
 1. Phase 4 — formal double-entry ledger tightening (see `Phase-4.md`).
-2. Services/Marketplace reorganization into Maintenance vs Professional categories with configurable delivery-strategy engine (see `UPDATE.md`).
+2. Linking "Managed Partner" delivery-strategy field to real Provider/Organization records (currently free text).
 
 ## 6. Source Docs Referenced
-- `secure-living/New docs alex dend/UPDATE.md` — client feedback transcript (planned service-module changes)
+- `secure-living/New docs alex dend/UPDATE.md` — client feedback transcript + to-do list (Services/Marketplace reorg — implemented)
 - `Phase-4.md` — ledger formalization plan
 - `Entries-created.md` (repo root) — demo seed-data log corroborating CRM/dashboard/role accounts
-- Git history (61 commits) — iterative Phase 1–3 delivery, stabilized via subsequent bug-fix commits
+- Git history (63 commits) — iterative Phase 1–3 delivery, stabilized via subsequent bug-fix commits; latest: `ef67352` (services reorg + category configurator + tenants/leases fix), `d7b3893` (leasing crash follow-up fix)

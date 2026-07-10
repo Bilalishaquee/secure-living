@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -45,8 +45,12 @@ export default function ReportsPage() {
     })();
   }, [user?.id, user?.authToken]);
 
+  const pnlRequestId = useRef(0);
+  const noiRequestId = useRef(0);
+
   async function loadPnl() {
     if (!user?.id) return;
+    const requestId = ++pnlRequestId.current;
     const q = new URLSearchParams({
       periodStart: new Date(periodStart).toISOString(),
       periodEnd: new Date(periodEnd).toISOString(),
@@ -55,15 +59,19 @@ export default function ReportsPage() {
     const res = await fetch(`/api/v1/reports/pnl?${q.toString()}`, { headers: { Authorization: `Bearer ${user.authToken ?? ""}` } });
     if (!res.ok) return;
     const json = (await res.json()) as { data: PnlData };
+    // Ignore stale responses from a superseded request (e.g. propertyId changed while this was in flight).
+    if (requestId !== pnlRequestId.current) return;
     setPnl(json.data);
   }
 
   async function loadNoi() {
     if (!user?.id || !propertyId) return;
+    const requestId = ++noiRequestId.current;
     const q = new URLSearchParams({ propertyId, year });
     const res = await fetch(`/api/v1/reports/noi?${q.toString()}`, { headers: { Authorization: `Bearer ${user.authToken ?? ""}` } });
     if (!res.ok) return;
     const json = (await res.json()) as { data: NoiData };
+    if (requestId !== noiRequestId.current) return;
     setNoi(json.data);
   }
 
