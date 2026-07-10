@@ -195,7 +195,7 @@ export default function LeasingPage() {
           <Link href={`/properties/${r.propertyId}`} className="text-sm font-medium text-blue-600 hover:underline">
             {r.propertyName ?? r.propertyId.slice(0, 8) + "…"}
           </Link>
-          <p className="text-xs text-slate-400">{r.unitNumber ? `Unit ${r.unitNumber}` : r.unitId.slice(0, 8) + "…"}</p>
+          <p className="text-xs text-slate-400">{r.unitNumber ? `Unit ${r.unitNumber}` : r.unitId ? r.unitId.slice(0, 8) + "…" : "No unit"}</p>
         </div>
       ),
     },

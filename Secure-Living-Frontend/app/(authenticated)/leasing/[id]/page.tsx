@@ -436,7 +436,7 @@ export default function LeaseDetailPage({ params }: PageProps) {
                 href={`/properties/${lease.propertyId}/units/${lease.unitId}`}
                 className="font-medium text-blue-600 hover:underline"
               >
-                {lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitId.slice(0, 16) + "…"}
+                {lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitId ? lease.unitId.slice(0, 16) + "…" : "No unit"}
               </Link>
             </div>
           </CardContent>
