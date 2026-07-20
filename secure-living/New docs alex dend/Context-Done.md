@@ -1,6 +1,6 @@
 # Secure Living — Platform Context: Completed Work
 
-> **Purpose**: Grounding reference for humans and LLMs working on this codebase. Describes what has already been built so future work does not duplicate or contradict existing decisions. Verified against source code, Prisma schema, and git history as of 2026-07-10 (last updated after commits `ef67352` and `d7b3893`).
+> **Purpose**: Grounding reference for humans and LLMs working on this codebase. Describes what has already been built so future work does not duplicate or contradict existing decisions. Verified against source code, Prisma schema, and git history — last updated 2026-07-20 after the Daraja integration commit.
 
 ## 1. Repository Layout
 
@@ -71,7 +71,7 @@ Five roles with dedicated dashboards and RBAC-scoped permissions: **Landlord, Te
 - Utility meters, readings, disputes, household charges, other/service charges
 
 ### 4.7 Access Control & Hospitality
-- QR applications, QR access logs (functional scannable QR codes with download + public landing page)
+- QR applications, QR access logs (functional scannable QR codes with download + public landing page) — **nav entries hidden per client request** (commit `c2e900b`); pages/API routes untouched, restorable by re-adding sidebar links
 - Short-stay bookings, stock/inventory usage
 - Visitor management + visitor logs
 - Container/storage management
@@ -99,16 +99,39 @@ About, pricing (recently matched to client plan comparison), blog, careers, cont
 - Follow-on frontend crash on `/leasing` (`Cannot read properties of null (reading 'slice')`) — pages called `.slice()` on `unitId` unconditionally; fixed to fall back to "No unit" when absent (`app/(authenticated)/leasing/page.tsx`, `leasing/[id]/page.tsx`).
 - Both confirmed fixed on production after deploy (commits `ef67352`, `d7b3893`).
 
+### 4.12 Second Round of Production Fixes (2026-07-10, commits `c2e900b`, `eff0b45`)
+- **Rent Collection invoice crash**: same null-`unitId`/`propertyId`/`tenantUserId` pattern hit the "Create invoice" lease dropdown in `rent-collection/page.tsx`; null-guarded with fallback labels ("No unit"/"No property"/"No tenant").
+- **Financial Reports / Accounting flashing to zero**: no stale-response guard on `loadPnl`/`loadNoi`/`accounting.load()` — a slower in-flight fetch could overwrite fresher data. Fixed with a request-id ref per effect so only the latest response applies.
+- **Financial Reports property filter defaulting to a random property** instead of "All Properties": `reports/page.tsx` auto-selected `properties[0]` right after fetching the property list; removed that auto-select so the filter now correctly defaults to All Properties (commit `eff0b45`).
+- **`/admin` bare route 404**: `TopBar.tsx` breadcrumbs auto-link every path segment, so any `/admin/*` page produced a dead link to bare `/admin`. Added `app/(authenticated)/admin/page.tsx` redirecting to `/admin/dashboard`.
+- **Rent Score tenant field**: replaced free-text tenant ID input with a searchable combobox (`screening/rent-score/page.tsx`) backed by `/api/v1/tenants`, filter-as-you-type, click-to-select.
+- **QR modules hidden from nav** (see §4.7).
+- All confirmed on production except the `/admin` redirect's super-admin visual confirmation (server-side redirect confirmed via curl; no super-admin demo credentials available to click through visually).
+
+### 4.13 Daraja (Safaricom M-Pesa) Integration — Phase 4 Slice 1 (2026-07-20)
+Client's Phase 4 spec (`UPDATE.md`) calls for a full provider-agnostic payment architecture (Posting Service, Merchant Management, 7-wallet model, banking adapters, etc.). Per client direction, this pass implements **Daraja only** — the live payment rail — as a self-contained first slice, not the full Phase 4 architecture:
+- `lib/server/payments/daraja.ts` — Daraja client: OAuth token caching, `stkPush()` (Lipa Na M-Pesa Online / STK Push collection), `parseStkCallback()`, and `b2cPayout()` (payout function, implemented but not yet wired to any UI/route — available for a future payout flow).
+- `DarajaStkRequest` model (migration `20260720000000_daraja_stk_requests`) correlates the async STK push callback back to the originating rent invoice; unique on `checkoutRequestId` for idempotency.
+- `POST /api/v1/payments/daraja/stk-push` — tenant (or landlord/admin) initiates an STK prompt against a specific rent invoice's balance.
+- `POST /api/v1/payments/daraja/callback` — public webhook Safaricom calls with the result; idempotent against retries (checked via request status, not just the unique key).
+- `GET /api/v1/payments/daraja/stk-push/[checkoutRequestId]` — status poll used by the frontend while waiting for the customer to approve the prompt.
+- `lib/server/payments/apply-invoice-payment.ts` — new shared helper that marks a `RentInvoice` (partially) paid **and** now also creates a `Transaction` ledger row + notifies landlord/tenant; used by both the STK callback and the existing manual "Record payment" route (`rent-invoices/[id]/pay`), which previously updated the invoice only and never touched the ledger — this closes that gap for cash/manual entries too, not just Daraja.
+- Frontend: `tenant/lease/payments/page.tsx` — tenants can trigger "Pay with M-Pesa" per unpaid invoice, enter a phone number, and the page polls for confirmation (success/failure) automatically.
+- Config: `DARAJA_CONSUMER_KEY/SECRET`, `DARAJA_BUSINESS_SHORTCODE`, `DARAJA_PASSKEY`, `DARAJA_INITIATOR_NAME`, `DARAJA_SECURITY_CREDENTIAL`, `DARAJA_ENV` (sandbox/production), `DARAJA_CALLBACK_BASE_URL` (public HTTPS origin Safaricom calls back to — required, no default) — all in `Secure-Living-Backend/.env`. Currently populated with Safaricom's **published sandbox test values** (shortcode `174379` etc.), not a live production PayBill.
+- Not built in this slice (deferred until requested): Payment Gateway Interface abstraction/registry, Merchant Management config UI, other provider adapters (Intersend/Stripe/PayPal — stubs), Banking Adapter, Organisation/Landlord Payout Settings screen, 7 distinct wallet types, Referral/Listing Credit ledger wiring, Brevo/Africa's Talking notifications, PDF receipt generation, reconciliation discrepancy blocking. See §5 and `UPDATE.md` for the full remaining Phase 4 scope.
+- `DARAJA_CALLBACK_BASE_URL` must be set to a public HTTPS URL before this works end-to-end (Safaricom cannot call back to `localhost`); production value should be the backend's deployed origin.
+
 ## 5. Delivery Status Summary
 
-**Done / stable**: Auth + RBAC, Properties/Units/Leases/Listings, Tenants/CRM, KYC (upload/review/viewer), Service Request engine, Services/Marketplace reorg (Maintenance vs Professional) with full category configurator, Wallet/Ledger/Escrow/Deposit primitives, Rent collection/receipts, Utilities, QR access control, Short-stay/hospitality, Visitor management, Vacate/move-out + deposit deduction flow, Admin console, Notifications, Compliance tracking, public marketing site.
+**Done / stable**: Auth + RBAC, Properties/Units/Leases/Listings, Tenants/CRM, KYC (upload/review/viewer), Service Request engine, Services/Marketplace reorg (Maintenance vs Professional) with full category configurator, Wallet/Ledger/Escrow/Deposit primitives, Rent collection/receipts, Utilities, QR access control, Short-stay/hospitality, Visitor management, Vacate/move-out + deposit deduction flow, Admin console, Notifications, Compliance tracking, public marketing site, Daraja STK Push rent collection (sandbox).
 
 **In progress / planned**:
-1. Phase 4 — formal double-entry ledger tightening (see `Phase-4.md`).
-2. Linking "Managed Partner" delivery-strategy field to real Provider/Organization records (currently free text).
+1. Phase 4 — remaining architecture beyond Daraja: Posting Service, Merchant Management, 7-wallet model, Banking Adapter, Payout Settings screen, Referral/Listing Credit ledger, PDF/communication layers, reconciliation blocking (see `Phase-4` section of `UPDATE.md`).
+2. Daraja Go-Live: swap sandbox credentials for a real registered PayBill/Till once Safaricom approves; set `DARAJA_ENV=production` and a real `DARAJA_CALLBACK_BASE_URL`.
+3. Linking "Managed Partner" delivery-strategy field to real Provider/Organization records (currently free text).
 
 ## 6. Source Docs Referenced
 - `secure-living/New docs alex dend/UPDATE.md` — client feedback transcript + to-do list (Services/Marketplace reorg — implemented)
 - `Phase-4.md` — ledger formalization plan
 - `Entries-created.md` (repo root) — demo seed-data log corroborating CRM/dashboard/role accounts
-- Git history (63 commits) — iterative Phase 1–3 delivery, stabilized via subsequent bug-fix commits; latest: `ef67352` (services reorg + category configurator + tenants/leases fix), `d7b3893` (leasing crash follow-up fix)
+- Git history — iterative Phase 1–3 delivery, stabilized via subsequent bug-fix commits; latest: `ef67352` (services reorg + category configurator + tenants/leases fix), `d7b3893` (leasing crash follow-up), `c2e900b` (invoice crash, reports zero-flash, admin 404, rent score picker, QR nav hide), `eff0b45` (reports property-filter default fix)

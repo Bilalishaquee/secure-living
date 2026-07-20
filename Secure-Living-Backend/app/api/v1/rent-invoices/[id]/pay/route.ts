@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/server/db";
 import { payRentInvoiceSchema } from "@/lib/server/validation";
 import { parseBody, requireActor, requirePermission, jsonError , withErrorHandler } from "@/lib/server/http";
+import { applyInvoicePayment } from "@/lib/server/payments/apply-invoice-payment";
 
 type Ctx = { params: { id: string } };
 
@@ -21,20 +22,12 @@ export const POST = withErrorHandler(async (req: Request, { params }: Ctx) => {
   if (inv.balanceKes <= 0) return jsonError(409, "Invoice is already paid");
   if (parsed.data.amountKes > inv.balanceKes) return jsonError(400, "Payment amount cannot exceed the invoice balance");
 
-  const amountPaid = inv.amountPaidKes + parsed.data.amountKes;
-  const balance = Math.max(0, inv.totalDueKes - amountPaid);
-  const status = balance === 0 ? "paid" : "partially_paid";
   const paymentReference = parsed.data.mpesaReference?.trim() || generatePaymentReference(inv.id);
-  const updated = await prisma.rentInvoice.update({
-    where: { id: params.id },
-    data: {
-      amountPaidKes: amountPaid,
-      balanceKes: balance,
-      paymentMethod: parsed.data.paymentMethod,
-      mpesaReference: paymentReference,
-      status,
-      paidAt: balance === 0 ? new Date() : undefined,
-    },
+  const updated = await applyInvoicePayment({
+    invoiceId: params.id,
+    amountKes: parsed.data.amountKes,
+    paymentMethod: parsed.data.paymentMethod,
+    mpesaReference: paymentReference,
   });
   return Response.json({ data: updated });
 })

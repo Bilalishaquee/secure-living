@@ -150,6 +150,11 @@ export const createRentInvoiceSchema = z.object({
   otherChargesKes: z.number().nonnegative().optional(),
 });
 
+export const initiateStkPushSchema = z.object({
+  invoiceId: z.string().min(1),
+  phoneNumber: z.string().min(9),
+});
+
 export const payRentInvoiceSchema = z.object({
   amountKes: z.number().positive(),
   paymentMethod: z.enum([
