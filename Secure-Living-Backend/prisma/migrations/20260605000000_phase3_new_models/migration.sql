@@ -383,31 +383,6 @@ CREATE TABLE "VisitorLog" (
     CONSTRAINT "VisitorLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "DepositTransfer" (
-    "id" TEXT NOT NULL,
-    "leaseId" TEXT NOT NULL,
-    "outgoingTenantId" TEXT NOT NULL,
-    "propertyId" TEXT NOT NULL,
-    "unitId" TEXT NOT NULL,
-    "depositAmountKes" DECIMAL(65,30) NOT NULL,
-    "platformFeeKes" DECIMAL(65,30) NOT NULL DEFAULT 500,
-    "incomingTenantId" TEXT,
-    "status" "DepositTransferStatus" NOT NULL DEFAULT 'LISTED',
-    "listedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "buyerPaidAt" TIMESTAMP(3),
-    "landlordApprovedAt" TIMESTAMP(3),
-    "inspectionCompletedAt" TIMESTAMP(3),
-    "releasedAt" TIMESTAMP(3),
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "cancelledAt" TIMESTAMP(3),
-    "escrowAccountId" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "DepositTransfer_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE INDEX "Container_organizationId_idx" ON "Container"("organizationId");
 
@@ -911,15 +886,6 @@ CREATE INDEX "VisitorLog_unitId_approvalStatus_idx" ON "VisitorLog"("unitId", "a
 
 -- CreateIndex
 CREATE INDEX "VisitorLog_approvalStatus_idx" ON "VisitorLog"("approvalStatus");
-
--- CreateIndex
-CREATE INDEX "DepositTransfer_outgoingTenantId_status_idx" ON "DepositTransfer"("outgoingTenantId", "status");
-
--- CreateIndex
-CREATE INDEX "DepositTransfer_unitId_status_idx" ON "DepositTransfer"("unitId", "status");
-
--- CreateIndex
-CREATE INDEX "DepositTransfer_status_expiresAt_idx" ON "DepositTransfer"("status", "expiresAt");
 
 -- AddForeignKey
 ALTER TABLE "Container" ADD CONSTRAINT "Container_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

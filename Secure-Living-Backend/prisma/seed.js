@@ -4,44 +4,6 @@ const { randomUUID } = require("crypto");
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.serviceRequestEvidence.deleteMany();
-  await prisma.kycDocument.deleteMany();
-  await prisma.apiSession.deleteMany();
-  await prisma.userRoleAssignment.deleteMany();
-  await prisma.rolePermission.deleteMany();
-  await prisma.permission.deleteMany();
-  await prisma.role.deleteMany();
-  await prisma.appUser.deleteMany();
-  await prisma.branch.deleteMany();
-  await prisma.organization.deleteMany();
-  await prisma.propertyRoleAssignment.deleteMany();
-  await prisma.reminderSchedule.deleteMany();
-  await prisma.eSignRequest.deleteMany();
-  await prisma.documentTemplate.deleteMany();
-  await prisma.tenantScreeningReport.deleteMany();
-  await prisma.userSubscription.deleteMany();
-  await prisma.subscriptionPlan.deleteMany();
-  await prisma.leaseRenewalAlert.deleteMany();
-  await prisma.financialReport.deleteMany();
-  await prisma.expense.deleteMany();
-  await prisma.property.deleteMany();
-  await prisma.reconciliationReport.deleteMany();
-  await prisma.rentInvoice.deleteMany();
-  await prisma.fundHold.deleteMany();
-  await prisma.escrowAccount.deleteMany();
-  await prisma.idempotencyKey.deleteMany();
-  await prisma.ledgerEntry.deleteMany();
-  await prisma.transaction.deleteMany();
-  await prisma.wallet.deleteMany();
-  await prisma.tenantApplication.deleteMany();
-  await prisma.listing.deleteMany();
-  await prisma.unit.deleteMany();
-  await prisma.auditLog.deleteMany();
-  await prisma.jobAssignment.deleteMany();
-  await prisma.professionalProfile.deleteMany();
-  await prisma.lease.deleteMany();
-  await prisma.serviceRequest.deleteMany();
-
   const org1 = await prisma.organization.create({
     data: {
       id: "org1",
