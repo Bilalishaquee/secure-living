@@ -46,6 +46,7 @@ export default function TenantPaymentSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [payingInvoice, setPayingInvoice] = useState<RentInvoice | null>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [payeeLabel, setPayeeLabel] = useState("");
   const [stk, setStk] = useState<StkState>({ step: "idle" });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -76,6 +77,7 @@ export default function TenantPaymentSchedulePage() {
   function openPayModal(inv: RentInvoice) {
     setPayingInvoice(inv);
     setPhoneNumber("");
+    setPayeeLabel("");
     setStk({ step: "idle" });
   }
 
@@ -86,7 +88,11 @@ export default function TenantPaymentSchedulePage() {
       const res = await fetch("/api/v1/payments/daraja/stk-push", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.authToken}` },
-        body: JSON.stringify({ invoiceId: payingInvoice.id, phoneNumber }),
+        body: JSON.stringify({
+          invoiceId: payingInvoice.id,
+          phoneNumber,
+          ...(payeeLabel.trim() && { payeeLabel: payeeLabel.trim() }),
+        }),
       });
       const json = (await res.json()) as { data?: { checkoutRequestId: string }; error?: string };
       if (!res.ok || !json.data) {
@@ -208,6 +214,18 @@ export default function TenantPaymentSchedulePage() {
                 onChange={(e) => setPhoneNumber(e.target.value)}
               />
               <p className="mt-1 text-xs text-slate-500">You&apos;ll receive an M-Pesa prompt on this number to approve the payment.</p>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Paying for (optional)</label>
+              <input
+                type="text"
+                placeholder="e.g. Alex the Plumber"
+                maxLength={40}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                value={payeeLabel}
+                onChange={(e) => setPayeeLabel(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-slate-500">Shown as the payment reference on the M-Pesa prompt. The paybill name itself is fixed by Safaricom.</p>
             </div>
             <Button className="w-full" disabled={stk.step === "sending" || phoneNumber.trim().length < 9} onClick={() => void sendStkPush()}>
               {stk.step === "sending" ? "Sending prompt…" : "Send M-Pesa prompt"}
