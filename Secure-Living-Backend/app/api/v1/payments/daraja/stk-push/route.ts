@@ -20,11 +20,13 @@ export const POST = withErrorHandler(async (req: Request) => {
   const callbackBase = process.env.DARAJA_CALLBACK_BASE_URL;
   if (!callbackBase) return jsonError(500, "DARAJA_CALLBACK_BASE_URL is not configured");
 
+  const payeeLabel = parsed.data.payeeLabel?.trim();
+
   const stk = await stkPush({
     phoneNumber: parsed.data.phoneNumber,
     amountKes: inv.balanceKes,
-    accountReference: inv.invoiceNumber,
-    transactionDesc: "Rent payment",
+    accountReference: payeeLabel || inv.invoiceNumber,
+    transactionDesc: payeeLabel ? `Pay ${payeeLabel}` : "Rent payment",
     callbackUrl: `${callbackBase.replace(/\/$/, "")}/api/v1/payments/daraja/callback`,
   });
 

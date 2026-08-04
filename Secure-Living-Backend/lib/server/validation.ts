@@ -153,6 +153,7 @@ export const createRentInvoiceSchema = z.object({
 export const initiateStkPushSchema = z.object({
   invoiceId: z.string().min(1),
   phoneNumber: z.string().min(9),
+  payeeLabel: z.string().min(1).max(40).optional(),
 });
 
 export const payRentInvoiceSchema = z.object({
