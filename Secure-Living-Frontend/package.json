@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "clean": "npx rimraf .next",
-    "dev": "node init && next dev",
-    "dev:clean": "node init && npm run clean && next dev",
-    "build": "node init && next build",
-    "start": "node init && next start",
+    "dev": "next dev",
+    "dev:clean": "npm run clean && next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
